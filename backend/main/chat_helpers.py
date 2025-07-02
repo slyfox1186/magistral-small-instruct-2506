@@ -222,12 +222,35 @@ async def handle_simple_conversational_request(
             memories = await global_vars.personal_memory.get_relevant_memories(query=user_prompt, limit=5)
             logger.info(f"🧠 MEMORY DEBUG: Retrieved {len(memories) if memories else 0} memories")
             
+            # CRITICAL FIX: Also get core memories (user facts)
+            logger.info(f"🧠 MEMORY DEBUG: Getting core memories...")
+            core_memories = await global_vars.personal_memory.get_all_core_memories()
+            logger.info(f"🧠 MEMORY DEBUG: Retrieved {len(core_memories) if core_memories else 0} core memories")
+            
+            # Build memory context from both sources
+            memory_parts = []
+            
+            # Add core memories first (most important user facts)
+            if core_memories:
+                core_facts = []
+                for key, value in core_memories.items():
+                    core_facts.append(f"{key}: {value}")
+                if core_facts:
+                    memory_parts.append("User Facts:\n" + "\n".join(core_facts))
+                    logger.info(f"🧠 MEMORY DEBUG: Added {len(core_facts)} core memory facts")
+            
+            # Add regular memories
             if memories:
-                memory_context = "\n".join([m.content for m in memories[:3]])
-                logger.info(f"🧠 MEMORY DEBUG: ✅ Using personal memory context ({len(memory_context)} chars)")
-                logger.debug(f"🧠 MEMORY DEBUG: Memory context preview: {memory_context[:100]}...")
+                regular_memories = [m.content for m in memories[:3]]
+                memory_parts.extend(regular_memories)
+                logger.info(f"🧠 MEMORY DEBUG: Added {len(regular_memories)} regular memories")
+            
+            if memory_parts:
+                memory_context = "\n\n".join(memory_parts)
+                logger.info(f"🧠 MEMORY DEBUG: ✅ Using combined memory context ({len(memory_context)} chars)")
+                logger.debug(f"🧠 MEMORY DEBUG: Memory context preview: {memory_context[:200]}...")
             else:
-                logger.info("🧠 MEMORY DEBUG: No relevant memories found")
+                logger.info("🧠 MEMORY DEBUG: No memories found")
         except Exception as e:
             logger.error(f"🧠 MEMORY DEBUG: ❌ Fast path memory retrieval failed: {e}", exc_info=True)
     else:
