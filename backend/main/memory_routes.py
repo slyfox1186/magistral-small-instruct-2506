@@ -354,3 +354,68 @@ def setup_memory_routes(app: FastAPI):
         except Exception as e:
             logger.error(f"Error searching memories: {e}")
             raise HTTPException(status_code=500, detail=str(e))
+
+    @app.delete("/api/clear-vital-memories")
+    @app.delete("/clear-vital-memories")  # Support both paths for compatibility
+    async def clear_vital_memories():
+        """Clear all vital memories stored for the assistant."""
+        try:
+            logger.info("🧹 Clearing all memories from personal memory system...")
+
+            deleted_count = 0
+
+            # Clear from personal memory system (SQLite)
+            if personal_memory:
+                try:
+                    # Use the proper clear method
+                    deleted_count = personal_memory.clear_all_memories()
+                    logger.info(f"🗑️ Cleared {deleted_count} memories from SQLite database")
+
+                except Exception as e:
+                    logger.error(f"Failed to clear personal memory system: {e}")
+
+            # Also clear from Redis if available (for compatibility)
+            from .globals import redis_client
+            if redis_client:
+                patterns = [
+                    "memory:*",
+                    "vital_memory:*",
+                    "user_memory:*",
+                    "neural_memory:*",
+                    "redis_memory:*",
+                    "conversation:*",
+                    "session:*",
+                    "msg:*",  # Clear message cache
+                    "*session*",  # Clear any session-related keys
+                    "*memory*",  # Clear any memory-related keys
+                ]
+
+                for pattern in patterns:
+                    try:
+                        keys = await redis_client.keys(pattern)
+                        if keys:
+                            for key in keys:
+                                await redis_client.delete(key)
+                            deleted_count += len(keys)
+                            logger.info(f"Deleted {len(keys)} Redis keys matching pattern '{pattern}'")
+                    except Exception as e:
+                        logger.warning(f"Failed to clear Redis pattern '{pattern}': {e}")
+
+            logger.info(f"✅ Successfully cleared {deleted_count} total memory entries")
+
+            # Import VitalMemoryResponse for proper return type
+            from .models import VitalMemoryResponse
+            return VitalMemoryResponse(
+                success=True,
+                message=f"Successfully cleared {deleted_count} memories",
+                deleted_count=deleted_count,
+            )
+
+        except Exception as e:
+            logger.error(f"Error clearing memories: {e}", exc_info=True)
+            from .models import VitalMemoryResponse
+            return VitalMemoryResponse(
+                success=False,
+                message=f"Failed to clear memories: {e!s}",
+                deleted_count=0,
+            )
