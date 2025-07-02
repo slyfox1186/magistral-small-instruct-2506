@@ -291,8 +291,14 @@ async def handle_simple_conversational_request(
 1. **Most Current Conversation is TRUTH:** Information from the most current conversation ALWAYS
    overrides stored memories. When referring to this, say "I prioritize information from the most
    current conversation."
-2. **Format with Markdown:** Use markdown formatting in all responses.
-3. **Be Conversational:** Keep responses warm, engaging, and concise."""
+2. **MANDATORY Markdown Formatting:** ALL responses MUST use proper markdown formatting including:
+   - Headers with #, ##, ###
+   - Bold text with **text**
+   - Lists with - or numbered items
+   - Code blocks with ```
+   - Tables for structured data using | Column | Format |
+3. **Structured Data as Tables:** Any structured data MUST be presented as markdown tables.
+4. **Be Conversational:** Keep responses warm, engaging, and concise."""
 
     # Add memory context if available
     if memory_context:
