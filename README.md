@@ -22,7 +22,7 @@ A **local AI chat system** that runs entirely on your machine - no internet requ
 - **Internet**: Only for initial setup and web search features
 
 ### Software Prerequisites
-- **Python**: 3.11 or 3.12
+- **Python**: 3.12+ (required)
 - **Node.js**: 18+ and npm
 - **Docker**: Latest version
 - **CUDA**: 11.8 or 12.x (for GPU acceleration)
@@ -34,20 +34,20 @@ A **local AI chat system** that runs entirely on your machine - no internet requ
 
 **Ubuntu/Debian:**
 ```bash
-# Install Python 3.11+, Node.js, Docker
+# Install Python 3.12+, Node.js, Docker
 sudo apt update
-sudo apt install python3.11 python3.11-pip nodejs npm docker.io git
+sudo apt install python3.12 python3.12-pip nodejs npm docker.io git
 sudo usermod -aG docker $USER  # Logout and login after this
 ```
 
 **macOS:**
 ```bash
 # Install with Homebrew
-brew install python@3.11 node docker git
+brew install python@3.12 node docker git
 ```
 
 **Windows:**
-- Install [Python 3.11+](https://www.python.org/downloads/)
+- Install [Python 3.12+](https://www.python.org/downloads/)
 - Install [Node.js 18+](https://nodejs.org/)
 - Install [Docker Desktop](https://www.docker.com/products/docker-desktop/)
 - Install [Git](https://git-scm.com/download/win)
@@ -109,6 +109,9 @@ REDIS_PORT=6379
 ### Step 5: Install Dependencies
 
 ```bash
+# Verify Python version (must be 3.12+)
+python3 --version  # Should show Python 3.12.x
+
 # Install Python dependencies
 pip install -r backend/requirements.txt
 
@@ -239,6 +242,15 @@ cd monitoring && docker-compose up -d && cd ../    # Start monitoring
 ## 🚨 Troubleshooting
 
 ### Common Issues
+
+**"Python version incompatible"**
+```bash
+# Check Python version (must be 3.12+)
+python3 --version
+# If older than 3.12, install Python 3.12+
+# Ubuntu: sudo apt install python3.12
+# macOS: brew install python@3.12
+```
 
 **"Model file not found"**
 ```bash
