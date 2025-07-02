@@ -146,6 +146,21 @@ def setup_chat_routes(app: FastAPI):
                 if any(indicator in prompt_lower for indicator in conversational_indicators):
                     return True
 
+            # Personal information sharing patterns (these should use fast path for memory extraction)
+            personal_info_patterns = [
+                "my name is", "i'm ", "i am ", "call me",
+                "my wife", "my husband", "my mother", "my father", 
+                "my age", "years old", "born in", "born on",
+                "i live", "my address", "allergic to", "allergy to",
+                "i work", "my job", "employed by", "profession",
+                "i love", "i enjoy", "hobby", "hobbies",
+                "things about", "about me", "personal info"
+            ]
+            
+            if any(pattern in prompt_lower for pattern in personal_info_patterns):
+                logger.info(f"🧠 MEMORY DEBUG: Detected personal info sharing - routing to fast path: '{prompt[:50]}...'")
+                return True
+
             return False
 
         # Check if this is a simple conversational request that can use fast path
@@ -173,20 +188,30 @@ def setup_chat_routes(app: FastAPI):
 
         # Step 2: Handle based on intent
         async def generate_response():
+            logger.info(f"🧠 MEMORY DEBUG: Starting generate_response for intent: {primary_intent}")
             try:
                 if primary_intent == "conversation":
-                    # Use standard conversation flow
-                    yield f"data: {json.dumps({'token': {'text': 'Processing conversation request...'}})}\n\n"
+                    logger.info("🧠 MEMORY DEBUG: Processing conversation intent - delegating to handle_simple_conversational_request")
+                    # Use the working fast path implementation for conversation
+                    # This handles memory retrieval, LLM generation, and memory storage properly
+                    
+                    logger.info("🧠 MEMORY DEBUG: Calling handle_simple_conversational_request for full pipeline conversation")
+                    
+                    # Use the existing handle_simple_conversational_request which has full implementation
+                    # This properly handles memory extraction, LLM generation, and background processing
+                    async for chunk in handle_simple_conversational_request(request, user_prompt, session_id).body_iterator:
+                        yield chunk
+                    return
                 else:
                     # Handle other intent types
+                    logger.info(f"🧠 MEMORY DEBUG: Processing non-conversation intent: {primary_intent}")
                     yield f"data: {json.dumps({'token': {'text': f'Processing {primary_intent} request...'}})}\n\n"
-
-                # Add minimal response completion
-                yield f"data: {json.dumps({'done': True})}\n\n"
+                    # Add minimal response completion for non-conversation intents
+                    yield f"data: {json.dumps({'done': True})}\n\n"
 
             except Exception as e:
                 error_msg = f"Error in response generation: {e!s}"
-                logger.error(error_msg, exc_info=True)
+                logger.error(f"🧠 MEMORY DEBUG: ❌ Error in generate_response: {error_msg}", exc_info=True)
                 yield f"data: {json.dumps({'error': error_msg})}\n\n"
 
         return StreamingResponse(

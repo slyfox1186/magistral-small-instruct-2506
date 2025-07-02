@@ -128,9 +128,14 @@ class MemoryAPI:
     async def get_stm(self, memory_id: str) -> ShortTermMemory | None:
         """Retrieve a short-term memory by ID"""
         key = f"{self.stm_prefix}{memory_id}"
-        data = await self.redis.hgetall(key)
+        try:
+            data = await self.redis.hgetall(key)
 
-        if not data:
+            if not data:
+                logger.debug(f"🧠 MEMORY DEBUG: STM not found: {memory_id}")
+                return None
+        except Exception as e:
+            logger.error(f"🧠 MEMORY DEBUG: ❌ Error retrieving STM {memory_id}: {e}", exc_info=True)
             return None
 
         # Convert byte strings to proper types
@@ -147,6 +152,7 @@ class MemoryAPI:
         """Update an existing STM"""
         memory = await self.get_stm(memory_id)
         if not memory:
+            logger.warning(f"🧠 MEMORY DEBUG: Cannot update STM - not found: {memory_id}")
             return None
 
         if content is not None:

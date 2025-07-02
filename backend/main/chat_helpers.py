@@ -437,6 +437,17 @@ async def lightweight_memory_processing(user_prompt: str, response: str, session
             (r"(?:my husband|husband's name is)\s+([A-Za-z]+)", "spouse_name", 0.9),
             (r"(?:my mother|mother's name is)\s+([A-Za-z]+)", "mother_name", 0.8),
             (r"(?:my father|father's name is)\s+([A-Za-z]+)", "father_name", 0.8),
+            # Age patterns for family
+            (r"(?:mother|mom|mother's)\s+(?:is\s+)?(\d+)\s+years old", "mother_age", 0.8),
+            (r"(?:father|dad|father's)\s+(?:is\s+)?(\d+)\s+years old", "father_age", 0.8),
+            # Physical characteristics  
+            (r"(?:i am|i'm|he is|she is)\s+(\d+['']?\d*[\"]*)\s+tall", "height", 0.7),
+            (r"(?:blue|brown|green|hazel|gray)\s+eyes", "eye_color", 0.7),
+            # Interests and hobbies
+            (r"(?:loves|enjoys|likes)\s+([a-zA-Z\s,]+?)(?:\.|,|$)", "hobby_interest", 0.6),
+            (r"fascination with\s+([a-zA-Z\s,]+?)(?:\.|,|$)", "interest", 0.7),
+            # Pets
+            (r"(?:owns|has)\s+(?:a\s+)?([a-zA-Z\s]+?)(?:\.|,|$)", "pet", 0.6),
             # Work/profession patterns
             (r"(?:i work as|i am a|my job is)\s+(.+?)(?:\.|,|$)", "user_profession", 0.8),
             (r"(?:work at|employed by)\s+(.+?)(?:\.|,|$)", "user_employer", 0.7),
