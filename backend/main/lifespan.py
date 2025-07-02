@@ -52,15 +52,15 @@ async def lifespan(app: FastAPI):
 
         # Validate required Redis modules
         required_modules = {"search": "RediSearch", "json": "RedisJSON"}
-        await redis_utils.validate_redis_modules(redis_client, required_modules)
+        await redis_utils.validate_redis_modules(global_vars.redis_client, required_modules)
         logger.info(" Required Redis modules (RediSearch, RedisJSON) are available")
 
     except redis_utils.RedisModuleError as e:
         logger.error(f" Critical Redis module missing: {e}")
-        redis_client = None  # Ensure redis is considered unavailable
+        global_vars.redis_client = None  # Ensure redis is considered unavailable
     except Exception as e:
         logger.error(f" Failed to initialize Redis connection: {e}")
-        redis_client = None
+        global_vars.redis_client = None
 
     # Removed flawed sentiment analysis loading - LLM handles sentiment naturally
     logger.info(" Using LLM's natural sentiment understanding instead of keyword matching")
