@@ -362,6 +362,8 @@ body {
   font-weight: 400;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-align: left;
+  word-break: break-word;
 }
 
 .message-content p {
@@ -534,7 +536,10 @@ body {
   overflow: hidden;
   box-shadow: var(--shadow-sm);
   border: 1px solid var(--border-default);
+  display: table;
+  table-layout: auto;
 }
+
 
 .message-content th {
   background: var(--bg-elevated);
@@ -569,7 +574,22 @@ body {
   border-bottom: 1px solid var(--border-subtle);
   color: var(--text-secondary);
   transition: background-color 0.2s ease;
-  vertical-align: top;
+  vertical-align: middle;
+  text-align: left;
+}
+
+/* Better alignment for specific table cell types */
+.message-content td:first-child {
+  font-weight: 500;
+  color: var(--text-primary);
+  text-align: right;
+  padding-right: 2rem;
+  min-width: 140px;
+}
+
+.message-content td:last-child {
+  text-align: left;
+  font-weight: 400;
 }
 
 .message-content tr:last-child td {
