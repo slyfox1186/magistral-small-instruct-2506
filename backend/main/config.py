@@ -77,5 +77,5 @@ if not PROMETHEUS_AVAILABLE:
     logger.warning("prometheus_client not available. Install with: pip install prometheus_client")
 
 # Configure beautiful colored logging
-setup_colored_logging(level=logging.INFO, enable_stream_formatting=True)
+setup_colored_logging(level=logging.DEBUG, enable_stream_formatting=True)
 logger = logging.getLogger(__name__)

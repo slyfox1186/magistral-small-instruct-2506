@@ -47,6 +47,8 @@ def setup_chat_routes(app: FastAPI):
         logger.info(
             f"  CHAT REQUEST RECEIVED for session {request.session_id} at {datetime.now().isoformat()}"
         )
+        logger.info(f"🧠 MEMORY DEBUG: Chat request details - Messages: {len(request.messages)}, Session: {request.session_id}")
+        logger.info(f"🧠 MEMORY DEBUG: Request object type: {type(request)}")
 
         #  Update chat activity for intelligent background processing
         update_chat_activity()
@@ -59,13 +61,21 @@ def setup_chat_routes(app: FastAPI):
         if request_total:
             request_total.labels(endpoint=endpoint, status="started").inc()
 
-        check_service_availability()
+        logger.info("🧠 MEMORY DEBUG: Performing service availability check...")
+        try:
+            check_service_availability()
+            logger.info("🧠 MEMORY DEBUG: ✅ Service availability check passed")
+        except Exception as service_error:
+            logger.error(f"🧠 MEMORY DEBUG: ❌ Service availability check failed: {service_error}", exc_info=True)
+            raise
 
         session_id = request.session_id
         user_prompt = request.messages[-1].content if request.messages else ""
+        logger.info(f"🧠 MEMORY DEBUG: Extracted user prompt: '{user_prompt[:100]}...' (length: {len(user_prompt)})")
+        logger.info(f"🧠 MEMORY DEBUG: Session ID: {session_id}")
 
         if not user_prompt:
-            logger.warning("Rejected empty prompt request")
+            logger.warning("🧠 MEMORY DEBUG: Rejected empty prompt request")
             raise HTTPException(status_code=400, detail="Empty prompt")
 
         #  PII REDACTION DISABLED - User wants AI to remember personal information
@@ -139,8 +149,13 @@ def setup_chat_routes(app: FastAPI):
             return False
 
         # Check if this is a simple conversational request that can use fast path
-        if is_simple_conversational_request(user_prompt):
+        logger.info(f"🧠 MEMORY DEBUG: Checking if request is simple conversational for user prompt: '{user_prompt[:50]}...'")
+        is_simple = is_simple_conversational_request(user_prompt)
+        logger.info(f"🧠 MEMORY DEBUG: Simple conversational check result: {is_simple}")
+        
+        if is_simple:
             logger.info("🚀 FAST PATH: Simple conversational request detected")
+            logger.info("🧠 MEMORY DEBUG: Entering handle_simple_conversational_request")
             return await handle_simple_conversational_request(request, user_prompt, session_id)
 
         # For complex requests, use the full pipeline

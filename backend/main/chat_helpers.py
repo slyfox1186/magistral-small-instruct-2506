@@ -178,10 +178,20 @@ Return just the category name."""
 
 def check_service_availability() -> None:
     """Check if all required services are available."""
+    logger.info("🧠 MEMORY DEBUG: Checking service availability")
+    logger.info(f"🧠 MEMORY DEBUG: Redis client object: {global_vars.redis_client}")
+    logger.info(f"🧠 MEMORY DEBUG: Personal memory object: {global_vars.personal_memory}")
+    
     # LLM availability is now checked by the persistent server on-demand
     # No need to check here since the server loads on first request
-    if not redis_utils.is_redis_available(global_vars.redis_client):
+    redis_available = redis_utils.is_redis_available(global_vars.redis_client)
+    logger.info(f"🧠 MEMORY DEBUG: Redis availability check result: {redis_available}")
+    
+    if not redis_available:
+        logger.error("🧠 MEMORY DEBUG: ❌ Redis Service Unavailable - raising HTTPException")
         raise HTTPException(status_code=503, detail="Redis Service Unavailable")
+    
+    logger.info("🧠 MEMORY DEBUG: ✅ All services available")
 
 # NO FALLBACK MESSAGE CREATION - SYSTEM MUST WORK OR FAIL
 
@@ -202,23 +212,39 @@ async def handle_simple_conversational_request(
     """
     # Get minimal memory context from personal memory
     memory_context = ""
+    logger.info(f"🧠 MEMORY DEBUG: Attempting to get memory context for session {session_id}")
+    
     if global_vars.personal_memory:
+        logger.info(f"🧠 MEMORY DEBUG: personal_memory is available: {type(global_vars.personal_memory)}")
         try:
             # Quick memory retrieval for context
+            logger.info(f"🧠 MEMORY DEBUG: Calling get_relevant_memories with query: '{user_prompt[:50]}...'")
             memories = await global_vars.personal_memory.get_relevant_memories(query=user_prompt, limit=5)
+            logger.info(f"🧠 MEMORY DEBUG: Retrieved {len(memories) if memories else 0} memories")
+            
             if memories:
                 memory_context = "\n".join([m.content for m in memories[:3]])
-                logger.debug(" FAST PATH: Using personal memory context")
+                logger.info(f"🧠 MEMORY DEBUG: ✅ Using personal memory context ({len(memory_context)} chars)")
+                logger.debug(f"🧠 MEMORY DEBUG: Memory context preview: {memory_context[:100]}...")
+            else:
+                logger.info("🧠 MEMORY DEBUG: No relevant memories found")
         except Exception as e:
-            logger.debug(f"Fast path memory retrieval failed: {e}")
+            logger.error(f"🧠 MEMORY DEBUG: ❌ Fast path memory retrieval failed: {e}", exc_info=True)
+    else:
+        logger.warning("🧠 MEMORY DEBUG: personal_memory is None - no memory context available")
 
     # Get minimal conversation history from personal memory
     history = []
+    logger.info(f"🧠 MEMORY DEBUG: Attempting to get conversation history for session {session_id}")
+    
     if global_vars.personal_memory:
         try:
+            logger.info(f"🧠 MEMORY DEBUG: Calling get_conversation_context for session {session_id}")
             recent_memories = await global_vars.personal_memory.get_conversation_context(
                 session_id, max_messages=4
             )  # Last 2 turns
+            logger.info(f"🧠 MEMORY DEBUG: Retrieved {len(recent_memories) if recent_memories else 0} conversation memories")
+            
             # Convert to history format
             for i in range(0, len(recent_memories), 2):
                 if i + 1 < len(recent_memories):
@@ -229,8 +255,11 @@ async def handle_simple_conversational_request(
                     history.append(
                         {"user": user_msg, "model": assistant_msg, "timestamp": timestamp}
                     )
+            logger.info(f"🧠 MEMORY DEBUG: ✅ Converted to {len(history)} history entries")
         except Exception as e:
-            logger.debug(f"Failed to get conversation history: {e}")
+            logger.error(f"🧠 MEMORY DEBUG: ❌ Failed to get conversation history: {e}", exc_info=True)
+    else:
+        logger.warning("🧠 MEMORY DEBUG: personal_memory is None - no conversation history available")
 
     # Use condensed version of main system prompt with critical rules
     simple_system_prompt = """You are Aria, a helpful and friendly AI assistant.
@@ -328,21 +357,38 @@ async def handle_simple_conversational_request(
 
         # Lightweight background processing (don't block response)
         if full_response:
+            logger.info(f"🧠 MEMORY DEBUG: Starting background memory processing for session {session_id}")
+            logger.info(f"🧠 MEMORY DEBUG: Response length: {len(full_response)} chars")
+            
             # Schedule minimal memory processing in background
-            asyncio.create_task(
-                lightweight_memory_processing(user_prompt, full_response, session_id)
-            )
+            try:
+                logger.info("🧠 MEMORY DEBUG: Creating background task for lightweight_memory_processing")
+                asyncio.create_task(
+                    lightweight_memory_processing(user_prompt, full_response, session_id)
+                )
+                logger.info("🧠 MEMORY DEBUG: ✅ Background memory processing task created")
+            except Exception as memory_task_error:
+                logger.error(f"🧠 MEMORY DEBUG: ❌ Failed to create memory processing task: {memory_task_error}", exc_info=True)
 
             # Update conversation history (also background)
-            # Call async history function directly with ResourceManager-powered embeddings
-            redis_utils.add_to_conversation_history(
-                session_id,
-                user_prompt,
-                full_response,
-                global_vars.redis_client,  # ResourceManager handles embedding model internally
-                redis_utils.CONVERSATION_HISTORY_KEY_PREFIX,
-                redis_utils.MAX_NON_VITAL_HISTORY,
-            )
+            try:
+                logger.info(f"🧠 MEMORY DEBUG: Adding conversation to Redis history for session {session_id}")
+                logger.info(f"🧠 MEMORY DEBUG: Redis client available: {global_vars.redis_client is not None}")
+                
+                # Call async history function directly with ResourceManager-powered embeddings
+                redis_utils.add_to_conversation_history(
+                    session_id,
+                    user_prompt,
+                    full_response,
+                    global_vars.redis_client,  # ResourceManager handles embedding model internally
+                    redis_utils.CONVERSATION_HISTORY_KEY_PREFIX,
+                    redis_utils.MAX_NON_VITAL_HISTORY,
+                )
+                logger.info("🧠 MEMORY DEBUG: ✅ Conversation added to Redis history")
+            except Exception as redis_history_error:
+                logger.error(f"🧠 MEMORY DEBUG: ❌ Failed to add to Redis history: {redis_history_error}", exc_info=True)
+        else:
+            logger.warning("🧠 MEMORY DEBUG: No response to process - skipping memory operations")
 
     return StreamingResponse(
         generate_fast_response(),
@@ -361,9 +407,16 @@ async def lightweight_memory_processing(user_prompt: str, response: str, session
     """Enhanced memory processing that stores canonical facts in core_memories
     and avoids redundant storage in the memories table.
     """
+    logger.info(f"🧠 MEMORY DEBUG: Starting lightweight_memory_processing for session {session_id}")
+    logger.info(f"🧠 MEMORY DEBUG: User prompt length: {len(user_prompt)}, Response length: {len(response)}")
+    logger.info(f"🧠 MEMORY DEBUG: User prompt preview: {user_prompt[:100]}...")
+    
     try:
         if not global_vars.personal_memory:
+            logger.warning("🧠 MEMORY DEBUG: personal_memory is None, exiting early")
             return
+        
+        logger.info(f"🧠 MEMORY DEBUG: personal_memory object available: {type(global_vars.personal_memory)}")
 
         # Enhanced pattern-based memory extraction
         memory_patterns = [
@@ -390,25 +443,34 @@ async def lightweight_memory_processing(user_prompt: str, response: str, session
         ]
 
         extracted_count = 0
-        for pattern, core_key, _importance in memory_patterns:
+        logger.info(f"🧠 MEMORY DEBUG: Scanning user prompt with {len(memory_patterns)} patterns")
+        
+        for i, (pattern, core_key, _importance) in enumerate(memory_patterns):
+            logger.debug(f"🧠 MEMORY DEBUG: Testing pattern {i+1}/{len(memory_patterns)}: {core_key}")
             match = re.search(pattern, user_prompt, re.IGNORECASE)
             if match:
                 value = match.group(1).strip()
+                logger.info(f"🧠 MEMORY DEBUG: Pattern match found! {core_key} = '{value}'")
 
-                # Store as core memory instead of regular memory to avoid redundancy
-                await global_vars.personal_memory.set_core_memory(
-                    key=core_key, value=value, category="user_profile"
-                )
-                logger.info(f" CORE MEMORY: Stored {core_key} = {value}")
-                extracted_count += 1
+                try:
+                    # Store as core memory instead of regular memory to avoid redundancy
+                    logger.info(f"🧠 MEMORY DEBUG: Attempting to store core memory: {core_key} = {value}")
+                    await global_vars.personal_memory.set_core_memory(
+                        key=core_key, value=value, category="user_profile"
+                    )
+                    logger.info(f"🧠 MEMORY DEBUG: ✅ Successfully stored core memory: {core_key} = {value}")
+                    extracted_count += 1
+                except Exception as core_memory_error:
+                    logger.error(f"🧠 MEMORY DEBUG: ❌ Failed to store core memory {core_key}: {core_memory_error}", exc_info=True)
 
                 # Don't extract too many things at once to avoid conflicts
                 if extracted_count >= 3:
+                    logger.info(f"🧠 MEMORY DEBUG: Reached extraction limit of 3, stopping")
                     break
 
-        logger.debug(f" CORE MEMORY: Processing complete for session {session_id}")
+        logger.info(f"🧠 MEMORY DEBUG: Memory processing complete for session {session_id}. Extracted {extracted_count} items.")
 
     except Exception as e:
-        logger.error(f"Core memory processing error: {e}")
+        logger.error(f"🧠 MEMORY DEBUG: ❌ Core memory processing error: {e}", exc_info=True)
 
 
