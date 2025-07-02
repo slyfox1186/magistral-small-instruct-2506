@@ -266,7 +266,7 @@ div.markdown-content {
   width: fit-content(15ch);
   min-width: fit-content;
   white-space: nowrap; /* Prevent numbers from wrapping */
-  text-align: right; /* Best practice for numeric data */
+  text-align: left; /* Left align for attribute names */
   /* Professional touch: Ensures digits align perfectly */
   font-variant-numeric: tabular-nums;
   padding-left: 0.75rem;

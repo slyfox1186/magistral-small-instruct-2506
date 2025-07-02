@@ -3,7 +3,7 @@ import MarkdownIt from 'markdown-it';
 import hljs from 'highlight.js';
 import 'highlight.js/styles/atom-one-dark.css'; // Import the theme CSS
 import DOMPurify from 'dompurify';
-import '../components/MarkdownIt.css';
+import '../styles/MarkdownIt.css';
 import { logger } from '../utils';
 
 // Component interface

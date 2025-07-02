@@ -582,7 +582,7 @@ body {
 .message-content td:first-child {
   font-weight: 500;
   color: var(--text-primary);
-  text-align: right;
+  text-align: left;
   padding-right: 2rem;
   min-width: 140px;
 }

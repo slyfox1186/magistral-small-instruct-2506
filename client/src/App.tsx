@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect, lazy, Suspense } from 'react';
 import { CSSTransition, TransitionGroup } from 'react-transition-group';
 import { MEMORY_SESSION_ID } from './api/chat';
-import './App.css';
+import './styles/App.css';
 // Import configuration
 import config from './utils/config';
 // Import constants
