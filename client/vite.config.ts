@@ -35,6 +35,8 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 4000,
+    // Force cache busting for CSS files during development
+    force: true,
     // Proxy API requests to the backend during development
     proxy: {
       '/api': {
@@ -43,6 +45,10 @@ export default defineConfig({
         secure: false,
       },
     },
+  },
+  css: {
+    // Force CSS cache invalidation
+    devSourcemap: true,
   },
   build: {
     sourcemap: false, // Disable sourcemaps in production for smaller files

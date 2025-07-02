@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect, lazy, Suspense } from 'react';
 import { CSSTransition, TransitionGroup } from 'react-transition-group';
 import { MEMORY_SESSION_ID } from './api/chat';
+import { CacheManager } from './utils/cacheUtils';
 import './styles/App.css';
 // Import configuration
 import config from './utils/config';
@@ -85,6 +86,14 @@ const ThinkingDots = () => (
 function App() {
   // Use fixed session ID from environment or generated ID
   const sessionId = MEMORY_SESSION_ID;
+
+  // Initialize cache management for development
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      CacheManager.clearDevelopmentCaches();
+      console.log('🔄 App initialized with fresh cache');
+    }
+  }, []);
 
   // Load messages from localStorage on initial render with type safety
   const [messages, setMessages] = useState<AppMessage[]>(() => {
