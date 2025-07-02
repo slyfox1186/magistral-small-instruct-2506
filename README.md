@@ -5,8 +5,13 @@ A sophisticated AI chat system implementing advanced metacognitive capabilities 
 ## 🚀 Quick Start
 
 ```bash
+# Clone and navigate to project root
+git clone https://github.com/slyfox1186/magistral-small-instruct-2506.git
+cd magistral-small-instruct-2506
+
 # Start everything (Redis, Frontend, Backend)
 cd docker && docker-compose up -d  # Start Redis Stack first
+cd ../                             # Go back to project root
 python start.py                    # Start both frontend and backend
 ```
 
@@ -68,7 +73,7 @@ This is a **Neural Consciousness Chat System** with a modular FastAPI backend an
 ## 🛠️ Development Commands
 
 ### Backend (Python/FastAPI)
-- Start both frontend and backend: `python start.py`
+- Start both frontend and backend: `python start.py` *(from project root)*
 - Start with custom ports: `python start.py --frontend-port 4001 --backend-port 8001`
 - Lint backend: `ruff check backend/` or `ruff check backend/ --fix`
 - Format backend: `ruff format backend/`
@@ -81,8 +86,8 @@ This is a **Neural Consciousness Chat System** with a modular FastAPI backend an
 - Lint frontend: `cd client && npm run lint`
 
 ### Infrastructure
-- Redis Stack: `cd docker && docker-compose up -d` (required for backend)
-- Monitoring Stack: `cd monitoring && docker-compose up -d`
+- Redis Stack: `cd docker && docker-compose up -d && cd ../` (required for backend)
+- Monitoring Stack: `cd monitoring && docker-compose up -d && cd ../`
 
 ## 🌐 Access Points
 - **Frontend**: http://localhost:4000
@@ -95,11 +100,11 @@ This is a **Neural Consciousness Chat System** with a modular FastAPI backend an
 
 ### Initial Setup
 1. Ensure GPU drivers and CUDA are installed (for LLM acceleration)
-2. Start Redis: `cd docker && docker-compose up -d`
+2. Start Redis: `cd docker && docker-compose up -d && cd ../`
 3. Install dependencies:
    - Backend: `pip install -r backend/requirements.txt`
-   - Frontend: `cd client && npm install`
-4. Start development: `python start.py`
+   - Frontend: `cd client && npm install && cd ../`
+4. Start development: `python start.py` *(from project root)*
 
 ## 🧠 Memory System
 
