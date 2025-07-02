@@ -277,7 +277,7 @@ body {
 .message.user .message-bubble {
   background: #374151;
   color: var(--text-primary);
-  padding: 0 1.25rem;
+  padding: 1.25rem 1.25rem;
   border-radius: 1.25rem 1.25rem 0.25rem 1.25rem;
   max-width: 80%;
   box-shadow: var(--shadow-md);
