@@ -5,6 +5,9 @@
 .env.staging
 **/.env*
 
+# Allow .env.example (template file)
+!.env.example
+
 # API Keys and secrets
 api_keys.txt
 secrets.json
