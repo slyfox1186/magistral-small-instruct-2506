@@ -1,0 +1,50 @@
+# Prettier ignore file
+
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build outputs
+dist/
+build/
+*.egg-info/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Version control
+.git/
+
+# IDE
+.vscode/
+.idea/
+
+# Python files (handled by Ruff)
+*.py
+*.pyc
+
+# Generated files
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+
+# Model files
+*.gguf
+*.bin
+*.safetensors
+
+# Logs
+*.log
+logs/
+
+# Environment files
+.env*
+
+# Coverage
+coverage/
+*.lcov
+
+# Misc
+*.min.js
+*.min.css

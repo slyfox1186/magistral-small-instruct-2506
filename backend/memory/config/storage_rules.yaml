@@ -1,0 +1,81 @@
+# Enhanced Storage Management Rules
+# These rules provide user-configurable control over memory storage behavior
+
+storage_rules:
+  # Dynamic capacity management
+  capacity_management:
+    stm_max_entries: 10000  # From existing config
+    ltm_max_entries: 100000  # From existing config
+    
+    # When capacity is exceeded, use these rules for pruning
+    pruning_strategy: "importance_based"  # or "age_based", "hybrid"
+    
+    # Minimum importance score to keep in memory
+    stm_min_importance: 0.1
+    ltm_min_importance: 0.3
+    
+    # Never prune memories with these characteristics
+    never_prune:
+      - importance_score: 0.9  # High importance
+      - circles: ["identity"]  # Core identity memories
+      - tags: ["core", "permanent", "critical"]
+      
+  # Customizable retention policies by circle
+  circle_policies:
+    identity:
+      min_retention_days: 365  # Always keep for 1 year minimum
+      importance_multiplier: 1.5  # Boost importance scores
+      
+    relationships:
+      min_retention_days: 180
+      importance_multiplier: 1.2
+      
+    experiences:
+      min_retention_days: 90
+      importance_multiplier: 1.0
+      
+    knowledge:
+      min_retention_days: 180
+      importance_multiplier: 1.1
+      
+    temporal:
+      min_retention_days: 7  # Quick expiry for schedules
+      importance_multiplier: 0.8
+      
+    context:
+      min_retention_days: 1  # Very quick expiry
+      importance_multiplier: 0.5
+      
+    communication:
+      min_retention_days: 30
+      importance_multiplier: 1.0
+
+  # User-customizable importance scoring
+  importance_scoring:
+    # Base factors that influence importance
+    factors:
+      recency_weight: 0.3      # How much recent memories matter
+      frequency_weight: 0.2    # How often memory is accessed
+      circle_weight: 0.3       # Circle priority influence
+      tag_weight: 0.2          # Specific tag influence
+      
+    # Tag-based importance boosts
+    tag_importance:
+      critical: 0.9
+      important: 0.7
+      personal: 0.6
+      work: 0.5
+      temporary: 0.2
+      
+  # Advanced pruning rules
+  advanced_pruning:
+    # Consolidate similar memories instead of just deleting
+    enable_consolidation: true
+    similarity_threshold: 0.85  # Vector similarity for consolidation
+    
+    # Archive instead of delete (move to cold storage)
+    enable_archiving: true
+    archive_after_days: 365
+    
+    # User approval required for high-importance deletions
+    require_approval_above_importance: 0.8

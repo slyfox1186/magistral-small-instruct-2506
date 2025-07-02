@@ -1,0 +1,103 @@
+# Memory Circle Definitions
+# Each circle represents a category of memory with specific properties
+
+circles:
+  identity:
+    description: "Core identity, values, and self-concept"
+    priority: 0.9
+    decay_rate: 0.01  # Very slow decay
+    color: "#FF6B6B"  # For visualization
+    sub_circles:
+      - personal_info
+      - beliefs
+      - values
+      - goals
+      - personality_traits
+      
+  relationships:
+    description: "People, connections, and social interactions"
+    priority: 0.8
+    decay_rate: 0.05
+    color: "#4ECDC4"
+    sub_circles:
+      - family
+      - friends
+      - colleagues
+      - acquaintances
+      - social_patterns
+      
+  experiences:
+    description: "Events, activities, and episodic memories"
+    priority: 0.7
+    decay_rate: 0.1
+    color: "#45B7D1"
+    sub_circles:
+      - daily_events
+      - significant_moments
+      - achievements
+      - challenges
+      - lessons_learned
+      
+  knowledge:
+    description: "Facts, skills, and learned information"
+    priority: 0.6
+    decay_rate: 0.02
+    color: "#96CEB4"
+    sub_circles:
+      - technical_skills
+      - domain_knowledge
+      - general_facts
+      - procedures
+      - resources
+      
+  temporal:
+    description: "Time-based information and schedules"
+    priority: 0.5
+    decay_rate: 0.2  # Fast decay for outdated info
+    color: "#FECA57"
+    sub_circles:
+      - schedules
+      - deadlines
+      - appointments
+      - recurring_events
+      - time_preferences
+      
+  context:
+    description: "Current situation and active context"
+    priority: 0.9
+    decay_rate: 0.8  # Very fast decay
+    color: "#FF9FF3"
+    sub_circles:
+      - current_task
+      - active_project
+      - session_context
+      - environment
+      - immediate_goals
+      
+  communication:
+    description: "Conversation patterns and preferences"
+    priority: 0.7
+    decay_rate: 0.3
+    color: "#54A0FF"
+    sub_circles:
+      - language_style
+      - conversation_history
+      - preferences
+      - topics_of_interest
+      - communication_patterns
+
+# Default circle for uncategorized memories
+default_circle: experiences
+
+# Circle selection rules (in order of precedence)
+selection_rules:
+  - pattern: "my name is|I am|I'm"
+    circle: identity
+  - pattern: "remember that .* is my"
+    circle: relationships
+  - pattern: "I learned|I know|fact:"
+    circle: knowledge
+  - pattern: "tomorrow|next week|schedule|deadline"
+    circle: temporal
+  - pattern: "right now|currently|working on"
+    circle: context

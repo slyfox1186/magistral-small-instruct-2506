@@ -1,0 +1,117 @@
+/* Import Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Fira+Code&display=swap');
+
+:root {
+  font-family: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  font-size: 18px;
+
+  color-scheme: dark;
+  /* Off-white text for reduced eye strain */
+  color: #f9fafb;
+  /* Deep slate blue background */
+  background-color: #0f172a;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  height: 100%;
+  overflow: hidden; /* Prevent html scroll */
+}
+
+body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden; /* Prevent body scroll */
+  line-height: 1.5;
+  background-color: #0f172a;
+}
+
+#root {
+  width: 100vw;
+  height: 100vh;
+  margin: 0;
+  padding: 0;
+  overflow: hidden; /* Only allow scrolling within specific containers */
+}
+
+/* Nuclear approach to fix code blocks */
+/* These rules will have extreme specificity to override everything */
+
+/* Target the syntax highlighter wrapper directly */
+.syntax-highlighter-wrapper,
+div.syntax-highlighter-wrapper,
+.message-content div.syntax-highlighter-wrapper {
+  display: block;
+  overflow: visible;
+  max-width: 100%;
+  position: relative;
+}
+
+/* Target the pre element - ESSENTIAL FIX */
+.syntax-highlighter-wrapper pre,
+div.syntax-highlighter-wrapper pre,
+.message-content div.syntax-highlighter-wrapper pre {
+  white-space: pre;
+  overflow-x: auto;
+  display: block;
+  max-width: 100%;
+  width: 100%;
+  tab-size: 4;
+}
+
+/* Target the code element inside the pre */
+.syntax-highlighter-wrapper pre code,
+div.syntax-highlighter-wrapper pre code,
+.message-content div.syntax-highlighter-wrapper pre code {
+  white-space: pre;
+  overflow: visible;
+  display: block;
+  font-family: 'Fira Code', 'Consolas', monospace;
+  font-size: 0.9em;
+  width: auto;
+}
+
+/* Ensure we intercept all possible permutations of pre/code selectors */
+pre,
+pre code,
+code pre,
+.message-content pre,
+.message-content code {
+  overflow-wrap: normal;
+  word-break: keep-all;
+  overflow-x: auto;
+}
+
+/* Override general paragraph styles */
+.markdown-paragraph {
+  width: 100%;
+  overflow: visible;
+  display: block;
+}
+
+/* Make sure standalone pre gets scrollbars */
+.markdown-paragraph > pre {
+  overflow-x: auto;
+  white-space: pre;
+}
+
+/* Ensure code block text stays intact */
+pre span,
+pre code span {
+  white-space: pre;
+}

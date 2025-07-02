@@ -1,0 +1,140 @@
+[tool.ruff]
+# Ruff configuration for modern Python development (2025 best practices)
+line-length = 100
+target-version = "py311"  # Updated to Python 3.11
+fix = true  # Auto-fix when possible
+
+[tool.ruff.format]
+# Format configuration (replaces Black)
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.ruff.lint]
+select = [
+    # Core rules
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # Pyflakes (includes unused imports/variables)
+    "I",      # isort
+    "N",      # pep8-naming
+    "UP",     # pyupgrade
+    
+    # Additional quality rules
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "DTZ",    # flake8-datetimez
+    "T10",    # flake8-debugger
+    "T20",    # flake8-print
+    "SIM",    # flake8-simplify
+    "PTH",    # flake8-use-pathlib
+    "ERA",    # flake8-eradicate (commented code)
+    "PD",     # pandas-vet
+    "PL",     # pylint
+    "TRY",    # tryceratops (exception handling)
+    "FLY",    # flynt (string formatting)
+    "PERF",   # performance
+    "FURB",   # refurb (modern Python patterns)
+    "LOG",    # flake8-logging
+    
+    # Security
+    "S",      # flake8-bandit
+    
+    # Documentation
+    "D",      # pydocstyle
+    
+    # Ruff-specific
+    "RUF",    # Ruff-specific rules
+    
+    # Async best practices
+    "ASYNC",  # flake8-async
+]
+
+ignore = [
+    "E203",   # Whitespace before ':'
+    "E501",   # Line too long (handled by formatter)
+    "D100",   # Missing docstring in public module
+    "D104",   # Missing docstring in public package
+    "D106",   # Missing docstring in public nested class
+    "D203",   # 1 blank line required before class docstring
+    "D213",   # Multi-line docstring summary should start at the second line
+    "S101",   # Use of assert (needed for tests)
+    "TRY003", # Avoid specifying long messages outside the exception class
+    "PLR0913", # Too many arguments (common in FastAPI)
+]
+
+exclude = [
+    ".git",
+    "__pycache__",
+    ".venv",
+    "venv",
+    "build",
+    "dist",
+    "*.egg-info",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    "models",  # Exclude model files
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401", "F403", "D104"]  # Allow unused imports in __init__ files
+"tests/**" = ["S101", "D100", "D101", "D102", "D103"]  # Relax rules for tests
+"**/migrations/**" = ["D100", "D101", "D102", "D103"]  # Relax docstring rules for migrations
+
+[tool.ruff.lint.isort]
+known-first-party = ["memory", "schemas", "services", "utils", "resource_manager", "config"]
+section-order = ["future", "standard-library", "third-party", "first-party", "local-folder"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"  # Use Google docstring convention
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10  # Maximum cyclomatic complexity
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Security"]
+
+# Mypy configuration for type checking
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false  # Start permissive
+disallow_incomplete_defs = true
+check_untyped_defs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+
+# Per-module options
+[[tool.mypy.overrides]]
+module = "llama_cpp.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "redis.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "sentence_transformers.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "prometheus_client.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "aiosqlite.*"
+ignore_missing_imports = true
+
+# FastAPI/Pydantic support
+plugins = ["pydantic.mypy"]
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true

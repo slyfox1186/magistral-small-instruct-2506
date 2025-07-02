@@ -1,0 +1,50 @@
+services:
+  redis-stack:
+    image: redis/redis-stack-server:latest
+    container_name: aria-redis-stack
+    ports:
+      - "6379:6379"  # Redis port
+    environment:
+      # Redis configuration
+      - REDIS_ARGS=--save 60 1000 --appendonly yes --appendfsync everysec
+    volumes:
+      - redis_data:/data
+    command: >
+      redis-stack-server
+      --bind 0.0.0.0
+      --protected-mode no
+      --save 60 1000
+      --appendonly yes
+      --appendfsync everysec
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - aria-network
+
+  # Redis Insight for web-based Redis management
+  redis-insight:
+    image: redislabs/redisinsight:latest
+    container_name: aria-redis-insight
+    ports:
+      - "8002:8001"
+    environment:
+      - REDISINSIGHT_HOST=0.0.0.0
+      - REDISINSIGHT_PORT=8001
+    depends_on:
+      - redis-stack
+    restart: unless-stopped
+    networks:
+      - aria-network
+
+volumes:
+  redis_data:
+    driver: local
+
+networks:
+  aria-network:
+    driver: bridge

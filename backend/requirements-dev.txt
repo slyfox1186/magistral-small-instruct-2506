@@ -1,0 +1,20 @@
+# Development dependencies
+# Install with: pip install -r requirements-dev.txt
+
+# Linting and code quality
+ruff==0.8.5
+mypy==1.13.0
+bandit==1.8.0  # Security linting
+
+# Type stubs for better mypy support
+types-aiofiles==25.0.0.20241221
+types-redis==4.6.0.20241004
+types-requests==2.32.0.20241016
+
+# Testing
+pytest==8.3.4
+pytest-asyncio==0.25.2
+pytest-cov==6.0.0
+
+# Pre-commit hooks
+pre-commit==4.0.1

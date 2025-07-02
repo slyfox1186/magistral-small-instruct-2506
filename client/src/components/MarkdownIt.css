@@ -1,0 +1,382 @@
+/* Base styles for markdown content */
+.markdown-content {
+  color: #f9fafb;
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans',
+    'Helvetica Neue', sans-serif;
+  line-height: 1.6;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  word-break: break-word;
+  font-size: 1rem;
+  display: block; /* Ensure block display */
+  width: 100%; /* Full width */
+  box-sizing: border-box; /* Include padding in width calculation */
+}
+
+/* Fix for split content issue */
+.markdown-content > * {
+  white-space: normal !important; /* Prevent content from being treated as whitespace */
+}
+
+/* Fix for div.markdown-content to prevent splitting */
+div.markdown-content {
+  display: block !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+/* Headers */
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3,
+.markdown-content h4,
+.markdown-content h5,
+.markdown-content h6 {
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+  font-weight: 600;
+  line-height: 1.25;
+  color: #3b82f6; /* Royal blue for headers */
+}
+
+/* Remove top margin when header is first element in markdown content */
+.markdown-content > h1:first-child,
+.markdown-content > h2:first-child,
+.markdown-content > h3:first-child,
+.markdown-content > h4:first-child,
+.markdown-content > h5:first-child,
+.markdown-content > h6:first-child {
+  margin-top: 0;
+}
+
+.markdown-content h1 {
+  font-size: 2em;
+  border-bottom: 0.0625rem solid rgba(59, 130, 246, 0.3); /* Blue border */
+  padding-bottom: 0.3em;
+}
+
+.markdown-content h2 {
+  font-size: 1.5em;
+  border-bottom: 0.0625rem solid rgba(148, 163, 184, 0.2); /* Subtle border */
+  padding-bottom: 0.2em;
+}
+
+.markdown-content h3 {
+  font-size: 1.25em;
+}
+
+.markdown-content h4 {
+  font-size: 1em;
+}
+
+.markdown-content h5 {
+  font-size: 0.875em;
+}
+
+.markdown-content h6 {
+  font-size: 0.85em;
+  color: #9ca3af; /* Muted color */
+}
+
+/* Lists */
+.markdown-content ul,
+.markdown-content ol {
+  padding-left: 2em;
+  margin: 1em 0;
+}
+
+.markdown-content li {
+  margin: 0.5em 0;
+  position: relative;
+}
+
+/* Ensure list markers render properly */
+.markdown-content ol {
+  list-style-type: decimal;
+  counter-reset: item;
+}
+
+.markdown-content ol ol {
+  list-style-type: lower-alpha;
+}
+
+.markdown-content ol ol ol {
+  list-style-type: lower-roman;
+}
+
+/* Unordered lists with proper bullets and spacing */
+.markdown-content ul {
+  list-style-type: disc;
+}
+
+.markdown-content ul ul {
+  list-style-type: circle;
+}
+
+.markdown-content ul ul ul {
+  list-style-type: square;
+}
+
+/* Links */
+.markdown-content a {
+  color: #3b82f6; /* Royal blue */
+  text-decoration: none;
+  transition: color 0.2s ease;
+  position: relative;
+}
+
+.markdown-content a:hover {
+  text-decoration: underline;
+  color: #60a5fa; /* Light blue for hover */
+}
+
+/* Code */
+.markdown-content code {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  background-color: #334155;
+  padding: 0.2em 0.4em;
+  border-radius: 0.25rem;
+  font-size: 0.9em;
+  word-break: keep-all;
+  color: #a78bfa;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.markdown-content pre {
+  background-color: #111827;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  overflow: auto;
+  font-size: 0.9em;
+  margin: 1em 0;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.markdown-content pre code {
+  background-color: transparent;
+  padding: 0;
+  white-space: pre;
+  word-break: normal;
+  color: inherit;
+  line-height: 1.5;
+  font-size: 0.9em;
+}
+
+/* Blockquotes */
+.markdown-content blockquote {
+  border-left: 0.25rem solid #8b5cf6;
+  padding: 1rem;
+  margin: 1em 0;
+  color: #d1d5db;
+  font-style: italic;
+  background: #1e293b;
+  border-radius: 0.5rem;
+}
+
+/* Image handling styles */
+.markdown-image {
+  max-width: 100%;
+  height: auto;
+  display: inline-block;
+  transition:
+    opacity 0.3s ease,
+    border 0.2s ease;
+  border: 0.125rem solid transparent;
+  border-radius: 0.25rem;
+}
+
+.loading-images .markdown-image {
+  opacity: 0.7;
+}
+
+/* Indicate image load errors */
+.image-load-error {
+  border: 0.125rem solid rgba(255, 80, 80, 0.5);
+  position: relative;
+  min-height: 2.5rem;
+  background-color: rgba(255, 50, 50, 0.1);
+}
+
+/* Fix layout shift by setting min-height for images */
+.markdown-image:not([height]) {
+  min-height: 1.5rem;
+}
+
+/* Images */
+.markdown-content img {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* Horizontal Rule */
+.markdown-content hr {
+  height: 0.0625rem;
+  border: none;
+  background: rgba(148, 163, 184, 0.3);
+  margin: 1.5rem 0;
+}
+
+/* Table container for horizontal scrolling */
+.table-container {
+  overflow-x: auto; /* Enable horizontal scrolling ONLY when needed */
+  width: 100%;
+  -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+}
+
+/* Tables */
+.markdown-content table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1.5em 0;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  display: table;
+  table-layout: auto; /* Let browser determine optimal column widths */
+  background-color: #111827;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  overflow: hidden; /* For border-radius to work properly */
+}
+
+/* --- Clean Column Sizing --- */
+.markdown-content th,
+.markdown-content td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #3a3a3a;
+  text-align: left;
+  /* Better word wrapping without breaking mid-word */
+  overflow-wrap: break-word;
+  /* Remove forced minimum width */
+  min-width: 0;
+  /* Consistent top alignment */
+  vertical-align: top;
+}
+
+/* 
+ * TARGETING NARROW COLUMNS (e.g., IDs, Numbers, Step columns)
+ * State-of-the-art: Using fit-content() for intelligent sizing
+ */
+.markdown-content th.col-numeric,
+.markdown-content td.col-numeric,
+/* Fallback: Assume first column is often numeric/ID */
+.markdown-content th:first-child, 
+.markdown-content td:first-child {
+  /* Modern CSS: Shrink-wrap to content with a reasonable max */
+  width: fit-content(15ch);
+  min-width: fit-content;
+  white-space: nowrap; /* Prevent numbers from wrapping */
+  text-align: right; /* Best practice for numeric data */
+  /* Professional touch: Ensures digits align perfectly */
+  font-variant-numeric: tabular-nums;
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+}
+
+/* Special handling for very narrow content (single digits, checkmarks) */
+.markdown-content th.col-narrow,
+.markdown-content td.col-narrow,
+.markdown-content th:first-child:has(+ th), /* If there are multiple columns */
+.markdown-content td:first-child:has(+ td) {
+  width: fit-content(5ch);
+  min-width: 3ch;
+}
+
+.markdown-content table[style*='border-collapse: separate'] td,
+.markdown-content table[style*='border-collapse: separate'] th {
+  border-left: 1px solid #505050;
+}
+
+.markdown-content table[style*='border-collapse: separate'] th:first-child,
+.markdown-content table[style*='border-collapse: separate'] td:first-child {
+  border-left: none;
+}
+
+/* Table headers */
+.markdown-content th {
+  background: #1e293b;
+  font-weight: 600;
+  text-align: left;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.3);
+  padding: 0.875rem 1rem;
+  color: #f9fafb;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  line-height: 1.4;
+  white-space: nowrap; /* Keep headers on one line */
+}
+
+/* Table cells */
+.markdown-content td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+  border-right: 1px solid rgba(148, 163, 184, 0.1);
+  background-color: transparent;
+  color: #d1d5db;
+  font-size: 0.9rem; /* Improved readability */
+  line-height: 1.6; /* Better line height */
+  hyphens: none; /* Disable auto-hyphenation */
+  text-align: left;
+  transition: background-color 0.2s ease;
+}
+
+/* Last row of cells */
+.markdown-content tr:last-child td {
+  border-bottom: none;
+}
+
+/* Last cell in row */
+.markdown-content td:last-child {
+  border-right: none;
+}
+
+/* Clean zebra striping */
+.markdown-content tbody tr:nth-child(even) {
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
+/* Subtle hover effect */
+.markdown-content tbody tr:hover {
+  background-color: rgba(59, 130, 246, 0.05);
+  transition: background-color 0.2s ease;
+}
+
+.markdown-content tbody tr:hover td {
+  color: #f9fafb;
+}
+
+/* Error states and recovery */
+.markdown-error {
+  padding: 0.625rem;
+  margin: 0.625rem 0;
+  border: 0.0625rem solid rgba(255, 100, 100, 0.3);
+  background-color: rgba(255, 50, 50, 0.1);
+  border-radius: 0.25rem;
+  color: #ff6b6b;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 0.9em;
+}
+
+.markdown-error-recovery {
+  padding: 0.5rem;
+  border-left: 0.1875rem solid #ffcc00;
+  margin: 0.625rem 0;
+  background-color: rgba(255, 204, 0, 0.05);
+  color: #e8eaed;
+}
+
+/* Render error indicator */
+.has-render-error {
+  position: relative;
+}
+
+.has-render-error::after {
+  content: '⚠️';
+  position: absolute;
+  top: 0.3125rem;
+  right: 0.3125rem;
+  font-size: 1rem;
+  color: #ffcc00;
+  opacity: 0.7;
+}

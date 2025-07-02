@@ -1,0 +1,1213 @@
+/* Modern, Sophisticated Chat Interface - High-End Dark Theme */
+
+/* Import high-quality fonts */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+/* State-of-the-Art Color Palette: "Midnight Violet" */
+:root {
+  /* Ultra-Modern Dark Backgrounds - Cool slate with depth */
+  --bg-primary: #0a0a0d; /* Pure black with subtle blue undertone */
+  --bg-secondary: #141418; /* Primary surface - cards, messages */
+  --bg-tertiary: #1c1c23; /* Secondary surface - inputs, hover */
+  --bg-elevated: #252530; /* Elevated elements - dropdowns, modals */
+
+  /* Premium Accent Colors - Sophisticated & Balanced */
+  --accent-primary: #8b5cf6; /* Vibrant violet - primary actions */
+  --accent-success: #10b981; /* Emerald green - positive states */
+  --accent-warning: #f59e0b; /* Amber - warnings only */
+  --accent-danger: #ef4444; /* Coral red - errors & destructive */
+  --accent-info: #3b82f6; /* Sky blue - information */
+
+  /* Accent Variations - Using opacity for consistency */
+  --accent-primary-faded: rgba(139, 92, 246, 0.1);
+  --accent-primary-hover: rgba(139, 92, 246, 0.15);
+  --accent-primary-glow: rgba(139, 92, 246, 0.4);
+
+  /* Premium Text Hierarchy - Maximum readability */
+  --text-primary: #fafafa; /* Pure white for main content */
+  --text-secondary: #a8a8b3; /* Silver gray - secondary info */
+  --text-tertiary: #6b6b7b; /* Dim gray - timestamps, labels */
+
+  /* Interactive States - Subtle & Refined */
+  --interactive-normal: rgba(139, 92, 246, 0.05);
+  --interactive-hover: rgba(139, 92, 246, 0.1);
+  --interactive-active: rgba(139, 92, 246, 0.15);
+
+  /* Sophisticated Borders - Using base color with opacity */
+  --border-color: #a8a8b3;
+  --border-subtle: rgba(168, 168, 179, 0.08);
+  --border-default: rgba(168, 168, 179, 0.16);
+  --border-strong: rgba(168, 168, 179, 0.24);
+
+  /* Premium Shadows - Deep & Elegant */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  --shadow-glow: 0 0 40px rgba(139, 92, 246, 0.15);
+
+  /* Elegant Glow Effects */
+  --glow-primary: 0 0 20px rgba(139, 92, 246, 0.4);
+  --glow-success: 0 0 20px rgba(16, 185, 129, 0.4);
+  --glow-danger: 0 0 20px rgba(239, 68, 68, 0.4);
+
+  /* Minimalist Gradients - Clean & Modern */
+  --gradient-main: linear-gradient(135deg, #0a0a0d 0%, #141418 100%);
+  --gradient-primary: linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%);
+  --gradient-surface: linear-gradient(135deg, #141418 0%, #1c1c23 100%);
+  --gradient-subtle: linear-gradient(
+    135deg,
+    rgba(139, 92, 246, 0.03) 0%,
+    rgba(139, 92, 246, 0.08) 100%
+  );
+}
+
+/* Global styles */
+* {
+  box-sizing: border-box;
+}
+
+/* Prevent all buttons and inputs from changing dimensions on interaction */
+button:focus,
+input:focus,
+textarea:focus,
+button:active,
+input:active,
+textarea:active {
+  outline: none;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family:
+    'Inter',
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
+  background-color: #0a0a0d; /* Chrome fallback */
+  background-color: var(--bg-primary, #0a0a0d);
+  color: #f9fafb; /* Chrome fallback */
+  color: var(--text-primary, #f9fafb);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  /* Subtle gradient background */
+  background-image: var(--gradient-main);
+}
+
+/* Main app layout */
+.app-layout-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  background: #0a0a0d; /* Chrome fallback */
+  background: var(--bg-primary, #0a0a0d);
+  position: fixed; /* Fix to viewport */
+  top: 0;
+  left: 0;
+  overflow: hidden; /* Prevent body scroll, only messages should scroll */
+}
+
+/* Subtle overlay for depth */
+.app-layout-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--gradient-subtle);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* Corner controls with subtle design */
+.corner-controls {
+  position: absolute;
+  top: 1.5rem;
+  right: 1.5rem;
+  z-index: 100;
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.clear-history-button,
+.clear-memory-button {
+  padding: 0.625rem 1.25rem;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: rgba(30, 41, 59, 0.8);
+  color: #f9fafb;
+  text-transform: none;
+  letter-spacing: 0.025em;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  position: relative;
+  overflow: hidden;
+  min-width: 100px;
+  text-align: center;
+}
+
+.clear-history-button:hover,
+.clear-memory-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+  border-color: var(--accent-primary);
+  background: rgba(51, 65, 85, 0.9);
+  color: #ffffff;
+}
+
+.clear-history-button:active,
+.clear-memory-button:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.clear-history-button {
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.clear-history-button:hover {
+  border-color: var(--accent-danger);
+  color: white;
+  background: var(--accent-danger);
+  box-shadow: var(--glow-danger);
+}
+
+.clear-memory-button {
+  border-color: var(--border-default);
+}
+
+.clear-memory-button:hover {
+  border-color: var(--accent-primary);
+  color: white;
+  background: var(--accent-primary);
+  box-shadow: var(--glow-primary);
+}
+
+/* Chat container */
+.chat-container {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  overflow: hidden; /* Contain children */
+}
+
+/* Messages area with elegant scrolling */
+.messages-container {
+  flex: 1 1 0; /* This is KEY - flex-basis: 0 forces it to respect flex-grow */
+  min-height: 0; /* CRITICAL - allows flex item to shrink below content size */
+  overflow-y: scroll; /* Changed from auto to scroll - always show scrollbar */
+  overflow-x: hidden;
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  scroll-behavior: smooth;
+  /* Ensure scrollbar is always visible on Windows/Linux */
+  scrollbar-width: thin; /* Firefox */
+  scrollbar-color: rgba(148, 163, 184, 0.3) transparent; /* Chrome fallback */
+  scrollbar-color: var(--border-default) transparent; /* Firefox */
+  /* Force height calculation */
+  height: 0; /* With flex: 1, this ensures proper height constraint */
+}
+
+/* Custom scrollbar styling for messages container */
+.messages-container::-webkit-scrollbar {
+  width: 8px;
+}
+
+.messages-container::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+  border-radius: 4px;
+}
+
+.messages-container::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 4px;
+}
+
+.messages-container::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-primary);
+}
+
+/* Center messages column with proper alignment */
+.messages-container > * {
+  max-width: 1000px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* Message bubbles with premium styling */
+.message {
+  display: flex;
+  flex-direction: column;
+  animation: messageSlideIn 0.3s ease-out;
+  transition: opacity 0.2s ease;
+}
+
+@keyframes messageSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* User messages - Ultra-Premium design */
+.message.user {
+  align-items: flex-end;
+}
+
+.message.user .message-bubble {
+  background: #374151;
+  color: var(--text-primary);
+  padding: 0 1.25rem;
+  border-radius: 1.25rem 1.25rem 0.25rem 1.25rem;
+  max-width: 80%;
+  box-shadow: var(--shadow-md);
+  position: relative;
+  font-weight: 500;
+  font-size: 1rem;
+  line-height: 1.5;
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+/* Subtle hover effect for user messages */
+.message.user .message-bubble:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+
+/* AI messages - Ultra-sophisticated design */
+.message.assistant {
+  align-items: flex-start;
+}
+
+.message.assistant .message-bubble {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  padding: 1.25rem 1.5rem;
+  border-radius: 1.25rem 1.25rem 1.25rem 0.25rem;
+  max-width: 80%;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  position: relative;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+  font-size: 1rem;
+  line-height: 1.65;
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Subtle hover state for AI messages */
+.message.assistant .message-bubble:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--border-default);
+}
+
+/* Message role labels - Clean and simple design */
+.message-role {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  margin-bottom: 0.75rem;
+  position: relative;
+  transition: opacity 0.3s ease;
+}
+
+.message.user .message-role {
+  color: var(--text-secondary);
+  text-align: right;
+  opacity: 0.8;
+}
+
+.message.assistant .message-role {
+  color: var(--text-tertiary);
+  opacity: 0.8;
+}
+
+/* Simple hover effect */
+.message:hover .message-role {
+  opacity: 1;
+}
+
+/* Message content styling */
+.message-content {
+  line-height: 1.6;
+  word-wrap: break-word;
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.message-content p {
+  margin: 0 0 0.75rem 0;
+  color: inherit;
+  font-weight: 400;
+}
+
+.message-content p:last-child {
+  margin-bottom: 0;
+}
+
+/* Code styling - Premium monospace */
+.message-content code {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.875em;
+  font-weight: 500;
+}
+
+/* Inline code */
+.message-content p code,
+.message-content li code {
+  background: var(--bg-elevated);
+  color: var(--accent-info);
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.25rem;
+  border: 1px solid var(--border-subtle);
+  font-size: 0.875em;
+}
+
+/* Code blocks */
+.message-content pre {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: 0.5rem;
+  padding: 1.25rem;
+  margin: 1rem 0;
+  overflow-x: auto;
+  position: relative;
+  box-shadow: var(--shadow-sm);
+}
+
+.message-content pre code {
+  background: transparent;
+  color: var(--text-primary);
+  padding: 0;
+  border: none;
+  display: block;
+  line-height: 1.6;
+}
+
+/* Language indicator for code blocks */
+.message-content pre::before {
+  content: attr(data-language);
+  position: absolute;
+  top: 0;
+  right: 0;
+  padding: 0.25rem 0.75rem;
+  background: var(--bg-elevated);
+  border-radius: 0 0.75rem 0 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Links - Neon glow animation */
+.message-content a {
+  color: var(--accent-primary);
+  text-decoration: none;
+  position: relative;
+  transition: all 0.3s ease;
+  font-weight: 500;
+  text-shadow: 0 0 5px transparent;
+}
+
+.message-content a::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  width: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent-primary) 0%, var(--accent-purple) 100%);
+  transition: width 0.3s ease;
+  box-shadow: 0 0 5px var(--accent-primary);
+}
+
+.message-content a:hover {
+  color: var(--accent-info);
+  text-shadow: 0 0 10px var(--accent-primary);
+}
+
+.message-content a:hover::after {
+  width: 100%;
+}
+
+/* Lists - Clean and organized */
+.message-content ul,
+.message-content ol {
+  margin: 0.75rem 0;
+  padding-left: 1.5rem;
+}
+
+.message-content li {
+  margin-bottom: 0.375rem;
+  color: inherit;
+  font-weight: 400;
+}
+
+/* Blockquotes */
+.message-content blockquote {
+  margin: 1rem 0;
+  padding: 1rem 1.5rem;
+  background: var(--bg-elevated);
+  border-left: 4px solid var(--accent-info);
+  border-radius: 0.5rem;
+  font-style: italic;
+  color: var(--text-secondary);
+}
+
+/* Headers - Clean hierarchy */
+.message-content h1,
+.message-content h2,
+.message-content h3,
+.message-content h4 {
+  margin: 1.5rem 0 0.75rem 0;
+  font-weight: 600;
+  color: inherit;
+  line-height: 1.3;
+}
+
+/* Remove top margin when header is first element in message content */
+.message-content > :first-child:is(h1, h2, h3, h4, h5, h6),
+.message-bubble .markdown-content > h1:first-child,
+.message-bubble .markdown-content > h2:first-child,
+.message-bubble .markdown-content > h3:first-child,
+.message-bubble .markdown-content > h4:first-child,
+.message-bubble .markdown-content > h5:first-child,
+.message-bubble .markdown-content > h6:first-child {
+  margin-top: 0;
+}
+
+.message-content h1 {
+  font-size: 1.75rem;
+  border-bottom: 2px solid var(--border-default);
+  padding-bottom: 0.5rem;
+}
+
+.message-content h2 {
+  font-size: 1.5rem;
+}
+
+.message-content h3 {
+  font-size: 1.25rem;
+}
+
+.message-content h4 {
+  font-size: 1.1rem;
+}
+
+/* Tables */
+.message-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.5rem 0;
+  background: var(--bg-secondary);
+  border-radius: 0.5rem;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border-default);
+}
+
+.message-content th {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  padding: 1rem 1.25rem;
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border: none;
+  position: relative;
+}
+
+.message-content th::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.3) 50%,
+    transparent 100%
+  );
+}
+
+.message-content td {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  transition: background-color 0.2s ease;
+  vertical-align: top;
+}
+
+.message-content tr:last-child td {
+  border-bottom: none;
+}
+
+.message-content tr:hover td {
+  background: var(--interactive-normal);
+  color: var(--text-primary);
+}
+
+/* Alternating row colors for better readability */
+.message-content tbody tr:nth-child(even) td {
+  background: rgba(255, 255, 255, 0.01);
+}
+
+.message-content tbody tr:nth-child(even):hover td {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* Thinking content styling */
+.assistant-thinking {
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-left: 3px solid var(--accent-warning);
+  border-radius: 0.5rem;
+  margin-bottom: 16px;
+  opacity: 1;
+  overflow: hidden;
+}
+
+.thinking-header {
+  background: var(--interactive-normal);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--accent-warning);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--border-default);
+}
+
+.thinking-content {
+  padding: 0.75rem;
+  font-size: 13px;
+  color: var(--text-primary);
+  font-family: 'JetBrains Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
+  max-height: 300px;
+  overflow-y: auto;
+  opacity: 0.95;
+  line-height: 1.4;
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.assistant-response {
+  margin-top: 0.5rem;
+}
+
+.thinking-markdown {
+  font-family: 'JetBrains Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace !important;
+  font-size: 13px !important;
+  opacity: 0.9;
+}
+
+.response-markdown {
+  font-family:
+    'Inter',
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif !important;
+}
+
+/* Streaming indicator */
+.message.streaming .message-bubble::after {
+  content: '';
+  position: absolute;
+  bottom: 0.5rem;
+  right: 0.5rem;
+  width: 8px;
+  height: 8px;
+  background: var(--accent-success);
+  border-radius: 50%;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+}
+
+/* Copy button for message bubbles */
+.copy-button {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  width: 2rem;
+  height: 2rem;
+  border: none;
+  border-radius: 0.375rem;
+  background: rgba(71, 85, 105, 0.8);
+  color: #d1d5db;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transform: scale(0.8);
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+  z-index: 10;
+  border: 1px solid var(--border-default);
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
+.copy-button svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2;
+  pointer-events: none;
+}
+
+/* Show copy button on hover */
+.message-bubble:hover .copy-button {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.copy-button:hover {
+  background: rgba(51, 65, 85, 0.9);
+  color: #ffffff;
+  border-color: var(--accent-primary);
+  transform: scale(1.05);
+}
+
+.copy-button:active {
+  transform: scale(0.95);
+}
+
+/* Copied state styling */
+.copy-button.copied {
+  background: var(--accent-success);
+  color: white;
+  border-color: var(--accent-success);
+}
+
+.copy-button.copied:hover {
+  background: var(--accent-success);
+}
+
+/* Ensure copy button doesn't interfere with streaming indicator */
+.message.streaming .message-bubble .copy-button {
+  top: 0.75rem;
+  right: 0.75rem;
+}
+
+/* Input area */
+.input-container {
+  flex-shrink: 0;
+  padding: 0.75rem 1rem; /* Reduced from 2rem to minimize wasted space */
+  background: rgba(30, 41, 59, 0.95);
+  border-top: 1px solid var(--border-default);
+  box-shadow: 0 -4px 8px rgba(0, 0, 0, 0.2);
+  position: relative;
+  min-height: auto;
+  height: auto;
+  display: flex;
+  justify-content: center;
+}
+
+.input-wrapper {
+  max-width: 1000px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: rgba(51, 65, 85, 0.5);
+  border: 1px solid var(--border-default);
+  border-radius: 0.75rem;
+  padding: 0.625rem;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+  min-height: 4.75rem;
+  height: auto;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  position: relative;
+  overflow: visible;
+  outline: none;
+  user-select: none;
+}
+
+.input-wrapper:focus-within {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.1);
+}
+
+/* Textarea - Premium text input with perfect auto-sizing */
+.message-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-size: 1rem;
+  font-family:
+    'Inter',
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
+  font-weight: 400;
+  padding: 0.75rem 1.25rem;
+  resize: none;
+  outline: none;
+  min-height: 3rem; /* Adjusted to account for padding and line-height */
+  max-height: 8rem;
+  line-height: 1.5;
+  height: 3rem; /* Set initial height to match calculated size */
+  overflow-y: hidden; /* Hide scrollbar by default */
+  transition: none; /* Remove transition to prevent visual jump */
+  border-radius: 1rem;
+  position: relative;
+  z-index: 1;
+}
+
+/* Ensure no outline on focus */
+.message-input:focus {
+  outline: none;
+}
+
+/* Smooth height transitions only for content changes, not initial render */
+.message-input.transitioning {
+  transition: height 0.15s ease-out;
+}
+
+.message-input::placeholder {
+  color: var(--text-tertiary);
+  font-weight: 300;
+  transition: color 0.2s ease;
+}
+
+.message-input:focus::placeholder {
+  color: var(--text-tertiary);
+  opacity: 0.5;
+}
+
+/* Custom scrollbar for textarea */
+.message-input::-webkit-scrollbar {
+  width: 4px;
+}
+
+.message-input::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.message-input::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 2px;
+}
+
+/* Send button */
+.send-button {
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 0.5rem;
+  border: none;
+  background: var(--accent-primary);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+  flex-shrink: 0;
+  box-shadow: var(--shadow-sm);
+  position: relative;
+  overflow: hidden;
+}
+
+.send-button:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.send-button:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 3px rgba(255, 69, 0, 0.15);
+}
+
+.send-button:disabled {
+  background: var(--bg-elevated);
+  cursor: not-allowed;
+  opacity: 0.5;
+  transform: none;
+  box-shadow: none;
+}
+
+.send-button svg {
+  width: 18px;
+  height: 18px;
+  stroke-width: 2.5;
+  transition: transform 0.2s ease;
+}
+
+.send-button:hover svg {
+  transform: scale(1.05);
+}
+
+/* Scroll to bottom button */
+.scroll-to-bottom-btn {
+  position: absolute;
+  bottom: 85px; /* Adjusted for smaller input area */
+  right: 50%;
+  transform: translateX(50%); /* Center horizontally */
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(51, 65, 85, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  color: #f9fafb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  z-index: 10;
+  user-select: none; /* Prevent text selection */
+  -webkit-user-select: none; /* Safari */
+  -moz-user-select: none; /* Firefox */
+  -ms-user-select: none; /* IE/Edge */
+}
+
+.scroll-to-bottom-btn:hover {
+  background: rgba(71, 85, 105, 0.9);
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  transform: translateX(50%) translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--shadow-lg);
+}
+
+.scroll-to-bottom-btn:active {
+  box-shadow: var(--shadow-sm);
+}
+
+.scroll-to-bottom-btn svg {
+  color: var(--accent-primary);
+  user-select: none; /* Prevent text selection on SVG */
+  pointer-events: none; /* Make SVG non-interactive, clicks go to button */
+}
+
+/* Scrollbar - Visible and functional */
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+  border-radius: 6px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--bg-elevated);
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-primary);
+  box-shadow: inset 0 0 6px var(--accent-primary-glow);
+}
+
+/* Ensure scrollbar is visible in messages container */
+.messages-container::-webkit-scrollbar {
+  width: 12px;
+}
+
+.messages-container::-webkit-scrollbar-track {
+  background: var(--bg-tertiary);
+  margin: 0.5rem 0;
+}
+
+.messages-container::-webkit-scrollbar-thumb {
+  background: var(--bg-elevated);
+  border-radius: 6px;
+}
+
+.messages-container::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-primary);
+}
+
+/* Error states - Subtle but clear */
+.error-message {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid var(--border-default);
+  color: var(--accent-danger);
+  padding: 1rem;
+  border-radius: 0.75rem;
+  margin: 1rem auto;
+  max-width: 600px;
+  text-align: center;
+}
+
+/* Loading states - Elegant dots */
+.thinking-dots {
+  display: flex;
+  gap: 4px;
+  padding: 0.5rem;
+}
+
+.thinking-dots span {
+  width: 6px;
+  height: 6px;
+  background: var(--text-tertiary);
+  border-radius: 50%;
+  animation: bounce 1.4s ease-in-out infinite both;
+}
+
+.thinking-dots span:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.thinking-dots span:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+.thinking-dots span:nth-child(3) {
+  animation-delay: 0;
+}
+
+@keyframes bounce {
+  0%,
+  80%,
+  100% {
+    transform: scale(0.8);
+    opacity: 0.5;
+  }
+  40% {
+    transform: scale(1.2);
+    opacity: 1;
+  }
+}
+
+/* Welcome message */
+.welcome-message {
+  text-align: center;
+  padding: 3rem 2rem;
+  margin: 2rem auto;
+  max-width: 600px;
+  animation: fadeInUp 0.8s ease-out;
+}
+
+.welcome-message h2 {
+  font-size: 2rem;
+  font-weight: 700;
+  background: var(--gradient-primary);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 1rem;
+}
+
+.welcome-message p {
+  color: var(--text-secondary);
+  font-size: 1.125rem;
+  line-height: 1.6;
+  animation: fadeIn 0.8s ease-out 0.3s both;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .messages-container {
+    padding: 1rem;
+  }
+
+  .message.user .message-bubble,
+  .message.assistant .message-bubble {
+    max-width: 90%;
+  }
+
+  .corner-controls {
+    top: 1rem;
+    right: 1rem;
+    gap: 0.5rem;
+  }
+
+  .clear-history-button,
+  .clear-memory-button {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.75rem;
+  }
+
+  .input-container {
+    padding: 0.5rem 0.75rem; /* Reduced mobile padding for more screen space */
+  }
+}
+
+/* Focus visible for accessibility */
+:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-primary);
+}
+
+/* Micro-interactions for better UX */
+button,
+a,
+.clickable {
+  position: relative;
+  overflow: hidden;
+}
+
+button::before,
+a::before,
+.clickable::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background: var(--accent-primary-hover);
+  transform: translate(-50%, -50%);
+  transition:
+    width 0.6s,
+    height 0.6s;
+}
+
+button:active::before,
+a:active::before,
+.clickable:active::before {
+  width: 300px;
+  height: 300px;
+}
+
+/* Loading states with shimmer effect */
+.loading {
+  position: relative;
+  overflow: hidden;
+}
+
+.loading::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.1) 50%,
+    transparent 100%
+  );
+  animation: shimmerLoad 1.5s ease-in-out infinite;
+}
+
+@keyframes shimmerLoad {
+  0% {
+    left: -100%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+
+/* Selection colors */
+::selection {
+  background: rgba(59, 130, 246, 0.3);
+  color: var(--text-primary);
+}
+
+/* REMOVED: Universal transition was causing severe performance issues
+   Instead, apply transitions only to specific elements that need them */
+
+/* Pulse animation for glowing elements */
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(0, 217, 255, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 20px rgba(0, 217, 255, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(0, 217, 255, 0);
+  }
+}
+
+/* Aurora animation for borders */
+@keyframes aurora {
+  0% {
+    border-color: var(--accent-primary);
+  }
+  25% {
+    border-color: var(--accent-purple);
+  }
+  50% {
+    border-color: var(--accent-danger);
+  }
+  75% {
+    border-color: var(--accent-success);
+  }
+  100% {
+    border-color: var(--accent-primary);
+  }
+}
+
+/* Fade in up animation */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Fade in animation */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
