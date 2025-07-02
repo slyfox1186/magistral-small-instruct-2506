@@ -12,7 +12,7 @@ from circuit_breaker import circuit_breaker_manager
 import monitoring
 
 # Import from our modules
-from .globals import health_checker, personal_memory
+from . import globals as global_vars
 from .models import MemoryIngestion, ScrapedContent
 
 logger = logging.getLogger(__name__)
@@ -28,12 +28,12 @@ def setup_memory_routes(app: FastAPI):
         """Ingest scraped content from web scraper service.
         This centralizes database writes to avoid SQLite concurrency issues.
         """
-        if not personal_memory:
+        if not global_vars.personal_memory:
             raise HTTPException(status_code=503, detail="Memory system not initialized")
 
         try:
             # Add scraped content to memory
-            await personal_memory.add_memory(
+            await global_vars.personal_memory.add_memory(
                 content=f"Content from {item.url}: {item.content}",
                 conversation_id=f"web_scrape_{datetime.now().strftime('%Y%m%d')}",
                 importance=0.6,
@@ -52,11 +52,11 @@ def setup_memory_routes(app: FastAPI):
         """General memory ingestion endpoint for distributed components.
         Allows other services to add memories without direct database access.
         """
-        if not personal_memory:
+        if not global_vars.personal_memory:
             raise HTTPException(status_code=503, detail="Memory system not initialized")
 
         try:
-            memory = await personal_memory.add_memory(
+            memory = await global_vars.personal_memory.add_memory(
                 content=item.content,
                 conversation_id=item.conversation_id,
                 importance=item.importance,
@@ -77,15 +77,15 @@ def setup_memory_routes(app: FastAPI):
     @app.get("/metrics/json")
     async def get_metrics_json():
         """Get system performance metrics in JSON format."""
-        if not health_checker:
+        if not global_vars.health_checker:
             return {"error": "Metrics collector not available"}
 
         try:
             # Get metrics summary
-            summary = health_checker.metrics_collector.get_metrics_summary()
+            summary = global_vars.health_checker.metrics_collector.get_metrics_summary()
 
             # Get current metrics
-            current = health_checker.metrics_collector.get_current_metrics()
+            current = global_vars.health_checker.metrics_collector.get_current_metrics()
 
             return {
                 "summary": summary,
@@ -99,11 +99,11 @@ def setup_memory_routes(app: FastAPI):
     @app.get("/metrics/prometheus")
     async def get_prometheus_metrics():
         """Get metrics in Prometheus exposition format."""
-        if not health_checker:
+        if not global_vars.health_checker:
             return "# ERROR: Metrics collector not available\n"
 
         try:
-            current_metrics = health_checker.metrics_collector.get_current_metrics()
+            current_metrics = global_vars.health_checker.metrics_collector.get_current_metrics()
             if current_metrics:
                 return monitoring.format_prometheus_metrics(current_metrics)
             else:
@@ -115,11 +115,11 @@ def setup_memory_routes(app: FastAPI):
     @app.get("/memory/stats")
     async def memory_stats_endpoint():
         """Get comprehensive memory system statistics."""
-        if not personal_memory:
+        if not global_vars.personal_memory:
             return {"error": "Personal memory system not available"}
 
         try:
-            stats = personal_memory.get_stats()
+            stats = global_vars.personal_memory.get_stats()
             return stats
         except Exception as e:
             logger.error(f"Error getting memory stats: {e}")
@@ -133,7 +133,7 @@ def setup_memory_routes(app: FastAPI):
 
         try:
             # Get conversation memories
-            memories = await personal_memory.get_conversation_context(user_id, max_messages=100)
+            memories = await global_vars.personal_memory.get_conversation_context(user_id, max_messages=100)
             stats = {
                 "conversation_id": user_id,
                 "total_memories": len(memories),
@@ -186,13 +186,13 @@ def setup_memory_routes(app: FastAPI):
     @app.post("/memory/optimize/{user_id}")
     async def optimize_user_memories(user_id: str, target_tokens: int = 1000):
         """Trigger comprehensive memory optimization for a user."""
-        if not personal_memory:
+        if not global_vars.personal_memory:
             raise HTTPException(status_code=503, detail="Memory pipeline not available")
 
         try:
             # Consolidate memories as optimization
             # Consolidation happens automatically in personal memory
-            await personal_memory.consolidate_old_memories()
+            await global_vars.personal_memory.consolidate_old_memories()
             result = {"success": True, "message": "Consolidation triggered"}
             result["target_tokens"] = target_tokens
             return result
@@ -209,7 +209,7 @@ def setup_memory_routes(app: FastAPI):
             memory_id: ID of memory to correct
             correction: Dict with 'new_content' and optional 'reason'
         """
-        if not personal_memory:
+        if not global_vars.personal_memory:
             raise HTTPException(status_code=503, detail="Memory pipeline not available")
 
         new_content = correction.get("new_content")
@@ -234,7 +234,7 @@ def setup_memory_routes(app: FastAPI):
     @app.delete("/memory/{user_id}/{memory_id}")
     async def delete_memory(user_id: str, memory_id: str, reason: str = "User requested deletion"):
         """Delete a specific memory."""
-        if not personal_memory:
+        if not global_vars.personal_memory:
             raise HTTPException(status_code=503, detail="Memory pipeline not available")
 
         try:
@@ -260,7 +260,7 @@ def setup_memory_routes(app: FastAPI):
             user_id: User who owns the memories
             bulk_correction: Dict with 'search_query', 'correction_pattern', and 'replacement'
         """
-        if not personal_memory:
+        if not global_vars.personal_memory:
             raise HTTPException(status_code=503, detail="Memory pipeline not available")
 
         required_fields = ["search_query", "correction_pattern", "replacement"]
@@ -287,7 +287,7 @@ def setup_memory_routes(app: FastAPI):
         This enqueues a background job using ARQ if available,
         otherwise runs it inline (not recommended for production).
         """
-        if not personal_memory:
+        if not global_vars.personal_memory:
             raise HTTPException(status_code=503, detail="Memory pipeline not available")
 
         try:
@@ -306,7 +306,7 @@ def setup_memory_routes(app: FastAPI):
                 # ARQ not available, run inline (not recommended)
                 logger.warning("ARQ not available, running consolidation inline")
                 # Consolidation happens automatically in personal memory
-                await personal_memory.consolidate_old_memories()
+                await global_vars.personal_memory.consolidate_old_memories()
                 result = {"success": True, "message": "Consolidation triggered"}
                 return {
                     "status": "completed",
@@ -327,12 +327,12 @@ def setup_memory_routes(app: FastAPI):
             query: Search query
             limit: Maximum results to return
         """
-        if not personal_memory:
+        if not global_vars.personal_memory:
             raise HTTPException(status_code=503, detail="Memory pipeline not available")
 
         try:
             # Use personal memory retrieval
-            memories = await personal_memory.get_relevant_memories(query=query, limit=limit)
+            memories = await global_vars.personal_memory.get_relevant_memories(query=query, limit=limit)
             results = memories
 
             # Convert to simpler format for API response
@@ -365,18 +365,17 @@ def setup_memory_routes(app: FastAPI):
             deleted_count = 0
 
             # Clear from personal memory system (SQLite)
-            if personal_memory:
+            if global_vars.personal_memory:
                 try:
                     # Use the proper clear method
-                    deleted_count = personal_memory.clear_all_memories()
+                    deleted_count = global_vars.personal_memory.clear_all_memories()
                     logger.info(f"🗑️ Cleared {deleted_count} memories from SQLite database")
 
                 except Exception as e:
                     logger.error(f"Failed to clear personal memory system: {e}")
 
             # Also clear from Redis if available (for compatibility)
-            from .globals import redis_client
-            if redis_client:
+            if global_vars.redis_client:
                 patterns = [
                     "memory:*",
                     "vital_memory:*",
@@ -392,10 +391,10 @@ def setup_memory_routes(app: FastAPI):
 
                 for pattern in patterns:
                     try:
-                        keys = await redis_client.keys(pattern)
+                        keys = await global_vars.redis_client.keys(pattern)
                         if keys:
                             for key in keys:
-                                await redis_client.delete(key)
+                                await global_vars.redis_client.delete(key)
                             deleted_count += len(keys)
                             logger.info(f"Deleted {len(keys)} Redis keys matching pattern '{pattern}'")
                     except Exception as e:

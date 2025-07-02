@@ -13,7 +13,7 @@ from fastapi.responses import StreamingResponse
 
 # Import from other modules
 from .models import ChatStreamRequest
-from .globals import personal_memory, redis_client
+from . import globals as global_vars
 import redis_utils
 import utils
 
@@ -180,7 +180,7 @@ def check_service_availability() -> None:
     """Check if all required services are available."""
     # LLM availability is now checked by the persistent server on-demand
     # No need to check here since the server loads on first request
-    if not redis_utils.is_redis_available(redis_client):
+    if not redis_utils.is_redis_available(global_vars.redis_client):
         raise HTTPException(status_code=503, detail="Redis Service Unavailable")
 
 # NO FALLBACK MESSAGE CREATION - SYSTEM MUST WORK OR FAIL
@@ -202,10 +202,10 @@ async def handle_simple_conversational_request(
     """
     # Get minimal memory context from personal memory
     memory_context = ""
-    if personal_memory:
+    if global_vars.personal_memory:
         try:
             # Quick memory retrieval for context
-            memories = await personal_memory.get_relevant_memories(query=user_prompt, limit=5)
+            memories = await global_vars.personal_memory.get_relevant_memories(query=user_prompt, limit=5)
             if memories:
                 memory_context = "\n".join([m.content for m in memories[:3]])
                 logger.debug(" FAST PATH: Using personal memory context")
@@ -214,9 +214,9 @@ async def handle_simple_conversational_request(
 
     # Get minimal conversation history from personal memory
     history = []
-    if personal_memory:
+    if global_vars.personal_memory:
         try:
-            recent_memories = await personal_memory.get_conversation_context(
+            recent_memories = await global_vars.personal_memory.get_conversation_context(
                 session_id, max_messages=4
             )  # Last 2 turns
             # Convert to history format
@@ -339,7 +339,7 @@ async def handle_simple_conversational_request(
                 session_id,
                 user_prompt,
                 full_response,
-                redis_client,  # ResourceManager handles embedding model internally
+                global_vars.redis_client,  # ResourceManager handles embedding model internally
                 redis_utils.CONVERSATION_HISTORY_KEY_PREFIX,
                 redis_utils.MAX_NON_VITAL_HISTORY,
             )
@@ -362,7 +362,7 @@ async def lightweight_memory_processing(user_prompt: str, response: str, session
     and avoids redundant storage in the memories table.
     """
     try:
-        if not personal_memory:
+        if not global_vars.personal_memory:
             return
 
         # Enhanced pattern-based memory extraction
@@ -396,7 +396,7 @@ async def lightweight_memory_processing(user_prompt: str, response: str, session
                 value = match.group(1).strip()
 
                 # Store as core memory instead of regular memory to avoid redundancy
-                await personal_memory.set_core_memory(
+                await global_vars.personal_memory.set_core_memory(
                     key=core_key, value=value, category="user_profile"
                 )
                 logger.info(f" CORE MEMORY: Stored {core_key} = {value}")
