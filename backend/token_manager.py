@@ -7,7 +7,6 @@ ensuring that token budgets are always optimally allocated based on the current 
 """
 
 import logging
-import re
 import time
 from typing import Any
 
@@ -46,28 +45,20 @@ def calculate_information_density(text: str) -> float:
         sum(len(word) for word in text.split()) / word_count
     )  # Longer words often more specific
 
-    # Content type scoring
-    has_numbers = bool(re.search(r"\d", text))
-    has_specific_terms = bool(
-        re.search(r"[A-Z][a-z]*[A-Z]|[a-z]+_[a-z]+|\w+\.\w+", text)
-    )  # CamelCase, snake_case, dotted
-    has_technical_markers = bool(re.search(r"[{}()\[\];,:]", text))  # Technical punctuation
-
-    # Emotional/important markers
-    has_emphasis = bool(re.search(r"[!]{1,3}|[?]{1,2}|[A-Z]{2,}", text))
-    has_negation = bool(
-        re.search(r"\b(not|never|don\'t|can\'t|won\'t|isn\'t|aren\'t)\b", text, re.IGNORECASE)
-    )
-
+    # Simple content type checks without regex
+    has_numbers = any(c.isdigit() for c in text)
+    # Check for technical markers using simple string operations
+    has_technical_markers = any(c in text for c in "{}()[];,:")
+    # Check for emphasis markers
+    has_emphasis = "!" in text or "?" in text or any(word.isupper() and len(word) > 1 for word in text.split())
+    
     # Calculate base density
     density = (
         lexical_diversity * 0.4
         + min(avg_word_length / 8, 1.0) * 0.2  # Normalize word length
         + (1.0 if has_numbers else 0.0) * 0.1
-        + (1.0 if has_specific_terms else 0.0) * 0.1
-        + (1.0 if has_technical_markers else 0.0) * 0.1
-        + (1.0 if has_emphasis else 0.0) * 0.05
-        + (1.0 if has_negation else 0.0) * 0.05
+        + (1.0 if has_technical_markers else 0.0) * 0.2  # Increased weight
+        + (1.0 if has_emphasis else 0.0) * 0.1  # Increased weight
     )
 
     return min(density, 1.0)
@@ -75,6 +66,7 @@ def calculate_information_density(text: str) -> float:
 
 def detect_emotional_salience(text: str) -> float:
     """Detect emotional salience in text for memory weighting.
+    Let the LLM handle nuanced emotional detection rather than regex patterns.
 
     Args:
         text: Text to analyze for emotional content
@@ -87,36 +79,27 @@ def detect_emotional_salience(text: str) -> float:
 
     text_lower = text.lower()
 
-    # Strong emotional indicators
-    strong_emotions = [
-        r"\b(love|hate|adore|despise|passionate|excited|thrilled|devastated|furious|terrified)\b",
-        r"\b(amazing|terrible|horrible|wonderful|fantastic|awful|brilliant|disgusting)\b",
-        r"\b(best|worst|favorite|least)\b",
-        r"\b(always|never|completely|totally|absolutely|definitely)\b",
-    ]
-
-    # Personal significance markers
-    personal_markers = [
-        r"\b(my|mine|i|me|personally|for me)\b.*\b(important|matter|care|significant)\b",
-        r"\b(changed my life|life changing|never forget|always remember)\b",
-        r"\b(trauma|milestone|breakthrough|revelation|epiphany)\b",
-    ]
-
-    # Intensity markers
+    # Simple intensity markers (keep these as they're straightforward)
     exclamation_count = text.count("!")
     caps_ratio = sum(1 for c in text if c.isupper()) / len(text) if text else 0
 
     salience_score = 0.0
 
-    # Check strong emotions
-    for pattern in strong_emotions:
-        if re.search(pattern, text_lower):
-            salience_score += 0.2
-
-    # Check personal markers
-    for pattern in personal_markers:
-        if re.search(pattern, text_lower):
-            salience_score += 0.3
+    # Basic keyword presence check without complex regex
+    emotion_keywords = [
+        "love", "hate", "adore", "despise", "passionate", "excited", "thrilled", 
+        "devastated", "furious", "terrified", "amazing", "terrible", "horrible", 
+        "wonderful", "fantastic", "awful", "brilliant", "disgusting", "best", 
+        "worst", "favorite", "always", "never", "trauma", "milestone", 
+        "breakthrough", "revelation", "epiphany"
+    ]
+    
+    # Count emotional keywords
+    emotional_word_count = sum(1 for word in text_lower.split() if word in emotion_keywords)
+    
+    # Simple scoring based on presence
+    if emotional_word_count > 0:
+        salience_score += min(emotional_word_count * 0.15, 0.6)
 
     # Add intensity bonuses
     if exclamation_count > 0:
@@ -165,7 +148,10 @@ def format_memories_for_llm_comprehension(memories: list[tuple[str, float]]) -> 
         text_lower = memory_text.lower()
 
         # Remove category prefixes added by the system (e.g., "[IDENTITY]", "[PREFERENCES]")
-        clean_text = re.sub(r"^\[[\w\s]+\]\s*", "", memory_text.strip())
+        clean_text = memory_text.strip()
+        if clean_text.startswith("[") and "]" in clean_text:
+            bracket_end = clean_text.find("]")
+            clean_text = clean_text[bracket_end + 1:].strip()
 
         categorized = False
 
@@ -373,54 +359,24 @@ def format_memories_for_llm_comprehension(memories: list[tuple[str, float]]) -> 
 
 def compress_memory_text(text: str) -> str:
     """Compress verbose memory text into concise, token-efficient format.
+    Uses the LLM's understanding rather than regex patterns for better comprehension.
 
     Examples:
     "My name is Jeff" → "Name: Jeff"
     "Wife's name is Rose and she is allergic to pets" → "Wife: Rose (pet allergic)"
     "I work as an AI developer and am the CEO of Myron Labs" → "Role: AI Developer, CEO Myron Labs"
     """
-    # Common compression patterns
-    compressions = [
-        # Name patterns
-        (r"(?:my name is|i am called|i'm called|i'm|i am)\s+([A-Za-z]+)", r"Name: \1"),
-        (r"([A-Za-z]+)'s name is ([A-Za-z]+)", r"\1: \2"),
-        # Role/work patterns
-        (r"(?:i work as|work as|i am a|i'm a)\s+([^.]+)", r"Role: \1"),
-        (r"(?:i am the|i'm the)\s+([^.]+)", r"Role: \1"),
-        # Age patterns
-        (r"(?:i am|i'm)\s+(\d+)\s+years old", r"Age: \1"),
-        (r"(?:born on|born in)\s+([^.]+)", r"Born: \1"),
-        # Physical traits
-        (r"(\d+'?\d*\"?)\s+tall", r"Height: \1"),
-        (r"(\w+)\s+eyes", r"Eyes: \1"),
-        # Location patterns
-        (r"(?:live at|address is|home address is)\s+([^.]+)", r"Address: \1"),
-        (r"(?:born in|from)\s+([^,]+)", r"From: \1"),
-        # Relationship patterns
-        (
-            r"(?:my|i have a)\s+(wife|husband|mother|father|sister|brother)\s+"
-            r"(?:named|is|called)\s+([A-Za-z]+)",
-            r"\1: \2",
-        ),
-        # Preference patterns
-        (r"(?:i love|i really like|i enjoy)\s+([^.]+)", r"Loves: \1"),
-        (r"(?:i like|i prefer)\s+([^.]+)", r"Likes: \1"),
-        (r"(?:i hate|i don't like|i dislike)\s+([^.]+)", r"Dislikes: \1"),
-        # Medical patterns
-        (r"(?:allergic to|allergy to)\s+([^.]+)", r"Allergic: \1"),
-        (r"(?:carry|carries|have|has).*epinephrine", r"Carries EpiPen"),
-    ]
-
     compressed = text.strip()
-
-    # Apply compression patterns
-    for pattern, replacement in compressions:
-        compressed = re.sub(pattern, replacement, compressed, flags=re.IGNORECASE)
-
+    
+    # Simple replacements without regex
     # Clean up common verbose phrases
-    compressed = re.sub(r"\band\s+", " | ", compressed)  # Replace "and" with "|" for compactness
-    compressed = re.sub(r"\s+", " ", compressed)  # Remove extra spaces
-    compressed = re.sub(r"\.+$", "", compressed)  # Remove trailing periods
+    compressed = compressed.replace(" and ", " | ")
+    
+    # Remove extra spaces
+    compressed = " ".join(compressed.split())
+    
+    # Remove trailing periods
+    compressed = compressed.rstrip(".")
 
     # Limit length to prevent overly long entries
     if len(compressed) > 80:
@@ -977,7 +933,22 @@ class TokenManager:
         # For extremely large content, try to keep result blocks intact
         if web_tokens > max_tokens * 2:
             # Split by result blocks (usually separated by "---" or blank lines)
-            blocks = re.split(r"(\n-{3,}\n|\n\n)", web_results)
+            # Simple split without regex
+            blocks = []
+            current_block = []
+            lines = web_results.split("\n")
+            
+            for line in lines:
+                if line.strip() == "" or (line.strip().startswith("-") and len(line.strip()) >= 3 and all(c == "-" for c in line.strip())):
+                    if current_block:
+                        blocks.append("\n".join(current_block))
+                        blocks.append("\n\n")  # Add separator
+                        current_block = []
+                else:
+                    current_block.append(line)
+            
+            if current_block:
+                blocks.append("\n".join(current_block))
             # Preserve important blocks (first few results)
             preserved_blocks = []
             preserved_tokens = 0
@@ -985,7 +956,7 @@ class TokenManager:
             for i, block in enumerate(blocks):
                 block_tokens = self.budget.count_tokens(block)
                 # Always include separators
-                if re.match(r"(\n-{3,}\n|\n\n)", block):
+                if block.strip() == "" or block == "\n\n":
                     if preserved_tokens + block_tokens <= max_tokens:
                         preserved_blocks.append(block)
                         preserved_tokens += block_tokens
@@ -1040,8 +1011,30 @@ class TokenManager:
         if prompt_tokens <= max_tokens:
             return system_prompt
         # Extract core components if needed
-        # Split by sections using pattern matching
-        sections = re.split(r"\n\s*---+\s*([A-Za-z\s]+)---+\s*\n", system_prompt)
+        # Split by sections without regex
+        sections = []
+        current_section = []
+        current_title = ""
+        
+        lines = system_prompt.split("\n")
+        for i, line in enumerate(lines):
+            # Check if line is a section header (starts and ends with ---)
+            stripped = line.strip()
+            if stripped.startswith("---") and stripped.endswith("---") and len(stripped) > 6:
+                # Extract title
+                title = stripped[3:-3].strip()
+                if current_section or current_title:
+                    sections.append("\n".join(current_section))
+                    sections.append(current_title)
+                current_section = []
+                current_title = title
+            else:
+                current_section.append(line)
+        
+        # Add the last section
+        if current_section or current_title:
+            sections.append("\n".join(current_section))
+            sections.append(current_title)
         # Critical sections that should be preserved (in order of priority)
         core_sections = ["", "CORE INSTRUCTIONS", "INSTRUCTIONS", "GUIDELINES", "RULES", "ROLE"]
         # First pass: extract and prioritize critical sections

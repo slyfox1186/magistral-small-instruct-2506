@@ -1,0 +1,258 @@
+// Global Variables - Veridian Twilight Theme
+// Import this file in all SCSS files: @import './global-variables';
+
+// =====================================================
+// Color Palette - 2025 Biophilic Dark Theme
+// =====================================================
+
+// Base Background Colors
+$bg-primary: #1a1b23; // Rich dark blue-gray - main background
+$bg-secondary: #252730; // Elevated surfaces - cards, messages  
+$bg-tertiary: #2f3349; // Interactive surfaces - inputs, hover
+$bg-elevated: #3c4165; // Highest elevation - dropdowns, modals
+
+// Veridian Twilight Specific Colors
+$bg-pure-black: #000000; // Pure black for side areas
+$bg-chat-container: #1A1D1A; // Deep desaturated green - calming & organic
+$bg-assistant-bubble: #2C332E; // Muted forest green - calm hierarchy
+$bg-user-bubble: #4A3F52; // Deep muted plum - sophisticated & warm
+$bg-input-area: #191C19; // Darker forest tone - grounding
+
+// Accent Colors - No Blue Tones
+$accent-primary: #A37D9D; // Dusty mauve - primary actions
+$accent-primary-hover: #B08BA7; // Lighter mauve for hover states
+$accent-success: #22c55e; // Bright green - positive states
+$accent-warning: #f59e0b; // Amber - warnings
+$accent-danger: #ef4444; // Red - errors & destructive
+$accent-info: #7C9885; // Sage green - information (no blue!)
+
+// Accent Variations
+$accent-primary-faded: rgba(163, 125, 157, 0.12);
+$accent-primary-hover-opacity: rgba(163, 125, 157, 0.2);
+$accent-primary-glow: rgba(163, 125, 157, 0.5);
+
+// Text Colors - Warm Tones (No Blue)
+$text-primary: #FAF8F5; // Warm cream white - main content
+$text-secondary: #D4CFC6; // Warm light tan - secondary info
+$text-tertiary: #A69F92; // Warm medium brown - timestamps, labels
+
+// Interactive States
+$interactive-normal: rgba(163, 125, 157, 0.08);
+$interactive-hover: rgba(163, 125, 157, 0.15);
+$interactive-active: rgba(163, 125, 157, 0.25);
+
+// Borders - Warm Gray Tones
+$border-color: #7A6F63;
+$border-subtle: rgba(122, 111, 99, 0.15);
+$border-default: rgba(122, 111, 99, 0.3);
+$border-strong: rgba(122, 111, 99, 0.5);
+
+// Neutral Borders (for subtle definitions)
+$border-neutral: rgba(230, 230, 230, 0.1);
+$border-neutral-light: rgba(230, 230, 230, 0.08);
+
+// =====================================================
+// Shadows
+// =====================================================
+
+$shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.2);
+$shadow-md: 0 4px 12px rgba(0, 0, 0, 0.25);
+$shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.3);
+$shadow-xl: 0 20px 40px rgba(0, 0, 0, 0.35);
+$shadow-glow: 0 0 30px rgba(163, 125, 157, 0.3);
+
+// Component Specific Shadows
+$shadow-button: 0 2px 6px rgba(163, 125, 157, 0.3);
+$shadow-button-hover: 0 4px 12px rgba(163, 125, 157, 0.5);
+$shadow-container: 0 0 60px rgba(163, 125, 157, 0.08);
+$shadow-input: 0 -4px 8px rgba(0, 0, 0, 0.3);
+
+// =====================================================
+// Gradients
+// =====================================================
+
+$gradient-main: linear-gradient(135deg, #1a1b23 0%, #252730 100%);
+$gradient-primary: linear-gradient(135deg, #A37D9D 0%, #B08BA7 100%);
+$gradient-surface: linear-gradient(135deg, #252730 0%, #2f3349 100%);
+$gradient-subtle: linear-gradient(135deg, rgba(163, 125, 157, 0.05) 0%, rgba(163, 125, 157, 0.12) 100%);
+
+// =====================================================
+// Typography
+// =====================================================
+
+$font-family-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+$font-family-mono: 'JetBrains Mono', 'Fira Code', 'Monaco', 'Inconsolata', monospace;
+
+// Font Sizes
+$font-size-xs: 0.75rem;
+$font-size-sm: 0.875rem;
+$font-size-base: 1rem;
+$font-size-lg: 1.125rem;
+$font-size-xl: 1.25rem;
+$font-size-2xl: 1.5rem;
+$font-size-3xl: 1.875rem;
+
+// Font Weights
+$font-weight-light: 300;
+$font-weight-normal: 400;
+$font-weight-medium: 500;
+$font-weight-semibold: 600;
+$font-weight-bold: 700;
+
+// Line Heights
+$line-height-tight: 1.25;
+$line-height-normal: 1.5;
+$line-height-relaxed: 1.65;
+$line-height-loose: 2;
+
+// =====================================================
+// Spacing
+// =====================================================
+
+$spacing-xs: 0.25rem;
+$spacing-sm: 0.5rem;
+$spacing-md: 0.75rem;
+$spacing-base: 1rem;
+$spacing-lg: 1.25rem;
+$spacing-xl: 1.5rem;
+$spacing-2xl: 2rem;
+$spacing-3xl: 3rem;
+
+// =====================================================
+// Border Radius
+// =====================================================
+
+$radius-sm: 0.25rem;
+$radius-md: 0.375rem;
+$radius-base: 0.5rem;
+$radius-lg: 0.75rem;
+$radius-xl: 1rem;
+$radius-2xl: 1.25rem;
+$radius-full: 9999px;
+
+// Component Specific Radius
+$radius-button: 0.625rem;
+$radius-bubble: 1.25rem;
+$radius-input: 0.75rem;
+
+// =====================================================
+// Transitions
+// =====================================================
+
+$transition-fast: 0.15s ease;
+$transition-base: 0.2s ease;
+$transition-slow: 0.3s ease;
+$transition-slower: 0.5s ease;
+
+// Specific Transitions
+$transition-transform: transform 0.2s ease;
+$transition-shadow: box-shadow 0.2s ease;
+$transition-color: color 0.2s ease, background-color 0.2s ease;
+$transition-border: border-color 0.2s ease;
+$transition-all: all 0.3s ease;
+
+// =====================================================
+// Z-Index Scale
+// =====================================================
+
+$z-index-negative: -1;
+$z-index-base: 0;
+$z-index-elevated: 1;
+$z-index-sticky: 10;
+$z-index-fixed: 20;
+$z-index-overlay: 30;
+$z-index-modal: 40;
+$z-index-popover: 50;
+$z-index-tooltip: 60;
+$z-index-max: 9999;
+
+// =====================================================
+// Breakpoints
+// =====================================================
+
+$breakpoint-xs: 480px;
+$breakpoint-sm: 640px;
+$breakpoint-md: 768px;
+$breakpoint-lg: 1024px;
+$breakpoint-xl: 1280px;
+$breakpoint-2xl: 1536px;
+
+// =====================================================
+// Component Specific Variables
+// =====================================================
+
+// Chat Container
+$chat-container-max-width: 1200px;
+
+// Messages
+$message-max-width: 80%;
+$message-gap: 1.5rem;
+$message-padding-x: 1.25rem;
+$message-padding-y: 1.25rem;
+
+// Input Area
+$input-min-height: 3rem;
+$input-padding: 0.5rem;
+
+// Buttons
+$button-size: 2.75rem;
+$button-padding-x: 1.5rem;
+$button-padding-y: 0.75rem;
+
+// Copy Button
+$copy-button-size: 2rem;
+$copy-button-offset: 0.75rem;
+
+// =====================================================
+// Mixins (Common Utilities)
+// =====================================================
+
+@mixin glass-effect {
+  backdrop-filter: blur(10px);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+@mixin hover-lift {
+  transition: transform $transition-base, box-shadow $transition-base;
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: $shadow-md;
+  }
+}
+
+@mixin focus-ring {
+  &:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px $accent-primary-hover-opacity;
+  }
+}
+
+@mixin truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@mixin scrollbar-custom {
+  scrollbar-width: thin;
+  scrollbar-color: $border-default transparent;
+  
+  &::-webkit-scrollbar {
+    width: 8px;
+  }
+  
+  &::-webkit-scrollbar-track {
+    background: $bg-secondary;
+    border-radius: $radius-sm;
+  }
+  
+  &::-webkit-scrollbar-thumb {
+    background: $border-default;
+    border-radius: $radius-sm;
+    
+    &:hover {
+      background: $border-strong;
+    }
+  }
+}

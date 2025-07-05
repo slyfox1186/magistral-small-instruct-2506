@@ -190,6 +190,17 @@ class AsyncPersonalMemorySystem:
         timestamp = datetime.now()
         memory_id = self._generate_id(content, timestamp)
 
+        # VERBOSE LOGGING: Log all memory additions
+        logger.info(f"🧠 MEMORY ADD: Adding new memory to database")
+        logger.info(f"🧠 MEMORY ADD:   Memory ID: {memory_id}")
+        logger.info(f"🧠 MEMORY ADD:   Conversation ID: {conversation_id}")
+        logger.info(f"🧠 MEMORY ADD:   Importance: {importance}")
+        logger.info(f"🧠 MEMORY ADD:   Timestamp: {timestamp}")
+        logger.info(f"🧠 MEMORY ADD:   Content length: {len(content)} characters")
+        logger.info(f"🧠 MEMORY ADD:   Content preview (first 300 chars): '{content[:300]}...'")
+        if metadata:
+            logger.info(f"🧠 MEMORY ADD:   Metadata: {metadata}")
+
         # Log entry for high importance memories only
         if importance >= HIGH_IMPORTANCE_THRESHOLD:
             logger.warning(
@@ -224,12 +235,18 @@ class AsyncPersonalMemorySystem:
             placeholders = ", ".join(["?" for _ in data])
             columns = ", ".join(data.keys())
 
+            logger.info(f"🧠 MEMORY ADD: Executing database INSERT")
+            logger.info(f"🧠 MEMORY ADD:   SQL columns: {columns}")
+            logger.info(f"🧠 MEMORY ADD:   Data values (first 5): {list(data.values())[:5]}")
+            
             await conn.execute(
                 f"INSERT INTO memories ({columns}) VALUES ({placeholders})", list(data.values())
             )
             await conn.commit()
+            
+            logger.info(f"🧠 MEMORY ADD: ✅ Successfully committed to database")
 
-        logger.debug(f"Memory {memory_id[:8]}... stored successfully")
+        logger.info(f"🧠 MEMORY ADD: ✅ Memory {memory_id[:8]}... stored successfully")
         return memory
 
     async def get_relevant_memories(
@@ -245,6 +262,11 @@ class AsyncPersonalMemorySystem:
         """
         if not self._initialized:
             await self.initialize()
+
+        logger.info(f"🧠 MEMORY RETRIEVAL DB: Starting database query for memories")
+        logger.info(f"🧠 MEMORY RETRIEVAL DB:   Query: '{query}'")
+        logger.info(f"🧠 MEMORY RETRIEVAL DB:   Limit: {limit}")
+        logger.info(f"🧠 MEMORY RETRIEVAL DB:   Time window: {time_window_hours}h")
 
         logger.debug(
             f"Retrieving memories: query={query[:50]}..., limit={limit}, time_window={time_window_hours}h"
@@ -277,20 +299,34 @@ class AsyncPersonalMemorySystem:
             """
             params.append(limit)
 
+            logger.info(f"🧠 MEMORY RETRIEVAL DB: Executing SQL query")
+            logger.info(f"🧠 MEMORY RETRIEVAL DB:   SQL: {base_query}")
+            logger.info(f"🧠 MEMORY RETRIEVAL DB:   Params: {params}")
+            
             cursor = await conn.execute(base_query, params)
             rows = await cursor.fetchall()
+            
+            logger.info(f"🧠 MEMORY RETRIEVAL DB: Found {len(rows)} rows in database")
 
             # Collect memories and their IDs for batch update
             memory_ids_to_update = []
 
-            for row in rows:
+            for i, row in enumerate(rows):
                 memory = self._row_to_memory(dict(row))
                 memories.append(memory)
                 memory_ids_to_update.append(memory.id)
+                
+                logger.info(f"🧠 MEMORY RETRIEVAL DB: Row {i+1}:")
+                logger.info(f"🧠 MEMORY RETRIEVAL DB:   ID: {memory.id}")
+                logger.info(f"🧠 MEMORY RETRIEVAL DB:   Conversation ID: {memory.conversation_id}")
+                logger.info(f"🧠 MEMORY RETRIEVAL DB:   Importance: {memory.importance}")
+                logger.info(f"🧠 MEMORY RETRIEVAL DB:   Timestamp: {memory.timestamp}")
+                logger.info(f"🧠 MEMORY RETRIEVAL DB:   Content (first 200 chars): '{memory.content[:200]}...'")
 
                 # Track high importance memories
                 if memory.importance >= HIGH_IMPORTANCE_THRESHOLD:
                     high_importance_memories.append(memory)
+                    logger.info(f"🧠 MEMORY RETRIEVAL DB:   ⭐ HIGH IMPORTANCE MEMORY")
 
             # Batch update access counts
             if memory_ids_to_update:
@@ -307,7 +343,46 @@ class AsyncPersonalMemorySystem:
                 f"Retrieved {len(high_importance_memories)} high importance memories out of {len(memories)} total"
             )
 
+        # Update access patterns for retrieved memories asynchronously
+        if memories:
+            # Don't await - let it run in background
+            asyncio.create_task(self._update_memories_on_access(memory_ids_to_update))
+
         return memories
+
+    async def _update_memories_on_access(self, memory_ids: list[str]):
+        """Update importance scores for accessed memories (runs in background)."""
+        try:
+            async with self._get_connection() as conn:
+                now = datetime.now()
+                for memory_id in memory_ids:
+                    # Fetch current importance
+                    cursor = await conn.execute(
+                        "SELECT importance FROM memories WHERE id = ?", (memory_id,)
+                    )
+                    row = await cursor.fetchone()
+                    if row:
+                        current_importance = row[0]
+                        # Boost importance with diminishing returns
+                        boost = (1.0 - current_importance) * 0.05  # 5% of remaining gap to 1.0
+                        new_importance = min(1.0, current_importance + boost)
+                        
+                        # Update importance and access stats
+                        await conn.execute(
+                            """UPDATE memories 
+                               SET importance = ?, 
+                                   access_count = access_count + 1, 
+                                   last_accessed = ? 
+                               WHERE id = ?""",
+                            (new_importance, now.isoformat(), memory_id),
+                        )
+                        
+                        if new_importance >= HIGH_IMPORTANCE_THRESHOLD and current_importance < HIGH_IMPORTANCE_THRESHOLD:
+                            logger.info(f"Memory {memory_id} promoted to high importance through access pattern")
+                
+                await conn.commit()
+        except Exception as e:
+            logger.error(f"Error updating memories on access: {e}")
 
     async def get_conversation_context(
         self, conversation_id: str, max_messages: int = 50

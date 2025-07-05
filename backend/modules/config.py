@@ -12,7 +12,6 @@ import asyncio
 import json
 import logging
 import os
-import re
 import textwrap
 import time
 import tracemalloc
@@ -20,14 +19,14 @@ from collections import deque
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from dataclasses import asdict
-from datetime import UTC, datetime
+from datetime import datetime, timezone
+UTC = timezone.utc
 from typing import Any
 
 # Third-party imports
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse, StreamingResponse
-from llama_cpp import Llama
 from pydantic import BaseModel, Field
 
 # Try to import prometheus_client

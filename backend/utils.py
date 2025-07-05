@@ -102,7 +102,6 @@ Examples:
         try:
             import asyncio
             import json
-            import re
 
             async def get_ai_analysis():
                 formatted_prompt = format_prompt(system_prompt, user_prompt)
@@ -126,11 +125,12 @@ Examples:
 
                     result_text = response["choices"][0]["text"].strip()
 
-                    # Extract JSON from response
-                    json_match = re.search(r"\{.*?\}", result_text, re.DOTALL)
-                    if json_match:
+                    # Extract JSON from response without regex
+                    start_idx = result_text.find("{")
+                    end_idx = result_text.rfind("}")
+                    if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
                         try:
-                            analysis = json.loads(json_match.group(0))
+                            analysis = json.loads(result_text[start_idx:end_idx+1])
 
                             # Validate the response structure
                             if "query_type" in analysis:
@@ -209,15 +209,15 @@ Examples:
 
                     result_text = response["choices"][0]["text"].strip()
 
-                    # Extract JSON array from response
+                    # Extract JSON array from response without regex
                     import json
-                    import re
 
                     # Try to find JSON array in the response
-                    json_match = re.search(r"\[.*?\]", result_text, re.DOTALL)
-                    if json_match:
+                    start_idx = result_text.find("[")
+                    end_idx = result_text.rfind("]")
+                    if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
                         try:
-                            symbols = json.loads(json_match.group(0))
+                            symbols = json.loads(result_text[start_idx:end_idx+1])
                             if isinstance(symbols, list):
                                 return symbols[:10]  # Limit to 10
                         except json.JSONDecodeError:
@@ -286,15 +286,15 @@ Examples:
 
                     result_text = response["choices"][0]["text"].strip()
 
-                    # Extract JSON array from response
+                    # Extract JSON array from response without regex
                     import json
-                    import re
 
                     # Try to find JSON array in the response
-                    json_match = re.search(r"\[.*?\]", result_text, re.DOTALL)
-                    if json_match:
+                    start_idx = result_text.find("[")
+                    end_idx = result_text.rfind("]")
+                    if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
                         try:
-                            symbols = json.loads(json_match.group(0))
+                            symbols = json.loads(result_text[start_idx:end_idx+1])
                             if isinstance(symbols, list):
                                 return symbols[:10]  # Limit to 10
                         except json.JSONDecodeError:

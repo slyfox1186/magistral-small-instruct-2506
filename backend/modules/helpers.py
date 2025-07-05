@@ -4,7 +4,8 @@
 import asyncio
 import logging
 import time
-from datetime import UTC, datetime
+from datetime import datetime, timezone
+UTC = timezone.utc
 
 from constants import DEFAULT_IMPORTANCE_SCORE, ECHO_SIMILARITY_THRESHOLD, MEMORY_CONSOLIDATION_INTERVAL
 
@@ -17,10 +18,10 @@ async def periodic_memory_consolidation():
         await asyncio.sleep(MEMORY_CONSOLIDATION_INTERVAL)  # Run every hour
         try:
             # Import here to avoid circular imports
-            from .globals import personal_memory
+            from .globals import app_state
             
-            if personal_memory:
-                await personal_memory.consolidate_old_memories()
+            if app_state.personal_memory:
+                await app_state.personal_memory.consolidate_old_memories()
                 logger.debug("Memory consolidation completed")
         except asyncio.CancelledError:
             logger.debug("Memory consolidation task cancelled")
@@ -83,9 +84,9 @@ async def store_conversation_memory(user_prompt: str, assistant_response: str, s
     """Store conversation turn in personal memory system with echo detection."""
     try:
         # Import here to avoid circular imports
-        from .globals import personal_memory, importance_calculator
+        from .globals import app_state
         
-        if personal_memory:
+        if app_state.personal_memory:
             start_time = time.time()
             logger.debug(f"[MEMORY_STORE] Storing memory for session {session_id}")
 
@@ -95,9 +96,9 @@ async def store_conversation_memory(user_prompt: str, assistant_response: str, s
             # Calculate importance for user message
             user_importance = DEFAULT_IMPORTANCE_SCORE  # Default
             user_analysis = None
-            if importance_calculator:
+            if app_state.importance_calculator:
                 try:
-                    user_importance, user_analysis = importance_calculator.calculate_importance(
+                    user_importance, user_analysis = app_state.importance_calculator.calculate_importance(
                         user_prompt,
                         context={
                             "is_user_message": True,
@@ -119,7 +120,7 @@ async def store_conversation_memory(user_prompt: str, assistant_response: str, s
                     )
 
             # Store user message with calculated importance
-            await personal_memory.add_memory(
+            await app_state.personal_memory.add_memory(
                 content=f"User: {user_prompt}",
                 conversation_id=session_id,
                 importance=user_importance,
@@ -131,10 +132,10 @@ async def store_conversation_memory(user_prompt: str, assistant_response: str, s
                 # Calculate importance for assistant response
                 assistant_importance = DEFAULT_IMPORTANCE_SCORE  # Default
                 assistant_analysis = None
-                if importance_calculator:
+                if app_state.importance_calculator:
                     try:
                         assistant_importance, assistant_analysis = (
-                            importance_calculator.calculate_importance(
+                            app_state.importance_calculator.calculate_importance(
                                 assistant_response,
                                 context={
                                     "is_assistant_response": True,
@@ -162,7 +163,7 @@ async def store_conversation_memory(user_prompt: str, assistant_response: str, s
                         )
 
                 # Store assistant response with calculated importance
-                await personal_memory.add_memory(
+                await app_state.personal_memory.add_memory(
                     content=f"Assistant: {assistant_response}",
                     conversation_id=session_id,
                     importance=assistant_importance,
@@ -173,7 +174,7 @@ async def store_conversation_memory(user_prompt: str, assistant_response: str, s
 
             # Trigger conversation summarization for this session
             try:
-                await personal_memory._summarize_conversation(session_id)
+                await app_state.personal_memory._summarize_conversation(session_id)
                 logger.debug(f"[CONVERSATION_SUMMARY] Created summary for session {session_id}")
             except Exception as e:
                 logger.error(f"[CONVERSATION_SUMMARY] Failed to create summary: {e}")

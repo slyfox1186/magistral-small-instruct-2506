@@ -15,7 +15,6 @@ from constants import (
     MAX_MEMORY_EXTRACTION_QUEUE_SIZE,
 )
 from gpu_lock import gpu_for_inference
-from llama_cpp import Llama
 from token_manager import TokenManager
 
 # Import prometheus metrics if available
@@ -104,93 +103,173 @@ class RedisStateManager:
         return False
 
 
-# ===================== Global Variables =====================
-llm: Llama | None = None
-llm_error: str | None = None
-personal_memory = None  # Will be initialized with memory provider
-importance_calculator = None  # Will be initialized on startup
-token_manager: TokenManager | None = None
-ultra_engine = None  # UltraAdvancedEngine
-redis_client = None
-state_manager: RedisStateManager | None = None
-metacognitive_engine = None
-background_tasks = []
+# ===================== Application State =====================
 
-# Monitoring instances
-import monitoring
-health_checker: monitoring.HealthChecker | None = None
-memory_analytics: monitoring.MemoryAnalytics | None = None
+class ApplicationState:
+    """Centralized application state management.
+    
+    This class encapsulates all global state to avoid scattered globals
+    and provide better control over initialization and access.
+    """
+    
+    def __init__(self):
+        # Core services
+        self.llm = None
+        self.llm_error: str | None = None
+        self.token_manager: TokenManager | None = None
+        self.redis_client = None
+        self.state_manager: RedisStateManager | None = None
+        
+        # Memory services
+        self.personal_memory = None
+        self.importance_calculator = None
+        
+        # Processing engines
+        self.ultra_engine = None
+        self.metacognitive_engine = None
+        
+        # Monitoring
+        self.health_checker = None
+        self.memory_analytics = None
+        
+        # External services
+        self.crypto_trader = None
+        self.stock_searcher = None
+        
+        # Background processing
+        self.background_tasks: list = []
+        
+        # Prometheus metrics (initialized if available)
+        self.prometheus_available = PROMETHEUS_AVAILABLE
+        self.gpu_queue_depth = None
+        self.model_lock_held = None
+        self.request_duration = None
+        self.request_total = None
+        self.request_errors = None
+        self.metacognitive_evaluations = None
+        self.metacognitive_duration = None
+        self.conversation_memories_total = None
+        self.memory_consolidation_total = None
+        self.memory_consolidation_duration = None
+        self.conversation_turns_total = None
+        
+        # Initialize Prometheus metrics if available
+        if PROMETHEUS_AVAILABLE:
+            self._init_prometheus_metrics()
+        
+    def is_initialized(self) -> bool:
+        """Check if core services are initialized."""
+        return self.llm is not None and self.redis_client is not None
+        
+    def reset(self):
+        """Reset all services to initial state."""
+        self.__init__()
+    
+    def _init_prometheus_metrics(self):
+        """Initialize Prometheus metrics."""
+        from prometheus_client import Counter, Gauge, Histogram
+        
+        # 1. LATENCY: Request processing time
+        self.request_duration = Histogram(
+            "neural_chat_request_duration_seconds",
+            "Time spent processing chat requests",
+            ["endpoint", "status"],
+        )
 
-# External service instances  
-crypto_trader = None
-stock_searcher = None
+        # 2. TRAFFIC: Request rate
+        self.request_total = Counter(
+            "neural_chat_requests_total", "Total number of chat requests", ["endpoint", "status"]
+        )
 
-# Background task tracking
-memory_extraction_queue = deque(maxlen=MAX_MEMORY_EXTRACTION_QUEUE_SIZE)
-embedding_queue = deque(maxlen=MAX_EMBEDDING_QUEUE_SIZE)
-background_processor_running = False
-background_processor_task = None
+        # 3. ERRORS: Error rate
+        self.request_errors = Counter(
+            "neural_chat_errors_total", "Total number of request errors", ["endpoint", "error_type"]
+        )
 
-# Chat activity tracking
-last_chat_activity = 0.0
+        # 4. SATURATION: GPU and system resource utilization
+        self.gpu_queue_depth = Gauge(
+            "neural_chat_gpu_queue_depth", "Current depth of GPU processing queue", ["priority"]
+        )
 
-# Background processing parameters
-GPU_IDLE_THRESHOLD = 2.0  # Seconds of inactivity before considering GPU idle
-BATCH_SIZE = BATCH_PROCESSING_SIZE  # Process this many memory extractions in one batch
-BATCH_TIMEOUT = 10.0  # Max seconds to wait for batch to fill up
+        self.model_lock_held = Gauge(
+            "neural_chat_model_lock_held", "Whether the model lock is currently held (1=held, 0=free)"
+        )
+
+        # Additional neural consciousness specific metrics
+        self.metacognitive_evaluations = Counter(
+            "neural_chat_metacognitive_evaluations_total",
+            "Number of metacognitive evaluations performed",
+            ["quality_tier", "improved"],
+        )
+
+        self.metacognitive_duration = Histogram(
+            "neural_chat_metacognitive_duration_seconds",
+            "Time spent in metacognitive evaluation",
+        )
+
+        self.conversation_memories_total = Counter(
+            "neural_chat_memories_total",
+            "Total number of memories stored",
+            ["memory_type", "session_id"],
+        )
+
+        self.memory_consolidation_total = Counter(
+            "neural_chat_memory_consolidation_total",
+            "Number of memory consolidation runs",
+            ["trigger_type"],
+        )
+
+        self.memory_consolidation_duration = Histogram(
+            "neural_chat_memory_consolidation_duration_seconds",
+            "Time spent consolidating memories",
+        )
+
+        self.conversation_turns_total = Counter(
+            "neural_chat_conversation_turns_total",
+            "Total conversation turns processed",
+            ["session_id"],
+        )
+
+# Single instance of application state
+app_state = ApplicationState()
 
 
-# ===================== Prometheus Metrics =====================
-if PROMETHEUS_AVAILABLE:
-    # 1. LATENCY: Request processing time
-    request_duration = Histogram(
-        "neural_chat_request_duration_seconds",
-        "Time spent processing chat requests",
-        ["endpoint", "status"],
-    )
+# ===================== Background Processing State =====================
 
-    # 2. TRAFFIC: Request rate
-    request_total = Counter(
-        "neural_chat_requests_total", "Total number of chat requests", ["endpoint", "status"]
-    )
+class BackgroundProcessingState:
+    """Centralized background processing state management.
+    
+    This class encapsulates all background processing state to avoid
+    scattered globals and provide better control.
+    """
+    
+    def __init__(self):
+        # Task queues
+        self.memory_extraction_queue = deque(maxlen=MAX_MEMORY_EXTRACTION_QUEUE_SIZE)
+        self.embedding_queue = deque(maxlen=MAX_EMBEDDING_QUEUE_SIZE)
+        
+        # Processing state
+        self.background_processor_running = False
+        self.background_processor_task = None
+        
+        # Activity tracking
+        self.last_chat_activity = 0.0
+        
+        # Processing parameters
+        self.gpu_idle_threshold = 2.0  # Seconds of inactivity before considering GPU idle
+        self.batch_size = BATCH_PROCESSING_SIZE  # Process this many memory extractions in one batch
+        self.batch_timeout = 10.0  # Max seconds to wait for batch to fill up
+    
+    def reset(self):
+        """Reset background processing state."""
+        self.__init__()
 
-    # 3. ERRORS: Error rate
-    request_errors = Counter(
-        "neural_chat_errors_total", "Total number of request errors", ["endpoint", "error_type"]
-    )
 
-    # 4. SATURATION: GPU and system resource utilization
-    gpu_queue_depth = Gauge(
-        "neural_chat_gpu_queue_depth", "Current depth of GPU processing queue", ["priority"]
-    )
+# Single instance of background processing state
+bg_state = BackgroundProcessingState()
 
-    model_lock_held = Gauge(
-        "neural_chat_model_lock_held", "Whether the model lock is currently held (1=held, 0=free)"
-    )
 
-    # Additional neural consciousness specific metrics
-    metacognitive_evaluations = Counter(
-        "neural_chat_metacognitive_evaluations_total",
-        "Number of metacognitive evaluations performed",
-        ["quality_tier", "improved"],
-    )
 
-    metacognitive_duration = Histogram(
-        "neural_chat_metacognitive_duration_seconds",
-        "Time spent on metacognitive evaluation",
-        ["quality_tier"],
-    )
-
-    response_quality_score = Histogram(
-        "neural_chat_response_quality_score",
-        "Quality scores from metacognitive evaluation",
-        ["dimension"],
-    )
-else:
-    # No-op metrics if Prometheus not available
-    request_duration = request_total = request_errors = None
-    gpu_queue_depth = model_lock_held = metacognitive_evaluations = None
-    metacognitive_duration = response_quality_score = None
 
 
 # ===================== Background Processing Classes =====================
@@ -230,9 +309,9 @@ async def queue_memory_extraction_task(
     task = MemoryExtractionTask(user_id, session_id, user_prompt, assistant_response, timestamp)
 
     # Check if queue is at capacity before adding (for eviction logging)
-    queue_was_full = len(memory_extraction_queue) >= MAX_MEMORY_EXTRACTION_QUEUE_SIZE
+    queue_was_full = len(bg_state.memory_extraction_queue) >= MAX_MEMORY_EXTRACTION_QUEUE_SIZE
 
-    memory_extraction_queue.append(task)
+    bg_state.memory_extraction_queue.append(task)
 
     if queue_was_full:
         logger.warning(
@@ -249,11 +328,9 @@ async def queue_memory_extraction_task(
 
 async def ensure_background_processor():
     """Ensure the background processor is running"""
-    global background_processor_running, background_processor_task
-
-    if not background_processor_running:
-        background_processor_running = True
-        background_processor_task = asyncio.create_task(intelligent_background_processor())
+    if not bg_state.background_processor_running:
+        bg_state.background_processor_running = True
+        bg_state.background_processor_task = asyncio.create_task(intelligent_background_processor())
         logger.debug("Started background processor")
 
 
@@ -270,48 +347,47 @@ async def intelligent_background_processor():
     - Prioritizes real-time chat responses
     - Prevents concurrent model access (SEGFAULT protection)
     """
-    global background_processor_running
 
     logger.debug("Background processor started")
 
     try:
         while True:
             # Check if we have any tasks to process
-            if not memory_extraction_queue and not embedding_queue:
+            if not bg_state.memory_extraction_queue and not bg_state.embedding_queue:
                 await asyncio.sleep(1.0)  # Check every second
                 continue
 
             # Check if GPU is idle (no recent chat activity)
             current_time = time.time()
-            time_since_last_chat = current_time - last_chat_activity
+            time_since_last_chat = current_time - bg_state.last_chat_activity
 
-            if time_since_last_chat >= GPU_IDLE_THRESHOLD:
+            if time_since_last_chat >= bg_state.gpu_idle_threshold:
                 # GPU is idle - start batch processing
                 memory_batch = []
                 embedding_batch = []
 
                 # Collect a batch of memory tasks (up to BATCH_SIZE)
-                while memory_extraction_queue and len(memory_batch) < BATCH_SIZE:
-                    memory_batch.append(memory_extraction_queue.popleft())
+                while bg_state.memory_extraction_queue and len(memory_batch) < bg_state.batch_size:
+                    memory_batch.append(bg_state.memory_extraction_queue.popleft())
 
                 # Collect a batch of embedding tasks
-                while embedding_queue and len(embedding_batch) < BATCH_SIZE:
-                    embedding_batch.append(embedding_queue.popleft())
+                while bg_state.embedding_queue and len(embedding_batch) < bg_state.batch_size:
+                    embedding_batch.append(bg_state.embedding_queue.popleft())
 
                 # Process memory tasks first (higher priority)
                 if memory_batch:
                     logger.debug(f"Processing batch of {len(memory_batch)} memory tasks")
                     await process_memory_batch(memory_batch)
-                    logger.debug(f"Memory batch complete - {len(memory_extraction_queue)} remaining")
+                    logger.debug(f"Memory batch complete - {len(bg_state.memory_extraction_queue)} remaining")
 
                 # Process embedding tasks (lower priority, SEGFAULT protection)
                 if embedding_batch:
                     logger.info(f"SEGFAULT PROTECTION - Processing batch of {len(embedding_batch)} embedding tasks")
                     await process_embedding_batch(embedding_batch)
-                    logger.info(f"Embedding batch complete - {len(embedding_queue)} tasks remaining")
+                    logger.info(f"Embedding batch complete - {len(bg_state.embedding_queue)} tasks remaining")
             else:
                 # GPU busy with chat - wait for idle period
-                wait_time = GPU_IDLE_THRESHOLD - time_since_last_chat
+                wait_time = bg_state.gpu_idle_threshold - time_since_last_chat
                 logger.debug(f"Waiting {wait_time:.1f}s for GPU idle period")
                 await asyncio.sleep(min(wait_time, 1.0))
 
@@ -320,12 +396,28 @@ async def intelligent_background_processor():
         raise
     except OSError as e:
         logger.error(f"Background processor I/O error: {e}")
+        # Specific handling for file system errors
+        if e.errno == 28:  # No space left on device
+            logger.critical("Disk full - pausing background processing")
+            await asyncio.sleep(300)  # Wait 5 minutes
     except RuntimeError as e:
         logger.error(f"Background processor runtime error: {e}")
+        # Specific handling for runtime errors
+        if "cannot schedule new futures" in str(e):
+            logger.critical("Event loop closed - stopping processor")
+            return
+    except MemoryError as e:
+        logger.critical(f"Out of memory in background processor: {e}")
+        # Clear queues to free memory
+        bg_state.memory_extraction_queue.clear()
+        bg_state.embedding_queue.clear()
     except Exception as e:
-        logger.error(f"Background processor unexpected error: {e}", exc_info=True)
+        # Log unexpected errors with full traceback
+        logger.error(f"Background processor unexpected error: {type(e).__name__}: {e}", exc_info=True)
+        # Continue processing after a delay
+        await asyncio.sleep(5)
     finally:
-        background_processor_running = False
+        bg_state.background_processor_running = False
         logger.info("Background processor stopped")
 
 
@@ -350,16 +442,16 @@ async def process_memory_batch(batch: list[MemoryExtractionTask]):
 
             # Use LOW priority to not interfere with real-time chat with SHORTER timeout
             async with gpu_for_inference("LLM initialization"):
-                if personal_memory:
+                if app_state.personal_memory:
                     try:
                         # Store conversation in personal memory
-                        await personal_memory.add_memory(
+                        await app_state.personal_memory.add_memory(
                             content=f"User: {task.user_prompt}",
                             conversation_id=task.session_id,
                             importance=0.5,
                         )
 
-                        await personal_memory.add_memory(
+                        await app_state.personal_memory.add_memory(
                             content=f"Assistant: {task.assistant_response}",
                             conversation_id=task.session_id,
                             importance=0.6,
@@ -369,9 +461,21 @@ async def process_memory_batch(batch: list[MemoryExtractionTask]):
                     except TimeoutError:
                         logger.error(f"DEADLOCK PROTECTION: Memory extraction timed out for {task.user_id}")
                         # Continue processing other tasks even if one times out
+                        continue
+                    except MemoryError as e:
+                        logger.critical(f"Out of memory during extraction for {task.user_id}: {e}")
+                        # Skip remaining tasks to prevent further memory issues
+                        break
+                    except ValueError as e:
+                        logger.error(f"Invalid data for {task.user_id}: {e}")
+                        continue
                     except Exception as memory_error:
-                        logger.error(f"CRASH PROTECTION: Memory extraction failed for {task.user_id}: {memory_error}")
+                        logger.error(
+                            f"CRASH PROTECTION: Memory extraction failed for {task.user_id}: "
+                            f"{type(memory_error).__name__}: {memory_error}"
+                        )
                         # Continue processing other tasks even if one fails
+                        continue
         except Exception as task_error:
             logger.error(f"CRASH PROTECTION: Task processing failed: {task_error}")
             # Continue with next task
@@ -389,5 +493,13 @@ async def process_embedding_batch(batch):
             # Process embedding task here
             # Implementation depends on specific embedding requirements
             logger.debug(f"Processing embedding for user {task.user_id}")
+        except (ValueError, TypeError) as e:
+            logger.error(f"Invalid embedding data for {task.user_id}: {e}")
+        except MemoryError as e:
+            logger.critical(f"Out of memory processing embedding for {task.user_id}: {e}")
+            break  # Stop processing to prevent further issues
         except Exception as e:
-            logger.error(f"Embedding processing failed for {task.user_id}: {e}")
+            logger.error(
+                f"Embedding processing failed for {task.user_id}: "
+                f"{type(e).__name__}: {e}"
+            )

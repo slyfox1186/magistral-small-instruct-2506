@@ -12,7 +12,6 @@ from dataclasses import dataclass
 from typing import Any
 
 import redis
-from llama_cpp import Llama
 
 from gpu_lock import gpu_for_inference
 
@@ -26,6 +25,7 @@ class LLMRequest:
     prompt: str
     max_tokens: int = 512
     temperature: float = 0.7
+    top_p: float = 0.95
     session_id: str = ""
     priority: int = 1  # Lower = higher priority
     future: asyncio.Future | None = None
@@ -52,7 +52,7 @@ class PersistentLLMServer:
 
     def __init__(self, model_path: str, redis_url: str = "redis://localhost:6379"):
         self.model_path = model_path
-        self.model: Llama | None = None
+        self.model = None
         self.request_queue = asyncio.PriorityQueue()
         self.gpu_lock = asyncio.Lock()
         self.is_running = False
@@ -87,6 +87,11 @@ class PersistentLLMServer:
             logger.info(f"📊 Using context length: {MODEL_CONFIG['n_ctx']}")
 
             # Model loading happens ONCE at startup, no need for lock
+            try:
+                from llama_cpp import Llama
+            except ImportError:
+                raise ImportError("llama-cpp-python is not installed. The LLM server cannot start without it.")
+                
             self.model = Llama(
                 model_path=self.model_path,
                 n_gpu_layers=MODEL_CONFIG.get("n_gpu_layers", -1),
@@ -134,6 +139,7 @@ class PersistentLLMServer:
         prompt: str,
         max_tokens: int = 512,
         temperature: float = 0.7,
+        top_p: float = 0.95,
         session_id: str = "",
         priority: int = 1,
         request_id: str = "",
@@ -146,7 +152,7 @@ class PersistentLLMServer:
             raise RuntimeError("LLM server not running. Call start() first.")
 
         # Step 1: Check exact match cache
-        cache_key = self._generate_cache_key(prompt, max_tokens, temperature)
+        cache_key = self._generate_cache_key(prompt, max_tokens, temperature, top_p)
         cached_response = await self._get_cached_response(cache_key)
         if cached_response:
             self.stats["cache_hits"] += 1
@@ -158,6 +164,7 @@ class PersistentLLMServer:
             prompt=prompt,
             max_tokens=max_tokens,
             temperature=temperature,
+            top_p=top_p,
             session_id=session_id,
             priority=priority,
             request_id=request_id,
@@ -193,6 +200,7 @@ class PersistentLLMServer:
         prompt: str,
         max_tokens: int = 512,
         temperature: float = 0.7,
+        top_p: float = 0.95,
         session_id: str = "",
         priority: int = 1,
     ) -> AsyncGenerator[str, None]:
@@ -219,6 +227,7 @@ class PersistentLLMServer:
                             prompt,
                             max_tokens=max_tokens,
                             temperature=temperature,
+                            top_p=top_p,
                             stop=["[/INST]", "[/SYSTEM_PROMPT]"],
                             echo=False,
                             stream=True,  # Enable streaming
@@ -228,6 +237,8 @@ class PersistentLLMServer:
                             if isinstance(output, dict) and "choices" in output:
                                 token = output["choices"][0].get("text", "")
                                 if token:
+                                    # Debug: Log each token as it's generated
+                                    print(f"🔄 STREAM TOKEN: '{token}' (len={len(token)})")
                                     # Put token in queue (thread-safe)
                                     loop.call_soon_threadsafe(token_queue.put_nowait, token)
 
@@ -324,6 +335,7 @@ class PersistentLLMServer:
                         prompt,
                         max_tokens=request.max_tokens,
                         temperature=request.temperature,
+                        top_p=request.top_p,
                         stop=["[/INST]", "[/SYSTEM_PROMPT]"],  # Magistral stop tokens
                         echo=False,
                     ),
@@ -356,9 +368,9 @@ class PersistentLLMServer:
 
         return text
 
-    def _generate_cache_key(self, prompt: str, max_tokens: int, temperature: float) -> str:
+    def _generate_cache_key(self, prompt: str, max_tokens: int, temperature: float, top_p: float) -> str:
         """Generate cache key for request parameters"""
-        key_data = f"{prompt}|{max_tokens}|{temperature}"
+        key_data = f"{prompt}|{max_tokens}|{temperature}|{top_p}"
         return f"llm_cache:{hashlib.md5(key_data.encode()).hexdigest()}"
 
     async def _get_cached_response(self, cache_key: str) -> str | None:

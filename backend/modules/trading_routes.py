@@ -13,7 +13,7 @@ from .models import (
     StockQuoteRequest,
     StockDataResponse,
 )
-from .globals import crypto_trader, stock_searcher
+from .globals import app_state
 
 logger = logging.getLogger(__name__)
 
@@ -25,13 +25,13 @@ def setup_trading_routes(app: FastAPI):
     @app.post("/api/crypto/quotes", response_model=CryptoDataResponse)
     async def get_crypto_quotes(request: CryptoQuoteRequest) -> CryptoDataResponse:
         """Get cryptocurrency quotes for specified coin IDs."""
-        if not crypto_trader:
+        if not app_state.crypto_trader:
             raise HTTPException(status_code=503, detail="Cryptocurrency trading service not available")
 
         try:
             # Get cryptocurrency data with sources
             formatted_data, sources = await asyncio.to_thread(
-                crypto_trader.format_crypto_data_with_sources, request.coin_ids
+                app_state.crypto_trader.format_crypto_data_with_sources, request.coin_ids
             )
 
             return CryptoDataResponse(success=True, data=formatted_data, sources=sources)
@@ -44,13 +44,13 @@ def setup_trading_routes(app: FastAPI):
     @app.post("/api/stocks/quotes", response_model=StockDataResponse)
     async def get_stock_quotes(request: StockQuoteRequest) -> StockDataResponse:
         """Get stock quotes for specified ticker symbols."""
-        if not stock_searcher:
+        if not app_state.stock_searcher:
             raise HTTPException(status_code=503, detail="Stock search service not available")
 
         try:
             # Get stock data with sources
             formatted_data, sources = await asyncio.to_thread(
-                stock_searcher.format_stock_data_with_sources, request.symbols
+                app_state.stock_searcher.format_stock_data_with_sources, request.symbols
             )
 
             return StockDataResponse(success=True, data=formatted_data, sources=sources)
@@ -61,11 +61,11 @@ def setup_trading_routes(app: FastAPI):
     @app.get("/api/crypto/trending", response_model=CryptoDataResponse)
     async def get_trending_cryptos() -> CryptoDataResponse:
         """Get trending cryptocurrencies."""
-        if not crypto_trader:
+        if not app_state.crypto_trader:
             raise HTTPException(status_code=503, detail="Cryptocurrency trading service not available")
 
         try:
-            trending_coins = await asyncio.to_thread(crypto_trader.get_trending_coins)
+            trending_coins = await asyncio.to_thread(app_state.crypto_trader.get_trending_coins)
 
             if not trending_coins:
                 return CryptoDataResponse(
@@ -102,11 +102,11 @@ def setup_trading_routes(app: FastAPI):
     @app.get("/api/crypto/global", response_model=CryptoDataResponse)
     async def get_global_crypto_market() -> CryptoDataResponse:
         """Get global cryptocurrency market data."""
-        if not crypto_trader:
+        if not app_state.crypto_trader:
             raise HTTPException(status_code=503, detail="Cryptocurrency trading service not available")
 
         try:
-            global_stats = await asyncio.to_thread(crypto_trader.get_global_market_data)
+            global_stats = await asyncio.to_thread(app_state.crypto_trader.get_global_market_data)
 
             if not global_stats:
                 return CryptoDataResponse(

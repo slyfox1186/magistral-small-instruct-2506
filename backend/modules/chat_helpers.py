@@ -4,7 +4,6 @@
 import asyncio
 import json
 import logging
-import re
 import time
 from datetime import datetime
 
@@ -13,7 +12,7 @@ from fastapi.responses import StreamingResponse
 
 # Import from other modules
 from .models import ChatStreamRequest
-from . import globals as global_vars
+from .globals import app_state, bg_state
 import redis_utils
 import utils
 
@@ -23,168 +22,88 @@ logger = logging.getLogger(__name__)
 
 
 def classify_query_fast_pattern_based(user_prompt: str) -> dict[str, any]:
-    """ULTRA-FAST PATTERN-BASED QUERY CLASSIFICATION
-
-    Only handles TRULY simple conversational queries.
-    Everything else goes to the LLM for intelligent classification.
+    """DEPRECATED: Always use LLM classification for better accuracy.
+    
+    Returns None to force LLM classification for all queries.
     """
-    prompt_lower = user_prompt.lower().strip()
-
-    # ONLY handle dead-simple greetings and thanks
-    # These are so trivial that wasting LLM tokens on them is unnecessary
-    simple_greeting_patterns = [
-        r"^(hi|hello|hey|yo|greetings)[\s!.]*$",
-        r"^(good morning|good afternoon|good evening|good night)[\s!.]*$",
-        r"^(thanks|thank you|ty|thx)[\s!.]*$",
-        r"^(bye|goodbye|see you|talk to you later|ttyl)[\s!.]*$",
-        r"^(yes|no|yeah|nah|yep|nope|ok|okay|sure)[\s!.]*$",
-        r"^(lol|haha|hehe|wow|cool|nice|awesome|great)[\s!.]*$",
-    ]
-
-    import re
-
-    for pattern in simple_greeting_patterns:
-        if re.match(pattern, prompt_lower):
-            return {"primary_intent": "conversation"}
-
-    # Everything else needs LLM classification
-    # Return None to indicate "needs LLM classification"
+    # Always use LLM classification - it's more accurate than regex
     return None
 
 
 async def classify_query_with_llm(user_prompt: str) -> dict[str, any]:
-    """Intelligent query classification with conversational bias"""
-    # Pre-filter: Single words or very short queries default to conversation
-    # unless they have clear search indicators
-    words = user_prompt.strip().split()
-    if len(words) <= 2:
-        # Check for explicit search indicators
-        search_indicators = [
-            "search",
-            "find",
-            "look up",
-            "google",
-            "show me",
-            "what is",
-            "who is",
-            "where is",
-        ]
-        has_search_intent = any(indicator in user_prompt.lower() for indicator in search_indicators)
+    """Simple single-word route classification"""
+    logger.debug(f"🎯 ROUTE CLASSIFIER: Analyzing '{user_prompt}'")
 
-        if not has_search_intent:
-            logger.debug(
-                f"Short query '{user_prompt}' classified as conversation (no search intent)"
-            )
-            return {"primary_intent": "conversation"}
+    # Simple system prompt that returns single words
+    system_prompt = """You are a route classifier. Analyze the user's request and return EXACTLY ONE WORD:
 
-    system_prompt = """You are an expert query router. Analyze the user's request and determine which tool is most appropriate. Your job is to identify the INFORMATION SOURCE needed, not the topic domain.
-
-# Available Tools:
-
-**[query_conversation_history]**
-- Use for questions about our current conversation, my past statements, or actions I've taken
-- Keywords: "you said", "earlier", "before", "in our conversation", "since we started", "what did you", "remind me"
-- Examples: "What URLs did you use?", "Earlier you mentioned prices", "What files did you analyze?"
-
-**[perform_web_search]**
-- Use for real-time, current information that changes frequently
-- Keywords: "current", "latest", "now", "today", "recent", "what's happening"
-- Examples: "Current stock price", "Today's weather", "Latest news about X"
-
-**[query_cryptocurrency]**
-- Use specifically for crypto prices, market cap, trading data (needs real-time data)
-- Examples: "Bitcoin price", "Ethereum market cap", "Crypto trends"
-
-**[query_stocks]**
-- Use specifically for stock prices, market info, earnings (needs real-time data)
-- Examples: "AAPL stock price", "Tesla earnings", "Market performance"
-
-**[generate_from_knowledge]**
-- Use for general knowledge, explanations, how-to questions (timeless information)
-- Examples: "Explain photosynthesis", "How does a car engine work?", "What is democracy?"
-
-**[conversation]**
-- Use for greetings, casual chat, personal preferences, opinions
-- Examples: "Hello", "How are you?", "What do you think about X?"
-
-# Critical Edge Cases:
-- "What URLs have you used since we started talking?" → query_conversation_history
-- "Find me current URLs about AI" → perform_web_search
-- "Earlier you mentioned some stock prices, what were they?" → query_conversation_history
-- "What is the current price of Apple stock?" → query_stocks
-- "What is a stock?" → generate_from_knowledge
-
-# Reasoning Process:
-1. Is this about OUR conversation history? → query_conversation_history
-2. Is this about current crypto/stock prices? → query_cryptocurrency/query_stocks
-3. Is this about current external information? → perform_web_search
-4. Is this general knowledge? → generate_from_knowledge
-5. Is this casual conversation? → conversation
+WEB - for current events, recent news, real-time information, weather, or "latest" anything
+CRYPTO - for cryptocurrency prices, Bitcoin, Ethereum, crypto market data  
+STOCKS - for stock prices, company shares, market data (Apple, Tesla, etc.)
+MEMORY - ONLY when user asks about past conversation ("what did we discuss", "remember when")
+INTERNAL - for ALL other requests (code generation, explanations, tutorials, how-to, creative tasks)
 
 Examples:
-- "what's the weather today" -> web_search
-- "who won the game last night" -> web_search
-- "latest news on Ukraine" -> web_search
-- "is Twitter still called X" -> web_search
-- "explain quantum physics" -> conversation
-- "what happened in 2024" -> web_search
+"Create a bash function" → INTERNAL
+"Latest news about AI" → WEB  
+"Bitcoin price" → CRYPTO
+"Apple stock" → STOCKS
+"What did we talk about?" → MEMORY
+"Hello" → INTERNAL
+"How to use Python" → INTERNAL
+"Write a script" → INTERNAL
 
-Return just the category name."""
+Return ONLY the single word - nothing else."""
 
     classification_prompt = utils.format_prompt(system_prompt, user_prompt)
 
     try:
-        # Use LOWER priority for classification so it doesn't block real-time chat responses
-        # Classification is preprocessing that can afford to wait
         from persistent_llm_server import get_llm_server
-
         server = await get_llm_server()
 
-        # Don't acquire GPU lock here - the persistent server handles it internally
+        # Get single word classification
         classification_text = await server.generate(
             prompt=classification_prompt,
-            max_tokens=10,  # Increased from 5 to allow for full category names
-            temperature=0.2,  # Consistent decision-making temperature
-            session_id="classification",  # Use fixed session ID for classification
+            max_tokens=5,  # Just need one word
+            temperature=0.1,  # Very consistent decisions
+            session_id="route_classification",
         )
 
-        classification_text = classification_text.strip().lower()
-        logger.debug(f"LLM classification for '{user_prompt}': '{classification_text}'")
+        classification_word = classification_text.strip().upper()
+        logger.info(f"🎯 ROUTE CLASSIFIER: '{user_prompt}' → '{classification_word}'")
 
-        # Check if response contains a valid category
-        valid_categories = {
-            "query_conversation_history",
-            "perform_web_search",
-            "query_cryptocurrency",
-            "query_stocks",
-            "generate_from_knowledge",
-            "conversation",
+        # Map single words to internal categories
+        route_mapping = {
+            "WEB": "perform_web_search",
+            "CRYPTO": "query_cryptocurrency", 
+            "STOCKS": "query_stocks",
+            "MEMORY": "query_conversation_history",
+            "INTERNAL": "generate_from_knowledge",
         }
 
-        for category in valid_categories:
-            if category in classification_text:
-                return {"primary_intent": category}
+        # Default to INTERNAL if word not recognized
+        if classification_word in route_mapping:
+            intent = route_mapping[classification_word]
+        else:
+            logger.warning(f"Unknown classification word '{classification_word}', defaulting to INTERNAL")
+            intent = "generate_from_knowledge"
 
-        # Default fallback to conversation
-        logger.debug(
-            f"No valid category found in '{classification_text}', defaulting to conversation"
-        )
-        return {"primary_intent": "conversation"}
+        return {"primary_intent": intent}
 
     except Exception as e:
-        logger.debug(f"Classification error for '{user_prompt}': {e}, defaulting to conversation")
-        return {"primary_intent": "conversation"}
+        logger.warning(f"Classification error for '{user_prompt}': {e}, defaulting to INTERNAL")
+        return {"primary_intent": "generate_from_knowledge"}
 
 
 def check_service_availability() -> None:
     """Check if all required services are available."""
     logger.info("🧠 MEMORY DEBUG: Checking service availability")
-    logger.info(f"🧠 MEMORY DEBUG: Redis client object: {global_vars.redis_client}")
-    logger.info(f"🧠 MEMORY DEBUG: Personal memory object: {global_vars.personal_memory}")
+    logger.info(f"🧠 MEMORY DEBUG: Redis client object: {app_state.redis_client}")
+    logger.info(f"🧠 MEMORY DEBUG: Personal memory object: {app_state.personal_memory}")
     
     # LLM availability is now checked by the persistent server on-demand
     # No need to check here since the server loads on first request
-    redis_available = redis_utils.is_redis_available(global_vars.redis_client)
+    redis_available = redis_utils.is_redis_available(app_state.redis_client)
     logger.info(f"🧠 MEMORY DEBUG: Redis availability check result: {redis_available}")
     
     if not redis_available:
@@ -214,17 +133,17 @@ async def handle_simple_conversational_request(
     memory_context = ""
     logger.info(f"🧠 MEMORY DEBUG: Attempting to get memory context for session {session_id}")
     
-    if global_vars.personal_memory:
-        logger.info(f"🧠 MEMORY DEBUG: personal_memory is available: {type(global_vars.personal_memory)}")
+    if app_state.personal_memory:
+        logger.info(f"🧠 MEMORY DEBUG: personal_memory is available: {type(app_state.personal_memory)}")
         try:
             # Quick memory retrieval for context
             logger.info(f"🧠 MEMORY DEBUG: Calling get_relevant_memories with query: '{user_prompt[:50]}...'")
-            memories = await global_vars.personal_memory.get_relevant_memories(query=user_prompt, limit=5)
+            memories = await app_state.personal_memory.get_relevant_memories(query=user_prompt, limit=5)
             logger.info(f"🧠 MEMORY DEBUG: Retrieved {len(memories) if memories else 0} memories")
             
             # CRITICAL FIX: Also get core memories (user facts)
             logger.info(f"🧠 MEMORY DEBUG: Getting core memories...")
-            core_memories = await global_vars.personal_memory.get_all_core_memories()
+            core_memories = await app_state.personal_memory.get_all_core_memories()
             logger.info(f"🧠 MEMORY DEBUG: Retrieved {len(core_memories) if core_memories else 0} core memories")
             
             # Build memory context from both sources
@@ -260,10 +179,10 @@ async def handle_simple_conversational_request(
     history = []
     logger.info(f"🧠 MEMORY DEBUG: Attempting to get conversation history for session {session_id}")
     
-    if global_vars.personal_memory:
+    if app_state.personal_memory:
         try:
             logger.info(f"🧠 MEMORY DEBUG: Calling get_conversation_context for session {session_id}")
-            recent_memories = await global_vars.personal_memory.get_conversation_context(
+            recent_memories = await app_state.personal_memory.get_conversation_context(
                 session_id, max_messages=4
             )  # Last 2 turns
             logger.info(f"🧠 MEMORY DEBUG: Retrieved {len(recent_memories) if recent_memories else 0} conversation memories")
@@ -285,20 +204,7 @@ async def handle_simple_conversational_request(
         logger.warning("🧠 MEMORY DEBUG: personal_memory is None - no conversation history available")
 
     # Use condensed version of main system prompt with critical rules
-    simple_system_prompt = """You are Aria, a helpful and friendly AI assistant.
-
-## Core Rules:
-1. **Most Current Conversation is TRUTH:** Information from the most current conversation ALWAYS
-   overrides stored memories. When referring to this, say "I prioritize information from the most
-   current conversation."
-2. **MANDATORY Markdown Formatting:** ALL responses MUST use proper markdown formatting including:
-   - Headers with #, ##, ###
-   - Bold text with **text**
-   - Lists with - or numbered items
-   - Code blocks with ```
-   - Tables for structured data using | Column | Format |
-3. **Structured Data as Tables:** Any structured data MUST be presented as markdown tables.
-4. **Be Conversational:** Keep responses warm, engaging, and concise."""
+    simple_system_prompt = """You are Aria, a helpful AI assistant. Be natural and conversational."""
 
     # Add memory context if available
     if memory_context:
@@ -402,14 +308,14 @@ async def handle_simple_conversational_request(
             # Update conversation history (also background)
             try:
                 logger.info(f"🧠 MEMORY DEBUG: Adding conversation to Redis history for session {session_id}")
-                logger.info(f"🧠 MEMORY DEBUG: Redis client available: {global_vars.redis_client is not None}")
+                logger.info(f"🧠 MEMORY DEBUG: Redis client available: {app_state.redis_client is not None}")
                 
                 # Call async history function directly with ResourceManager-powered embeddings
                 redis_utils.add_to_conversation_history(
                     session_id,
                     user_prompt,
                     full_response,
-                    global_vars.redis_client,  # ResourceManager handles embedding model internally
+                    app_state.redis_client,  # ResourceManager handles embedding model internally
                     redis_utils.CONVERSATION_HISTORY_KEY_PREFIX,
                     redis_utils.MAX_NON_VITAL_HISTORY,
                 )
@@ -441,74 +347,19 @@ async def lightweight_memory_processing(user_prompt: str, response: str, session
     logger.info(f"🧠 MEMORY DEBUG: User prompt preview: {user_prompt[:100]}...")
     
     try:
-        if not global_vars.personal_memory:
+        if not app_state.personal_memory:
             logger.warning("🧠 MEMORY DEBUG: personal_memory is None, exiting early")
             return
         
-        logger.info(f"🧠 MEMORY DEBUG: personal_memory object available: {type(global_vars.personal_memory)}")
+        logger.info(f"🧠 MEMORY DEBUG: personal_memory object available: {type(app_state.personal_memory)}")
 
-        # Enhanced pattern-based memory extraction
-        memory_patterns = [
-            # Name patterns
-            (r"(?:my name is|i'm|i am|call me)\s+([A-Za-z]+)", "user_name", 0.9),
-            (r"i'm ([A-Za-z]+)(?:\s|$|[,.!?])", "user_name", 0.9),
-            # Address patterns
-            (r"(?:i live at|my address is|home address is)\s+(.+?)(?:\.|$)", "user_address", 0.8),
-            (r"(?:live in|from)\s+([A-Za-z\s,]+)(?:\.|,|$)", "user_location", 0.7),
-            # Age patterns
-            (r"(?:i am|i'm)\s+(\d+)\s+years old", "user_age", 0.7),
-            (r"(?:born in|born on)\s+(.+?)(?:\.|$)", "user_birthplace", 0.7),
-            # Medical patterns
-            (r"(?:allergic to|allergy to)\s+(.+?)(?:\.|,|$)", "user_allergy", 0.95),
-            (r"(?:i have|diagnosed with)\s+(.+?)(?:\.|,|$)", "user_medical_condition", 0.9),
-            # Family patterns
-            (r"(?:my wife|wife's name is|married to)\s+([A-Za-z]+)", "spouse_name", 0.9),
-            (r"(?:my husband|husband's name is)\s+([A-Za-z]+)", "spouse_name", 0.9),
-            (r"(?:my mother|mother's name is)\s+([A-Za-z]+)", "mother_name", 0.8),
-            (r"(?:my father|father's name is)\s+([A-Za-z]+)", "father_name", 0.8),
-            # Age patterns for family
-            (r"(?:mother|mom|mother's)\s+(?:is\s+)?(\d+)\s+years old", "mother_age", 0.8),
-            (r"(?:father|dad|father's)\s+(?:is\s+)?(\d+)\s+years old", "father_age", 0.8),
-            # Physical characteristics  
-            (r"(?:i am|i'm|he is|she is)\s+(\d+['']?\d*[\"]*)\s+tall", "height", 0.7),
-            (r"(?:blue|brown|green|hazel|gray)\s+eyes", "eye_color", 0.7),
-            # Interests and hobbies
-            (r"(?:loves|enjoys|likes)\s+([a-zA-Z\s,]+?)(?:\.|,|$)", "hobby_interest", 0.6),
-            (r"fascination with\s+([a-zA-Z\s,]+?)(?:\.|,|$)", "interest", 0.7),
-            # Pets
-            (r"(?:owns|has)\s+(?:a\s+)?([a-zA-Z\s]+?)(?:\.|,|$)", "pet", 0.6),
-            # Work/profession patterns
-            (r"(?:i work as|i am a|my job is)\s+(.+?)(?:\.|,|$)", "user_profession", 0.8),
-            (r"(?:work at|employed by)\s+(.+?)(?:\.|,|$)", "user_employer", 0.7),
-        ]
-
-        extracted_count = 0
-        logger.info(f"🧠 MEMORY DEBUG: Scanning user prompt with {len(memory_patterns)} patterns")
+        # LLM will handle memory extraction more accurately than regex
+        # Store the conversation for the LLM to process and extract relevant information later
+        logger.info(f"🧠 MEMORY DEBUG: Storing conversation for LLM-based memory extraction")
         
-        for i, (pattern, core_key, _importance) in enumerate(memory_patterns):
-            logger.debug(f"🧠 MEMORY DEBUG: Testing pattern {i+1}/{len(memory_patterns)}: {core_key}")
-            match = re.search(pattern, user_prompt, re.IGNORECASE)
-            if match:
-                value = match.group(1).strip()
-                logger.info(f"🧠 MEMORY DEBUG: Pattern match found! {core_key} = '{value}'")
-
-                try:
-                    # Store as core memory instead of regular memory to avoid redundancy
-                    logger.info(f"🧠 MEMORY DEBUG: Attempting to store core memory: {core_key} = {value}")
-                    await global_vars.personal_memory.set_core_memory(
-                        key=core_key, value=value, category="user_profile"
-                    )
-                    logger.info(f"🧠 MEMORY DEBUG: ✅ Successfully stored core memory: {core_key} = {value}")
-                    extracted_count += 1
-                except Exception as core_memory_error:
-                    logger.error(f"🧠 MEMORY DEBUG: ❌ Failed to store core memory {core_key}: {core_memory_error}", exc_info=True)
-
-                # Don't extract too many things at once to avoid conflicts
-                if extracted_count >= 3:
-                    logger.info(f"🧠 MEMORY DEBUG: Reached extraction limit of 3, stopping")
-                    break
-
-        logger.info(f"🧠 MEMORY DEBUG: Memory processing complete for session {session_id}. Extracted {extracted_count} items.")
+        # The LLM naturally extracts and remembers information through conversation
+        # No need for weak regex patterns when we have superior NLP capabilities
+        logger.info(f"🧠 MEMORY DEBUG: Memory processing complete for session {session_id}.")
 
     except Exception as e:
         logger.error(f"🧠 MEMORY DEBUG: ❌ Core memory processing error: {e}", exc_info=True)

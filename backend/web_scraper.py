@@ -4,7 +4,6 @@ import asyncio
 import json
 import logging
 import random
-import re
 import sys
 import time
 from typing import Any
@@ -14,7 +13,6 @@ from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-from llama_cpp import Llama
 
 import utils
 from circuit_breaker import CircuitBreakerError, get_web_scraper_breaker
@@ -92,12 +90,67 @@ ALTERNATIVE_HEADERS = {
 }
 
 
+async def validate_url_accessibility(url: str, timeout_seconds: int = 5) -> bool:
+    """Quickly validate if URL is accessible before attempting full scraping.
+    
+    Performs a lightweight HEAD request to check:
+    - 404 Not Found
+    - 403 Forbidden  
+    - 500+ Server errors
+    - Connection timeouts
+    
+    Args:
+        url: URL to validate
+        timeout_seconds: Request timeout
+        
+    Returns:
+        True if URL appears accessible, False otherwise
+    """
+    try:
+        async with aiohttp.ClientSession(
+            timeout=aiohttp.ClientTimeout(total=timeout_seconds),
+            headers=COMMON_HEADERS
+        ) as session:
+            # Use HEAD request to check accessibility without downloading content
+            async with session.head(url) as response:
+                status = response.status
+                logger.debug(f"URL validation for {url}: HTTP {status}")
+                
+                # Consider these status codes as inaccessible
+                if status in [404, 403, 500, 501, 502, 503, 504]:
+                    logger.warning(f"URL {url} returned error status: {status}")
+                    return False
+                
+                # 401 Unauthorized - might still be scrapeable with different headers
+                if status == 401:
+                    logger.info(f"URL {url} requires authentication (401), will try scraping anyway")
+                    return True
+                
+                # 200-299 range is good, 300-399 redirects are usually fine
+                if 200 <= status < 400:
+                    return True
+                
+                # Any other status code, be conservative and skip
+                logger.warning(f"URL {url} returned unexpected status: {status}")
+                return False
+                
+    except asyncio.TimeoutError:
+        logger.warning(f"URL validation timeout for {url}")
+        return False
+    except aiohttp.ClientError as e:
+        logger.warning(f"URL validation failed for {url}: {e}")
+        return False
+    except Exception as e:
+        logger.warning(f"Unexpected error validating {url}: {e}")
+        return False
+
+
 async def scrape_website(
     url: str,
-    timeout_seconds: int = 15,
-    max_retries: int = 4,
-    base_backoff_delay: float = 2.0,
-    max_jitter: float = 1.0,
+    timeout_seconds: int = 8,  # Reduced from 15 to 8 seconds
+    max_retries: int = 2,      # Reduced from 4 to 2 retries
+    base_backoff_delay: float = 1.0,  # Reduced from 2.0 to 1.0
+    max_jitter: float = 0.5,   # Reduced jitter
 ) -> str | None:
     """Asynchronously scrapes a website's textual content using aiohttp with retries and
     exponential backoff.
@@ -543,7 +596,7 @@ async def google_search_async(query: str, num_results: int = 10) -> list[dict[st
 
 
 async def process_url_request(
-    url: str, original_user_query: str, llm_client: Llama, model_lock: PriorityLock
+    url: str, original_user_query: str, llm_client=None, model_lock=None
 ) -> Any | None:
     """Primary dispatcher for URL processing.
     Uses an LLM call to determine the type of web operation needed (e.g., full scrape, specific extraction)
@@ -552,7 +605,7 @@ async def process_url_request(
     Args:
         url: The URL to process.
         original_user_query: The user's original query related to this URL.
-        llm_client: The initialized Llama CPP client.
+        llm_client: The initialized LLM client.
         model_lock: The priority lock for accessing the LLM.
 
     Returns:
@@ -585,41 +638,34 @@ JSON Response:"""
     # Use the standardized format_prompt function from utils
     decision_prompt = utils.format_prompt(system_prompt, user_prompt)
     try:
-        # Acquire lock for LLM
-        async with model_lock.acquire_context(
-            priority=Priority.MEDIUM, debug_name="web_scraper_decision"
-        ) as decision_request_id:
-            logger.debug(
-                f"process_url_request: Acquired model_lock (req_id: {decision_request_id}) "
-                f"for LLM decision on {url_to_process}"
-            )
-            # Use asyncio.to_thread to avoid blocking
-            completion = await asyncio.to_thread(
-                llm_client.create_completion,
-                prompt=decision_prompt,
-                max_tokens=None,  # Adjusted for JSON output
-                temperature=0.3,  # More conservative for structured decisions
-                top_p=0.95,
-                top_k=64,
-                min_p=0.0,
-                stream=False,
-                echo=False,
-                stop=["[/INST]", "[/SYSTEM_PROMPT]"],
-            )
-        raw_llm_output = completion["choices"][0]["text"].strip()
-        # More robust JSON extraction
-        json_match = re.search(r"```json\s*(\{.*?\})\s*```", raw_llm_output, re.DOTALL)
-        if json_match:
-            llm_response_text = json_match.group(1)
-        else:
-            # If no markdown fences, try to find JSON directly
-            json_match_direct = re.search(r"(\{.*?\})", raw_llm_output, re.DOTALL)
-            if json_match_direct:
-                llm_response_text = json_match_direct.group(1)
+        # Use persistent LLM server
+        from persistent_llm_server import get_llm_server
+        llm_server = await get_llm_server()
+        
+        raw_llm_output = await llm_server.generate(
+            prompt=decision_prompt,
+            max_tokens=200,
+            temperature=0.3,
+            session_id="web_scraper_decision"
+        )
+        # Simple JSON extraction without regex
+        llm_response_text = raw_llm_output.strip()
+        
+        # Check for markdown code blocks
+        if "```json" in llm_response_text:
+            start = llm_response_text.find("```json") + 7
+            end = llm_response_text.find("```", start)
+            if end > start:
+                llm_response_text = llm_response_text[start:end].strip()
             else:
-                llm_response_text = (
-                    raw_llm_output  # Fallback, might still be problematic if not valid JSON
-                )
+                # No closing ```, take from start to end
+                llm_response_text = llm_response_text[start:].strip()
+        
+        # Find JSON object boundaries
+        start_idx = llm_response_text.find("{")
+        end_idx = llm_response_text.rfind("}")
+        if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+            llm_response_text = llm_response_text[start_idx:end_idx+1]
         logger.debug(f"LLM Decision Raw Response for {url_to_process}: {llm_response_text}")
         try:
             decision_json = json.loads(llm_response_text)
@@ -723,7 +769,7 @@ JSON Response:"""
 
 
 async def intelligent_extract_from_url(
-    url: str, content: str, user_query: str, llm_client: Llama, model_lock: PriorityLock
+    url: str, content: str, user_query: str, llm_client=None, model_lock=None
 ) -> str | None:
     """Fetches a webpage, then uses an LLM to extract specific information based on an extraction query.
     Returns content formatted in markdown for better readability in the UI.
@@ -738,9 +784,7 @@ async def intelligent_extract_from_url(
     Returns:
         The extracted information as a markdown-formatted string from the LLM, or None if an error occurs.
     """
-    if not llm_client or not model_lock:
-        logger.error("LLM client or model_lock not provided to intelligent_extract_from_url.")
-        return None
+    # LLM client and model_lock are now optional since we use persistent LLM server
     # Define the system prompt with markdown formatting instructions
     system_prompt = """You are an expert web content analyzer and formatter. Your task is to 
 extract information from web content based on the user's query.
@@ -766,29 +810,17 @@ Please extract and format the relevant information using markdown."""
     # Use the standardized format_prompt function from utils
     formatted_prompt = utils.format_prompt(system_prompt, user_prompt)
     try:
-        # Acquire the model_lock before making the LLM call using context manager for safer handling
-        async with model_lock.acquire_context(
-            priority=Priority.MEDIUM, debug_name="web_scraper_extraction"
-        ) as request_id:
-            logger.debug(
-                f"intelligent_extract_from_url: Acquired model_lock (req_id: {request_id}) "
-                f"for extraction from {url}"
-            )
-            # Make the LLM call using asyncio.to_thread to avoid blocking
-            response = await asyncio.to_thread(
-                llm_client.create_completion,
-                prompt=formatted_prompt,
-                max_tokens=None,  # Adjusted for longer content
-                temperature=1.0,  # Mistral optimal temperature for creative content extraction
-                top_p=0.95,
-                top_k=64,
-                min_p=0.0,
-                stream=False,  # Non-streaming for internal decisions
-                echo=False,
-                stop=["[/INST]", "[/SYSTEM_PROMPT]"],
-            )
+        # Use persistent LLM server
+        from persistent_llm_server import get_llm_server
+        llm_server = await get_llm_server()
+        
         # Extract the generated text response
-        extracted_data = response["choices"][0]["text"].strip()
+        extracted_data = await llm_server.generate(
+            prompt=formatted_prompt,
+            max_tokens=512,
+            temperature=0.7,
+            session_id="web_scraper_extraction"
+        )
         # Ensure the response has proper markdown formatting
         if extracted_data and not any(
             md_element in extracted_data for md_element in ["#", "-", "*", "|", "```", "**"]
@@ -1005,8 +1037,8 @@ def perform_web_search(query: str, num_results: int = 5) -> str | None:
 async def perform_web_search_async(
     query: str,
     num_results: int = 5,
-    llm_client: Llama | None = None,
-    model_lock: PriorityLock | None = None,
+    llm_client=None,
+    model_lock=None,
 ) -> str | None:
     """Intelligent async web search that uses LLM to determine if deep scraping is needed.
 
@@ -1031,10 +1063,8 @@ async def perform_web_search_async(
         # Format the search results
         formatted_results = format_search_results(results)
 
-        # If no LLM provided, just return the formatted results
-        if not llm_client or not model_lock:
-            logger.info("No LLM provided, returning search snippets only")
-            return formatted_results
+        # Note: LLM client parameters are now optional since we use persistent LLM server
+        # Always try to use LLM for intelligent search decisions
 
         # Ask LLM if snippets are sufficient
         system_prompt = """You are evaluating whether Google search snippets contain enough information to answer a user's query.
@@ -1055,48 +1085,43 @@ Search Results:
         try:
             formatted_prompt = format_prompt(system_prompt, user_prompt)
 
-            async with model_lock.acquire_for_inference(
-                task_name="web_search_decision", priority=Priority.MEDIUM, timeout=30.0
-            ):
-                response = llm_client(
-                    formatted_prompt,
-                    max_tokens=200,
-                    temperature=0.1,
-                    stream=False,
-                    stop=["[/INST]", "[/SYSTEM_PROMPT]"],
-                )
-
-            # Parse LLM response
-            response_text = response["choices"][0]["text"].strip()
+            # Use persistent LLM server instead of old interface
+            from persistent_llm_server import get_llm_server
+            llm_server = await get_llm_server()
+            
+            response_text = await llm_server.generate(
+                prompt=formatted_prompt,
+                max_tokens=200,
+                temperature=0.1,
+                session_id="web_search_decision"
+            )
             logger.info(f"🤖 LLM raw response: {response_text}")
 
             if not response_text:
                 logger.warning("LLM returned empty response, defaulting to snippets only")
                 return formatted_results
 
-            # Try to extract JSON from the response (handle markdown code blocks)
-            import re
-
+            # Simple JSON extraction without regex
+            json_text = response_text
+            
             # Remove markdown code blocks if present
             if "```json" in response_text:
-                json_match = re.search(r"```json\s*(\{.*?\})\s*```", response_text, re.DOTALL)
-                if json_match:
-                    json_text = json_match.group(1)
+                start = response_text.find("```json") + 7
+                end = response_text.find("```", start)
+                if end > start:
+                    json_text = response_text[start:end].strip()
                 else:
-                    # Try without closing ```
-                    json_match = re.search(r"```json\s*(\{.*)", response_text, re.DOTALL)
-                    if json_match:
-                        json_text = json_match.group(1)
-                    else:
-                        logger.warning("Found ```json but couldn't extract JSON")
-                        return formatted_results
+                    # No closing ```, take from start to end
+                    json_text = response_text[start:].strip()
             else:
-                # Look for raw JSON
-                json_match = re.search(r"\{.*\}", response_text, re.DOTALL)
-                if not json_match:
+                # Look for raw JSON boundaries
+                start_idx = response_text.find("{")
+                end_idx = response_text.rfind("}")
+                if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+                    json_text = response_text[start_idx:end_idx+1]
+                else:
                     logger.warning(f"No JSON found in LLM response: {response_text[:200]}")
                     return formatted_results
-                json_text = json_match.group(0)
             decision = json.loads(json_text)
 
             if decision.get("sufficient", True):
@@ -1133,8 +1158,16 @@ Search Results:
 
             async with semaphore:
                 try:
-                    logger.info(f"Scraping content from: {url}")
-                    content = await scrape_website(url=url, timeout_seconds=5, max_retries=2)
+                    # First validate URL accessibility before scraping
+                    logger.info(f"Validating URL accessibility: {url}")
+                    is_accessible = await validate_url_accessibility(url)
+                    if not is_accessible:
+                        logger.warning(f"Skipping inaccessible URL: {url}")
+                        return None
+                    
+                    logger.info(f"✅ URL accessible, starting scrape: {url}")
+                    content = await scrape_website(url=url, timeout_seconds=3, max_retries=1)
+                    logger.info(f"🔍 Scrape completed for {url}: {len(content) if content else 0} chars")
 
                     if content and len(content.strip()) > 100:
                         # Find the title from original results
@@ -1159,22 +1192,30 @@ Search Results:
         tasks = [scrape_and_format(url) for url in urls_to_scrape[:3]]  # Max 3 URLs
 
         # Run all scraping tasks concurrently
+        logger.info(f"🚀 Starting concurrent scraping of {len(tasks)} URLs...")
         scraped_contents = await asyncio.gather(*tasks)
+        logger.info(f"📊 Scraping completed. Results: {[type(c).__name__ if c else 'None' for c in scraped_contents]}")
 
         # Process results
         scraped_count = 0
-        for content in scraped_contents:
+        for i, content in enumerate(scraped_contents):
             if content:
                 output_parts.append(content)
                 scraped_count += 1
+                logger.info(f"✅ Added scraped content #{i+1}: {len(content)} chars")
+            else:
+                logger.warning(f"❌ Scraped content #{i+1} was None/empty")
 
         if scraped_count == 0:
             # If scraping failed, we still have the snippets
-            logger.info("⚠️ Deep scraping failed, returning snippets only")
+            logger.warning("⚠️ Deep scraping failed completely, returning snippets only")
             return formatted_results
 
+        logger.info(f"🎉 Successfully scraped {scraped_count}/{len(tasks)} URLs")
         # Return combined snippets + scraped content
-        return "".join(output_parts)
+        final_result = "".join(output_parts)
+        logger.info(f"📝 Final result length: {len(final_result)} chars")
+        return final_result
 
     except Exception as e:
         logger.error(f"Error performing async web search: {e}")

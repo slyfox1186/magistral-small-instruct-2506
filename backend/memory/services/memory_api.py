@@ -7,7 +7,6 @@ Handles memory creation, updates, deletion, and tag extraction.
 
 import json
 import logging
-import re
 from pathlib import Path
 from typing import Any
 
@@ -336,7 +335,20 @@ class MemoryAPI:
 
     def _extract_tags(self, content: str) -> list[str]:
         """Extract hashtags from content"""
-        hashtags = re.findall(r"#\w+", content)
+        # Simple hashtag extraction without regex
+        hashtags = []
+        words = content.split()
+        for word in words:
+            if word.startswith("#") and len(word) > 1:
+                # Take the hashtag part (until first non-word character)
+                hashtag = "#"
+                for char in word[1:]:
+                    if char.isalnum() or char == "_":
+                        hashtag += char
+                    else:
+                        break
+                if len(hashtag) > 1:  # Ensure it's not just "#"
+                    hashtags.append(hashtag)
         return list(set(hashtags))  # Remove duplicates
 
     def _determine_circle(self, content: str) -> str:
@@ -348,7 +360,8 @@ class MemoryAPI:
             pattern = rule["pattern"]
             circle = rule["circle"]
 
-            if re.search(pattern, content_lower):
+            # Simple pattern matching without regex
+            if pattern in content_lower:
                 return circle
 
         # Default circle

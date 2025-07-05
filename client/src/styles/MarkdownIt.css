@@ -1,6 +1,6 @@
 /* Base styles for markdown content */
 .markdown-content {
-  color: #f9fafb;
+  color: #FAF8F5; /* Warm cream white - NO BLUE! */
   font-family:
     -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans',
     'Helvetica Neue', sans-serif;
@@ -37,7 +37,7 @@ div.markdown-content {
   margin-bottom: 0.5em;
   font-weight: 600;
   line-height: 1.25;
-  color: #3b82f6; /* Royal blue for headers */
+  color: #A37D9D; /* Dusty mauve for headers - NO BLUE! */
 }
 
 /* Remove top margin when header is first element in markdown content */
@@ -76,7 +76,7 @@ div.markdown-content {
 
 .markdown-content h6 {
   font-size: 0.85em;
-  color: #9ca3af; /* Muted color */
+  color: #A69F92; /* Warm medium brown - NO BLUE! */
 }
 
 /* Lists */
@@ -120,7 +120,7 @@ div.markdown-content {
 
 /* Links */
 .markdown-content a {
-  color: #3b82f6; /* Royal blue */
+  color: #A37D9D; /* Dusty mauve - NO BLUE! */
   text-decoration: none;
   transition: color 0.2s ease;
   position: relative;
@@ -128,7 +128,7 @@ div.markdown-content {
 
 .markdown-content a:hover {
   text-decoration: underline;
-  color: #60a5fa; /* Light blue for hover */
+  color: #B08BA7; /* Lighter mauve for hover - NO BLUE! */
 }
 
 /* Code */
@@ -139,7 +139,7 @@ div.markdown-content {
   border-radius: 0.25rem;
   font-size: 0.9em;
   word-break: keep-all;
-  color: #a78bfa;
+  color: #B08BA7; /* Lighter mauve for code - NO BLUE! */
   border: 1px solid rgba(148, 163, 184, 0.2);
 }
 
@@ -169,7 +169,7 @@ div.markdown-content {
   border-left: 0.25rem solid #8b5cf6;
   padding: 1rem;
   margin: 1em 0;
-  color: #d1d5db;
+  color: #D4CFC6; /* Warm light tan - NO BLUE! */
   font-style: italic;
   background: #1e293b;
   border-radius: 0.5rem;
@@ -299,7 +299,7 @@ div.markdown-content {
   text-align: left;
   border-bottom: 1px solid rgba(148, 163, 184, 0.3);
   padding: 0.875rem 1rem;
-  color: #f9fafb;
+  color: #FAF8F5; /* Warm cream white - NO BLUE! */
   font-size: 0.9rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -313,7 +313,7 @@ div.markdown-content {
   border-bottom: 1px solid rgba(148, 163, 184, 0.1);
   border-right: 1px solid rgba(148, 163, 184, 0.1);
   background-color: transparent;
-  color: #d1d5db;
+  color: #D4CFC6; /* Warm light tan - NO BLUE! */
   font-size: 0.9rem; /* Improved readability */
   line-height: 1.6; /* Better line height */
   hyphens: none; /* Disable auto-hyphenation */
@@ -338,12 +338,12 @@ div.markdown-content {
 
 /* Subtle hover effect */
 .markdown-content tbody tr:hover {
-  background-color: rgba(59, 130, 246, 0.05);
+  background-color: rgba(163, 125, 157, 0.05);
   transition: background-color 0.2s ease;
 }
 
 .markdown-content tbody tr:hover td {
-  color: #f9fafb;
+  color: #FAF8F5; /* Warm cream white - NO BLUE! */
 }
 
 /* Error states and recovery */
@@ -353,7 +353,7 @@ div.markdown-content {
   border: 0.0625rem solid rgba(255, 100, 100, 0.3);
   background-color: rgba(255, 50, 50, 0.1);
   border-radius: 0.25rem;
-  color: #ff6b6b;
+  color: #ef4444; /* Red for errors */
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-size: 0.9em;
 }
@@ -363,7 +363,7 @@ div.markdown-content {
   border-left: 0.1875rem solid #ffcc00;
   margin: 0.625rem 0;
   background-color: rgba(255, 204, 0, 0.05);
-  color: #e8eaed;
+  color: #FAF8F5; /* Warm cream white - NO BLUE! */
 }
 
 /* Render error indicator */
@@ -377,6 +377,6 @@ div.markdown-content {
   top: 0.3125rem;
   right: 0.3125rem;
   font-size: 1rem;
-  color: #ffcc00;
+  color: #f59e0b; /* Amber for warnings */
   opacity: 0.7;
 }

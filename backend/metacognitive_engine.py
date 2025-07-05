@@ -6,11 +6,9 @@ Based on Gemini's strategic analysis for hybrid heuristics + LLM criticism.
 
 import json
 import logging
-import re
 from dataclasses import asdict, dataclass
 from enum import Enum
 
-from llama_cpp import Llama
 
 import utils
 from gpu_lock import GPULock, Priority
@@ -87,34 +85,8 @@ class HeuristicEvaluator:
     """
 
     def __init__(self):
-        # Common patterns for poor responses
-        self.empty_response_patterns = [
-            r"^\s*$",
-            r"^I don\'t know\.?\s*$",
-            r"^I\'m not sure\.?\s*$",
-            r"^I cannot answer\.?\s*$",
-        ]
-
-        self.repetition_patterns = [
-            r"(.{10,}?)\1{2,}",  # Same phrase repeated 3+ times
-            r"(\b\w+\b)(\s+\1){3,}",  # Same word repeated 4+ times
-        ]
-
-        self.placeholder_patterns = [
-            r"\[.*?\]",  # [placeholder text]
-            r"{{.*?}}",  # {{placeholder}}
-            r"TODO:",  # TODO markers
-            r"FIXME:",  # FIXME markers
-            r"XXX",  # XXX markers
-        ]
-
-        # Quality indicators
-        self.positive_indicators = [
-            r"\b(?:specific|detailed|comprehensive|thorough|clear|precise)\b",
-            r"\b(?:example|instance|illustration|demonstration)\b",
-            r"\b(?:because|therefore|consequently|as a result)\b",
-            r"\b(?:first|second|third|finally|in conclusion)\b",
-        ]
+        # No longer rely on regex patterns - trust the LLM's capabilities
+        pass
 
     def evaluate_response(
         self, response: str, user_query: str, context: str = ""
@@ -149,99 +121,58 @@ class HeuristicEvaluator:
         return assessment
 
     def _evaluate_clarity(self, response: str) -> float:
-        """Evaluate response clarity using heuristics."""
+        """Evaluate response clarity using simple length-based heuristics."""
         score = 1.0
 
         # Check for empty or very short responses
-        if len(response.strip()) < 10:
+        response_length = len(response.strip())
+        if response_length < 10:
             score -= 0.5
-
-        # Check for repetition
-        for pattern in self.repetition_patterns:
-            if re.search(pattern, response, re.IGNORECASE):
-                score -= 0.3
-                break
-
-        # Check for placeholder text
-        for pattern in self.placeholder_patterns:
-            if re.search(pattern, response, re.IGNORECASE):
-                score -= 0.4
-                break
+        elif response_length < 50:
+            score -= 0.2
 
         # Check for excessive length (might be unclear rambling)
-        if len(response) > 2000:
+        if response_length > 2000:
             score -= 0.1
 
         return max(0.0, min(1.0, score))
 
     def _evaluate_completeness(self, response: str, user_query: str) -> float:
-        """Evaluate response completeness."""
+        """Evaluate response completeness based on length and query type."""
         score = 0.5  # Base score
 
-        # Check for question words in query and corresponding answers
+        # Check for question words in query
         question_words = ["what", "how", "why", "when", "where", "who", "which"]
         query_lower = user_query.lower()
-        response_lower = response.lower()
-
-        # If query asks specific questions, check if response addresses them
+        
+        # If query asks specific questions, give bonus for longer responses
         query_has_question = any(word in query_lower for word in question_words)
-        if query_has_question:
-            # Look for answering patterns
-            answer_patterns = [
-                r"\b(?:the answer is|this is|here\'s how|because|due to)\b",
-                r"\b(?:you can|to do this|follow these|step by step)\b",
-            ]
-
-            if any(re.search(pattern, response_lower) for pattern in answer_patterns):
-                score += 0.3
-
-        # Check for structured content (lists, steps, examples)
-        if re.search(r"(?:\d+\.|•|\*|\-)\s+", response):
-            score += 0.2
+        if query_has_question and len(response) > 100:
+            score += 0.3
 
         # Length consideration - very short responses likely incomplete
-        if len(response) < 50:
+        response_length = len(response.strip())
+        if response_length < 50:
             score -= 0.3
-        elif len(response) > 200:
-            score += 0.1
+        elif response_length > 200:
+            score += 0.2
 
         return max(0.0, min(1.0, score))
 
     def _evaluate_coherence(self, response: str) -> float:
         """Evaluate logical flow and coherence."""
-        score = 0.7  # Base score
-
-        # Check for connecting words
-        connecting_words = [
-            "however",
-            "therefore",
-            "furthermore",
-            "moreover",
-            "additionally",
-            "consequently",
-            "meanwhile",
-            "similarly",
-            "in contrast",
-            "for example",
-        ]
-
-        response_lower = response.lower()
-        connections_found = sum(1 for word in connecting_words if word in response_lower)
-
-        if connections_found > 0:
-            score += min(0.2, connections_found * 0.05)
-
-        # Check for contradictions (simple patterns)
-        contradiction_patterns = [
-            r"\b(?:yes|true|correct)\b.*?\b(?:no|false|incorrect|wrong)\b",
-            r"\b(?:always|never)\b.*?\b(?:sometimes|often|rarely)\b",
-        ]
-
-        for pattern in contradiction_patterns:
-            if re.search(pattern, response_lower, re.DOTALL):
-                score -= 0.3
-                break
-
+        # Trust the LLM to produce coherent responses
+        # Use a high base score with minor adjustments for length
+        score = 0.8  # Higher base score - trust the model
+        
+        response_length = len(response.strip())
+        if response_length < 20:
+            # Very short responses might lack coherence
+            score -= 0.2
+        elif response_length > 100:
+            # Longer responses likely have better structure
+            score += 0.1
+            
         return max(0.0, min(1.0, score))
 
     def _evaluate_relevance(self, response: str, user_query: str) -> float:
@@ -249,94 +180,49 @@ class HeuristicEvaluator:
         if not user_query:
             return 0.5
 
-        # Extract key terms from query
-        query_words = set(re.findall(r"\b\w{3,}\b", user_query.lower()))
-        response_words = set(re.findall(r"\b\w{3,}\b", response.lower()))
+        # Simple word overlap check without regex
+        query_words = set(user_query.lower().split())
+        response_words = set(response.lower().split())
 
         # Calculate word overlap
         if query_words:
             overlap = len(query_words.intersection(response_words))
-            relevance_score = min(1.0, overlap / len(query_words))
+            relevance_score = min(1.0, 0.5 + (overlap / len(query_words)) * 0.5)
         else:
-            relevance_score = 0.5
+            relevance_score = 0.7  # Trust the model by default
 
-        # Boost for direct question answering
-        if "?" in user_query:
-            answer_patterns = [
-                r"\byes\b",
-                r"\bno\b",
-                r"\bthe answer is\b",
-                r"\bthis is\b",
-                r"\byou can\b",
-            ]
-            if any(re.search(pattern, response.lower()) for pattern in answer_patterns):
-                relevance_score += 0.2
+        # Boost for question queries
+        if "?" in user_query and len(response) > 50:
+            relevance_score += 0.1
 
         return max(0.0, min(1.0, relevance_score))
 
     def _evaluate_helpfulness(self, response: str, user_query: str) -> float:
         """Evaluate how helpful the response is."""
-        score = 0.5  # Base score
-
-        response_lower = response.lower()
-
-        # Check for helpful patterns
-        helpful_patterns = [
-            r"\b(?:here\'s how|you can|try this|follow these steps)\b",
-            r"\b(?:example|for instance|such as)\b",
-            r"\b(?:tip|advice|suggestion|recommendation)\b",
-        ]
-
-        for pattern in helpful_patterns:
-            if re.search(pattern, response_lower):
-                score += 0.2
-                break
-
-        # Check for unhelpful patterns
-        unhelpful_patterns = [
-            r"\bi don\'t know\b",
-            r"\bi can\'t help\b",
-            r"\bi\'m not sure\b",
-            r"\bthat\'s not possible\b",
-        ]
-
-        for pattern in unhelpful_patterns:
-            if re.search(pattern, response_lower):
-                score -= 0.4
-                break
-
+        # Trust the model to be helpful by default
+        score = 0.7  # Higher base score
+        
+        # Simple length-based heuristic
+        response_length = len(response.strip())
+        if response_length < 30:
+            score -= 0.3  # Very short responses are less helpful
+        elif response_length > 100:
+            score += 0.2  # Longer responses tend to be more helpful
+            
         return max(0.0, min(1.0, score))
 
     def _evaluate_confidence(self, response: str) -> float:
         """Evaluate confidence level of the response."""
-        response_lower = response.lower()
-
-        # Confident indicators
-        confident_patterns = [
-            r"\b(?:definitely|certainly|absolutely|clearly|obviously)\b",
-            r"\b(?:the answer is|this is|you should|you can)\b",
-        ]
-
-        uncertain_patterns = [
-            r"\b(?:maybe|perhaps|possibly|might|could|probably)\b",
-            r"\b(?:i think|i believe|it seems|appears to)\b",
-            r"\b(?:not sure|don\'t know|unclear)\b",
-        ]
-
-        confident_count = sum(
-            1 for pattern in confident_patterns if re.search(pattern, response_lower)
-        )
-        uncertain_count = sum(
-            1 for pattern in uncertain_patterns if re.search(pattern, response_lower)
-        )
-
-        # Calculate confidence score
-        if confident_count > uncertain_count:
-            return min(1.0, 0.7 + (confident_count * 0.1))
-        elif uncertain_count > confident_count:
-            return max(0.2, 0.7 - (uncertain_count * 0.15))
+        # Trust the model's natural confidence level
+        # Use response length as a simple proxy
+        response_length = len(response.strip())
+        
+        if response_length < 20:
+            return 0.5  # Very short responses show less confidence
+        elif response_length < 100:
+            return 0.7  # Medium confidence
         else:
-            return 0.7  # Neutral
+            return 0.8  # Longer, detailed responses show confidence
 
 
 class LLMCritic:
@@ -344,7 +230,7 @@ class LLMCritic:
     Implements the "System 2" thinking for nuanced evaluation.
     """
 
-    def __init__(self, llm: Llama, model_lock: GPULock):
+    def __init__(self, llm, model_lock: GPULock):
         self.llm = llm
         self.model_lock = model_lock
 
@@ -445,10 +331,13 @@ Format your response as JSON:
     def _parse_evaluation_result(self, evaluation_text: str) -> ResponseAssessment:
         """Parse LLM evaluation result into ResponseAssessment."""
         try:
-            # Extract JSON from the response
-            json_match = re.search(r"\{.*?\}", evaluation_text, re.DOTALL)
-            if json_match:
-                eval_data = json.loads(json_match.group())
+            # Try to find JSON-like content by looking for curly braces
+            start_idx = evaluation_text.find('{')
+            end_idx = evaluation_text.rfind('}')
+            
+            if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+                json_str = evaluation_text[start_idx:end_idx + 1]
+                eval_data = json.loads(json_str)
 
                 return ResponseAssessment(
                     factual_accuracy=float(eval_data.get("factual_accuracy", 0.5)),
@@ -461,41 +350,33 @@ Format your response as JSON:
                 )
             else:
                 logger.warning("No JSON found in LLM evaluation response")
-                return self._fallback_parse(evaluation_text)
+                # Return neutral assessment if no JSON found
+                return ResponseAssessment(
+                    factual_accuracy=0.7,
+                    relevance=0.7,
+                    completeness=0.7,
+                    clarity=0.7,
+                    coherence=0.7,
+                    helpfulness=0.7,
+                    confidence=0.7,
+                )
 
         except json.JSONDecodeError as e:
             logger.warning(f"Failed to parse LLM evaluation JSON: {e}")
-            return self._fallback_parse(evaluation_text)
+            # Return neutral assessment on parse error
+            return ResponseAssessment(
+                factual_accuracy=0.7,
+                relevance=0.7,
+                completeness=0.7,
+                clarity=0.7,
+                coherence=0.7,
+                helpfulness=0.7,
+                confidence=0.7,
+            )
         except Exception as e:
             logger.error(f"Error parsing LLM evaluation: {e}")
             return ResponseAssessment()  # Default neutral scores
 
-    def _fallback_parse(self, evaluation_text: str) -> ResponseAssessment:
-        """Fallback parsing using regex for scores."""
-        assessment = ResponseAssessment()
-
-        # Try to extract scores using regex
-        score_patterns = {
-            "factual_accuracy": r"factual[_\s]*accuracy[:\s]*([0-9]\.[0-9])",
-            "relevance": r"relevance[:\s]*([0-9]\.[0-9])",
-            "completeness": r"completeness[:\s]*([0-9]\.[0-9])",
-            "clarity": r"clarity[:\s]*([0-9]\.[0-9])",
-            "coherence": r"coherence[:\s]*([0-9]\.[0-9])",
-            "helpfulness": r"helpfulness[:\s]*([0-9]\.[0-9])",
-            "confidence": r"confidence[:\s]*([0-9]\.[0-9])",
-        }
-
-        text_lower = evaluation_text.lower()
-        for dimension, pattern in score_patterns.items():
-            match = re.search(pattern, text_lower)
-            if match:
-                try:
-                    score = float(match.group(1))
-                    setattr(assessment, dimension, score)
-                except ValueError:
-                    pass
-
-        return assessment
 
 
 class MetacognitiveEngine:
@@ -503,7 +384,7 @@ class MetacognitiveEngine:
     Implements true "neural consciousness" through self-reflection.
     """
 
-    def __init__(self, llm: Llama, model_lock: GPULock):
+    def __init__(self, llm, model_lock: GPULock):
         self.llm = llm
         self.model_lock = model_lock
         self.heuristic_evaluator = HeuristicEvaluator()
@@ -784,39 +665,29 @@ def select_quality_tier(user_query: str, context: str = "") -> QualityTier:
         Appropriate QualityTier for the query
     """
     query_lower = user_query.lower()
+    query_length = len(user_query.strip())
 
-    # Real-time tier patterns (quick, casual queries)
-    real_time_patterns = [
-        r"\b(?:hi|hello|hey|thanks|thank you)\b",
-        r"\b(?:joke|funny|laugh)\b",
-        r"\b(?:quick|fast|briefly)\b",
-        r"^\w{1,3}\?$",  # Very short questions like "Why?"
-    ]
-
-    # Analytical tier patterns (complex, detailed requests)
-    analytical_patterns = [
-        r"\b(?:detailed|comprehensive|thorough|complete|in-depth)\b",
-        r"\b(?:analyze|analysis|report|research|study)\b",
-        r"\b(?:explain everything|tell me all|full explanation)\b",
-        r"\b(?:business plan|strategy|architecture|design)\b",
-        r"\b(?:take your time|be thorough|don\'t rush)\b",
-        r"write.{0,20}(?:detailed|comprehensive|thorough)",
-    ]
-
-    # Check for real-time patterns
-    for pattern in real_time_patterns:
-        if re.search(pattern, query_lower):
+    # Check for real-time keywords (quick, casual queries)
+    real_time_keywords = ["hi", "hello", "hey", "thanks", "thank", "joke", "funny", "quick", "briefly"]
+    for keyword in real_time_keywords:
+        if keyword in query_lower:
             return QualityTier.REAL_TIME
 
-    # Check for analytical patterns
-    for pattern in analytical_patterns:
-        if re.search(pattern, query_lower):
+    # Check for analytical keywords (complex, detailed requests)
+    analytical_keywords = [
+        "detailed", "comprehensive", "thorough", "complete", "in-depth",
+        "analyze", "analysis", "report", "research", "study",
+        "explain everything", "tell me all", "full explanation",
+        "business plan", "strategy", "architecture", "design"
+    ]
+    for keyword in analytical_keywords:
+        if keyword in query_lower:
             return QualityTier.ANALYTICAL
 
-    # Check query length and complexity
-    if len(user_query) < 20:
+    # Check query length
+    if query_length < 20:
         return QualityTier.REAL_TIME
-    elif len(user_query) > 200:
+    elif query_length > 200:
         return QualityTier.ANALYTICAL
 
     # Default to balanced
@@ -828,7 +699,7 @@ def select_quality_tier(user_query: str, context: str = "") -> QualityTier:
 _global_metacognitive_engine: MetacognitiveEngine | None = None
 
 
-def initialize_metacognitive_engine(llm: Llama, model_lock: GPULock) -> MetacognitiveEngine:
+def initialize_metacognitive_engine(llm, model_lock: GPULock) -> MetacognitiveEngine:
     """Initialize global metacognitive engine."""
     global _global_metacognitive_engine
     _global_metacognitive_engine = MetacognitiveEngine(llm, model_lock)

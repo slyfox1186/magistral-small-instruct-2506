@@ -17,10 +17,19 @@ License: MIT
 import logging
 import time
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
+UTC = timezone.utc
 from typing import Any
 
 import requests
+
+# Import configuration
+from crypto_config import (
+    CRYPTO_MAPPINGS,
+    SENTIMENT_WORDS,
+    COINTELEGRAPH_API_CONFIG,
+    NEWS_CATEGORIES
+)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -103,11 +112,10 @@ class CryptoTrading:
         """Initialize the CryptoTrading class with Cointelegraph API."""
         self.apify_token = None  # Will be set from environment if available
         self.cache = {}
-        self.cache_duration = 300  # 5 minutes cache for news
-        self.base_url = (
-            "https://api.apify.com/v2/acts/dadhalfdev~cointelegraph-scraper-crypto-news/"
-            "run-sync-get-dataset-items"
-        )
+        self.cache_duration = COINTELEGRAPH_API_CONFIG["cache_duration"]
+        self.base_url = COINTELEGRAPH_API_CONFIG["base_url"]
+        self.timeout = COINTELEGRAPH_API_CONFIG["timeout"]
+        self.memory = COINTELEGRAPH_API_CONFIG["memory"]
         logger.info("CryptoTrading initialized with Cointelegraph scraper")
 
     def clear_cache(self):
@@ -148,7 +156,11 @@ class CryptoTrading:
 
             def fetch():
                 # Apify API parameters for Cointelegraph scraper
-                params = {"token": self.apify_token, "timeout": 60, "memory": 128}
+                params = {
+                    "token": self.apify_token,
+                    "timeout": self.timeout,
+                    "memory": self.memory
+                }
 
                 # Input for the scraper
                 scraper_input = {
@@ -164,7 +176,11 @@ class CryptoTrading:
 
                 # Make request to Apify
                 response = requests.post(
-                    self.base_url, json=scraper_input, params=params, headers=headers, timeout=60
+                    self.base_url,
+                    json=scraper_input,
+                    params=params,
+                    headers=headers,
+                    timeout=self.timeout
                 )
 
                 if response.status_code == 200:
@@ -302,21 +318,8 @@ class CryptoTrading:
                 title_lower = article.title.lower()
                 content_lower = (article.content_preview or "").lower()
 
-                # Common cryptocurrency names and symbols
-                crypto_terms = {
-                    "bitcoin": "BTC",
-                    "ethereum": "ETH",
-                    "binance": "BNB",
-                    "cardano": "ADA",
-                    "solana": "SOL",
-                    "ripple": "XRP",
-                    "dogecoin": "DOGE",
-                    "polygon": "MATIC",
-                    "avalanche": "AVAX",
-                    "chainlink": "LINK",
-                }
-
-                for name, symbol in crypto_terms.items():
+                # Use cryptocurrency mappings from config
+                for name, symbol in CRYPTO_MAPPINGS.items():
                     if name in title_lower or name in content_lower:
                         if symbol not in coin_mentions:
                             coin_mentions[symbol] = 0
@@ -419,30 +422,8 @@ class CryptoTrading:
         try:
             news = self.get_crypto_news(limit=50)
 
-            positive_words = [
-                "surge",
-                "bull",
-                "rally",
-                "gain",
-                "up",
-                "rise",
-                "soar",
-                "pump",
-                "green",
-                "bullish",
-            ]
-            negative_words = [
-                "crash",
-                "bear",
-                "fall",
-                "down",
-                "drop",
-                "dump",
-                "red",
-                "bearish",
-                "decline",
-                "plunge",
-            ]
+            positive_words = SENTIMENT_WORDS["positive"]
+            negative_words = SENTIMENT_WORDS["negative"]
 
             positive_count = 0
             negative_count = 0

@@ -654,9 +654,9 @@ def start_backend(port):
     
     # Add verbose flags to the uvicorn command with extra debugging
     backend_cmd = [
-        "python3", "-u",  # -u for unbuffered output
+        "/home/jman/miniconda3/bin/python3.12", "-u",  # -u for unbuffered output
         "-m", "uvicorn", 
-        "main_new:app",  # Run main_new:app from within backend directory
+        "main:app",  # Run main:app from within backend directory
         "--host", "0.0.0.0", 
         "--port", str(port),
         "--log-level", "debug",  # Set uvicorn to debug log level
@@ -702,7 +702,7 @@ def start_backend(port):
             try:
                 os.chdir(backend_dir)
                 subprocess.run([
-                    "python3", "-c", 
+                    "python3.12", "-c", 
                     "import sys; print('Python path:', sys.path); import main; print('Import successful')"
                 ], check=True, capture_output=True, text=True, timeout=5)
             except subprocess.CalledProcessError as e:

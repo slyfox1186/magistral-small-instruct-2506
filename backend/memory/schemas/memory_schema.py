@@ -47,9 +47,20 @@ class MemoryBase(BaseModel):
     def extract_hashtags(self):
         """Extract hashtags from content if not provided"""
         if not self.tags and self.content:
-            import re
-
-            hashtags = re.findall(r"#\w+", self.content)
+            # Simple hashtag extraction without regex
+            hashtags = []
+            words = self.content.split()
+            for word in words:
+                if word.startswith("#") and len(word) > 1:
+                    # Take the hashtag part (until first non-word character)
+                    hashtag = "#"
+                    for char in word[1:]:
+                        if char.isalnum() or char == "_":
+                            hashtag += char
+                        else:
+                            break
+                    if len(hashtag) > 1:  # Ensure it's not just "#"
+                        hashtags.append(hashtag)
             self.tags = hashtags
         return self
 

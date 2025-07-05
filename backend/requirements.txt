@@ -25,3 +25,6 @@ yfinance==0.2.51  # For stock market data from Yahoo Finance
 pandas==2.2.3  # For data manipulation and analysis
 numpy==2.2.1  # For numerical computations
 google-api-python-client==2.157.0  # For Google search functionality
+# NLP dependencies for advanced memory importance scoring
+spacy>=3.7.0  # For NLP analysis in memory importance scoring
+spacytextblob>=4.0.0  # For sentiment analysis

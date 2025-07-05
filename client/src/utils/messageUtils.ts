@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { createRef } from 'react';
 import { Message } from '../api/chat';
+import { Status } from '../types/status';
 
 /**
  * Extended Message interface with UI-specific properties
@@ -8,6 +9,7 @@ import { Message } from '../api/chat';
 export interface AppMessage extends Message {
   id: string;
   nodeRef?: React.RefObject<HTMLDivElement>;
+  status?: Status;
 }
 
 /**
@@ -31,12 +33,13 @@ export function createUserMessage(content: string): AppMessage {
  * @param content The message content
  * @returns A properly formatted assistant message
  */
-export function createAssistantMessage(content: string): AppMessage {
+export function createAssistantMessage(content: string, status?: Status): AppMessage {
   return {
     id: uuidv4(),
     role: 'assistant',
     content,
     nodeRef: createRef<HTMLDivElement>(),
+    status,
   };
 }
 

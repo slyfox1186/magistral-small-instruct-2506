@@ -26,11 +26,9 @@ from ultra_advanced_engine import UltraAdvancedEngine
 # Import from our modules
 from .globals import (
     RedisStateManager,
-    background_processor_running,
-    background_processor_task,
-    background_tasks,
+    app_state,
+    bg_state,
 )
-from . import globals as global_vars
 from .helpers import periodic_memory_consolidation
 from .system_prompt import SYSTEM_PROMPT
 
@@ -47,20 +45,20 @@ async def lifespan(app: FastAPI):
     # Initialize Redis connection with connection pooling asynchronously
     try:
         logger.info(" Initializing async Redis connection with built-in resilience...")
-        global_vars.redis_client = await redis_utils.initialize_redis_connection_async()
+        app_state.redis_client = await redis_utils.initialize_redis_connection_async()
         logger.info(" Async Redis connection initialized successfully")
 
         # Validate required Redis modules
         required_modules = {"search": "RediSearch", "json": "RedisJSON"}
-        await redis_utils.validate_redis_modules(global_vars.redis_client, required_modules)
+        await redis_utils.validate_redis_modules(app_state.redis_client, required_modules)
         logger.info(" Required Redis modules (RediSearch, RedisJSON) are available")
 
     except redis_utils.RedisModuleError as e:
         logger.error(f" Critical Redis module missing: {e}")
-        global_vars.redis_client = None  # Ensure redis is considered unavailable
+        app_state.redis_client = None  # Ensure redis is considered unavailable
     except Exception as e:
         logger.error(f" Failed to initialize Redis connection: {e}")
-        global_vars.redis_client = None
+        app_state.redis_client = None
 
     # Removed flawed sentiment analysis loading - LLM handles sentiment naturally
     logger.info(" Using LLM's natural sentiment understanding instead of keyword matching")
@@ -89,17 +87,17 @@ async def lifespan(app: FastAPI):
         )
 
         if not sufficient:
-            llm_error = (
+            app_state.llm_error = (
                 f" Insufficient VRAM. Required: ~{required_vram} GB, Available: {available_gb:.2f} GB. "
                 f"Cannot load model safely."
             )
-            logger.error(llm_error)
+            logger.error(app_state.llm_error)
         else:
             logger.info(" VRAM check passed - sufficient memory available for model loading")
 
     except Exception as e:
         logger.warning(f" Could not perform VRAM check: {e}. Proceeding with model load attempt.")
-        llm_error = None  # Allow startup to continue if VRAM check fails
+        app_state.llm_error = None  # Allow startup to continue if VRAM check fails
 
     logger.info(f"Loading Llama model from {MODEL_PATH}")
     logger.info(
@@ -107,30 +105,30 @@ async def lifespan(app: FastAPI):
     )
 
     if not os.path.exists(MODEL_PATH):
-        llm_error = f"Model file not found at {MODEL_PATH}"
-        logger.error(llm_error)
-    elif llm_error:
+        app_state.llm_error = f"Model file not found at {MODEL_PATH}"
+        logger.error(app_state.llm_error)
+    elif app_state.llm_error:
         # VRAM check failed, error already set and logged
         pass
     else:
         # DISABLED: Using persistent LLM server instead
         logger.info(" Skipping legacy model loading - using persistent LLM server")
-        global_vars.llm = None  # Will be handled by persistent_llm_server.py
-        llm_error = None
+        app_state.llm = None  # Will be handled by persistent_llm_server.py
+        app_state.llm_error = None
 
     # Initialize Redis state manager for multi-worker safety
-    if redis_utils.is_redis_available(global_vars.redis_client):
-        global_vars.state_manager = RedisStateManager(global_vars.redis_client)
+    if redis_utils.is_redis_available(app_state.redis_client):
+        app_state.state_manager = RedisStateManager(app_state.redis_client)
         logger.info(" Redis state manager initialized for multi-worker safety")
 
     # Initialize token manager (required for all operations)
     try:
-        global_vars.token_manager = TokenManager(MODEL_CONFIG["n_ctx"], SYSTEM_PROMPT)
+        app_state.token_manager = TokenManager(MODEL_CONFIG["n_ctx"], SYSTEM_PROMPT)
         logger.info(" Token manager initialized successfully")
     except Exception as tm_error:
         logger.error(f" Failed to initialize token manager: {tm_error}")
         # Set to None to prevent further errors
-        global_vars.token_manager = None
+        app_state.token_manager = None
 
     # Initialize personal memory system (SQLite-based for simplicity)
     try:
@@ -138,7 +136,7 @@ async def lifespan(app: FastAPI):
 
         # Initialize personal memory system using provider
         memory_config = MemoryConfig()
-        global_vars.personal_memory = get_memory_system(memory_config)
+        app_state.personal_memory = get_memory_system(memory_config)
         logger.info(
             f" Personal memory system initialized with backend: {memory_config.MEMORY_BACKEND}"
         )
@@ -153,21 +151,21 @@ async def lifespan(app: FastAPI):
 
         # Start periodic memory consolidation task
         consolidation_task = asyncio.create_task(periodic_memory_consolidation())
-        background_tasks.append(consolidation_task)
+        app_state.background_tasks.append(consolidation_task)
         logger.info(" Started periodic memory consolidation task")
 
     except Exception as e:
         logger.error(f" Error initializing memory system: {e}", exc_info=True)
         # Set to None to prevent further errors
-        global_vars.personal_memory = None
-        global_vars.importance_calculator = None
+        app_state.personal_memory = None
+        app_state.importance_calculator = None
 
     # Initialize LLM-dependent components
-    if global_vars.llm:
+    if app_state.llm:
         try:
             # Initialize Ultra-Advanced Engine (with gpu_lock instead of model_lock)
-            global_vars.ultra_engine = UltraAdvancedEngine(
-                global_vars.llm, None
+            app_state.ultra_engine = UltraAdvancedEngine(
+                app_state.llm, None
             )  # Pass None since we use gpu_for_inference
             logger.info(" Ultra-Advanced AI Engine initialized successfully")
 
@@ -177,8 +175,8 @@ async def lifespan(app: FastAPI):
     # Initialize trading modules
     try:
         logger.info("Initializing trading and market data modules...")
-        global_vars.crypto_trader = crypto_trading.CryptoTrading()
-        global_vars.stock_searcher = stock_search.StockSearch()
+        app_state.crypto_trader = crypto_trading.CryptoTrading()
+        app_state.stock_searcher = stock_search.EnhancedStockSearch()
         logger.info(" Trading modules initialized successfully")
     except Exception as e:
         logger.error(f" Error initializing trading modules: {e}", exc_info=True)
@@ -186,10 +184,10 @@ async def lifespan(app: FastAPI):
     # Initialize monitoring systems
     try:
         logger.info("Initializing production monitoring systems...")
-        global_vars.health_checker, global_vars.memory_analytics = monitoring.initialize_monitoring(
+        app_state.health_checker, app_state.memory_analytics = monitoring.initialize_monitoring(
             None,
             None,
-            global_vars.redis_client,  # Memory monitoring will be updated later
+            app_state.redis_client,  # Memory monitoring will be updated later
         )
 
         logger.info(" Monitoring systems initialized successfully")
@@ -204,7 +202,7 @@ async def lifespan(app: FastAPI):
     # Initialize LLM optimizer for performance
     try:
         logger.info(" Initializing LLM optimizer...")
-        initialize_llm_optimizer(redis_client=global_vars.redis_client, cache_ttl=CACHE_TTL)
+        initialize_llm_optimizer(redis_client=app_state.redis_client, cache_ttl=CACHE_TTL)
         logger.info(" LLM optimizer initialized successfully")
         logger.info("    Caching enabled for LLM calls")
         logger.info("    Performance monitoring active")
@@ -245,7 +243,7 @@ async def lifespan(app: FastAPI):
     # Initialize metacognitive engine for response quality assessment
     try:
         logger.info(" Initializing Metacognitive Engine v1...")
-        global_vars.metacognitive_engine = initialize_metacognitive_engine(global_vars.llm, None)
+        app_state.metacognitive_engine = initialize_metacognitive_engine(app_state.llm, None)
         logger.info(" Metacognitive Engine initialized successfully")
         logger.info("    Heuristic evaluation: ACTIVE")
         logger.info("    LLM criticism: ACTIVE")
@@ -267,9 +265,9 @@ async def lifespan(app: FastAPI):
     logger.info("Beginning graceful application shutdown...")
 
     # Save Redis data
-    if redis_utils.is_redis_available(global_vars.redis_client):
+    if redis_utils.is_redis_available(app_state.redis_client):
         try:
-            await global_vars.redis_client.save()
+            await app_state.redis_client.save()
             logger.info(" Redis data persistence completed")
         except Exception as e:
             logger.error(f" Error saving Redis data: {e}")
@@ -285,36 +283,33 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f" Error stopping LLM server: {e}")
 
-    # Stop all background tasks
-    global background_processor_running
-
     # Cancel all tracked background tasks
-    if background_tasks:
-        logger.info(f" Stopping {len(background_tasks)} background tasks...")
-        for task in background_tasks:
+    if app_state.background_tasks:
+        logger.info(f" Stopping {len(app_state.background_tasks)} background tasks...")
+        for task in app_state.background_tasks:
             if not task.done():
                 task.cancel()
 
         # Wait for all tasks to complete cancellation
-        await asyncio.gather(*background_tasks, return_exceptions=True)
-        background_tasks.clear()
+        await asyncio.gather(*app_state.background_tasks, return_exceptions=True)
+        app_state.background_tasks.clear()
         logger.info(" All background tasks stopped")
 
     # Stop background processor
-    if background_processor_task and not background_processor_task.done():
+    if bg_state.background_processor_task and not bg_state.background_processor_task.done():
         logger.info(" Stopping background processor...")
-        background_processor_running = False
-        background_processor_task.cancel()
+        bg_state.background_processor_running = False
+        bg_state.background_processor_task.cancel()
         try:
-            await background_processor_task
+            await bg_state.background_processor_task
         except asyncio.CancelledError:
             pass
         logger.info(" Background processor stopped")
 
     # Cleanup legacy model
-    if global_vars.llm:
+    if app_state.llm:
         logger.info(" Cleaning up legacy model resources...")
-        global_vars.llm = None
+        app_state.llm = None
 
     # Stop tracemalloc to prevent memory leak
     tracemalloc.stop()

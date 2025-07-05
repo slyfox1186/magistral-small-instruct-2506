@@ -3,12 +3,6 @@ import { CSSTransition, TransitionGroup } from 'react-transition-group';
 import { MEMORY_SESSION_ID } from './api/chat';
 import { CacheManager } from './utils/cacheUtils';
 import './styles/App.css';
-import './styles/StatusAnimations.css';
-// Import status system components
-import { AlertProvider, useAlert } from './contexts/AlertContext';
-import { AlertContainer } from './components/alerts/AlertContainer';
-import { StatusIndicator } from './components/status/StatusIndicator';
-import { Status } from './types/status';
 // Import configuration
 import config from './utils/config';
 // Import constants
@@ -90,8 +84,6 @@ const ThinkingDots = () => (
 );
 
 function App() {
-  // Get alert functions
-  const alert = useAlert();
   // Use fixed session ID from environment or generated ID
   const sessionId = MEMORY_SESSION_ID;
 
@@ -126,7 +118,6 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [streamingComplete, setStreamingComplete] = useState(false);
-  const [currentMessageStatus, setCurrentMessageStatus] = useState<Status>('thinking');
 
   // Store the accumulated response for final message creation
   const accumulatedResponseRef = useRef<string>('');
@@ -368,10 +359,6 @@ function App() {
 
             // Add the complete message without flushSync to prevent layout shifts
             setMessages((prevMessages) => [...prevMessages, newMessage]);
-
-            // Show success status briefly
-            setCurrentMessageStatus('success');
-            alert.success('Message received successfully', 3000);
 
             // Use requestAnimationFrame to ensure DOM has updated before resetting state
             requestAnimationFrame(() => {
@@ -753,7 +740,6 @@ function App() {
     performanceMonitor.startMark('messageSendTotal');
     setError(null); // Clear previous errors
     setIsLoading(true);
-    setCurrentMessageStatus('thinking'); // Start with thinking status
     isAccumulatingMessageRef.current = false; // Reset accumulation flag
     isFinalCompletionRef.current = false; // Reset final completion flag
     resetTokenBuffer(); // Reset token buffer for new message
@@ -984,11 +970,6 @@ function App() {
                   // Add token to accumulator
                   accumulatedResponseRef.current += tokenText;
 
-                  // Update status to streaming once tokens start arriving
-                  if (currentMessageStatus === 'thinking') {
-                    setCurrentMessageStatus('streaming');
-                  }
-
                   // Manage buffer size to prevent memory exhaustion
                   accumulatedResponseRef.current = manageBufferSize(accumulatedResponseRef.current);
 
@@ -1047,8 +1028,6 @@ function App() {
       // Regular error handling
       const errorMsg = err instanceof Error ? err.message : String(err);
       setError(errorMsg);
-      setCurrentMessageStatus('error');
-      alert.error(`Chat error: ${errorMsg}`, 5000);
 
       // Clean up timers
       if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current);
@@ -1113,8 +1092,6 @@ function App() {
     streamingComplete,
     parseThinkingContent,
     manageBufferSize,
-    currentMessageStatus,
-    alert,
   ]); // Essential dependencies only
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -1258,12 +1235,10 @@ function App() {
             <div
               ref={streamingRef}
               key="streaming-message-container-stable"
-              className="message assistant"
+              className="message assistant streaming"
             >
               <div className="message-role">AI</div>
               <div className="message-bubble">
-                {/* New Status Indicator */}
-                <StatusIndicator status={currentMessageStatus} size="small" className="message-status" />
                 {currentResponseRaw && (
                   <button
                     className="copy-button"
@@ -1410,14 +1385,4 @@ function App() {
   );
 }
 
-// Wrap App with AlertProvider
-const AppWithAlerts = () => {
-  return (
-    <AlertProvider>
-      <App />
-      <AlertContainer />
-    </AlertProvider>
-  );
-};
-
-export default AppWithAlerts;
+export default App;

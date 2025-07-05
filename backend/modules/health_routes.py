@@ -10,21 +10,11 @@ from fastapi.responses import PlainTextResponse
 # Import prometheus metrics if available
 try:
     from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
-    PROMETHEUS_AVAILABLE = True
 except ImportError:
-    PROMETHEUS_AVAILABLE = False
+    pass
 
 # Import from our modules
-from .globals import (
-    PROMETHEUS_AVAILABLE,
-    gpu_queue_depth,
-    health_checker,
-    llm,
-    metacognitive_engine,
-    model_lock_held,
-    personal_memory,
-    redis_client,
-)
+from .globals import app_state
 from memory_provider import get_memory_stats
 
 logger = logging.getLogger(__name__)
@@ -42,24 +32,24 @@ def setup_health_routes(app: FastAPI):
         """Comprehensive health check endpoint for production monitoring.
         Returns overall system health with component details.
         """
-        if not health_checker:
+        if not app_state.health_checker:
             return {"status": "unhealthy", "error": "Health checker not initialized"}
 
         try:
             # Perform health checks on all components
-            await health_checker.check_component(
-                "redis", lambda: health_checker.check_redis(redis_client)
+            await app_state.health_checker.check_component(
+                "redis", lambda: app_state.health_checker.check_redis(app_state.redis_client)
             )
-            await health_checker.check_component("llm", lambda: health_checker.check_llm(llm, None))
-            await health_checker.check_component(
-                "memory_system", lambda: {"status": "healthy" if personal_memory else "unhealthy"}
+            await app_state.health_checker.check_component("llm", lambda: app_state.health_checker.check_llm(app_state.llm, None))
+            await app_state.health_checker.check_component(
+                "memory_system", lambda: {"status": "healthy" if app_state.personal_memory else "unhealthy"}
             )
 
             # Get overall health status
-            health_status = await health_checker.get_overall_health()
+            health_status = await app_state.health_checker.get_overall_health()
 
             #  PHASE 2: Add metacognitive and scraper service health
-            if metacognitive_engine:
+            if app_state.metacognitive_engine:
                 health_status["components"]["metacognitive_engine"] = {
                     "status": "healthy",
                     "heuristic_evaluator": "active",
@@ -90,21 +80,21 @@ def setup_health_routes(app: FastAPI):
         """Prometheus metrics endpoint for Phase 3A baseline instrumentation.
         Provides golden signals: Latency, Traffic, Errors, Saturation
         """
-        if not PROMETHEUS_AVAILABLE:
+        if not app_state.prometheus_available:
             raise HTTPException(status_code=503, detail="Prometheus client not available")
 
         try:
             # Update LLM server metrics
-            if gpu_queue_depth:
+            if app_state.gpu_queue_depth:
                 try:
                     from persistent_llm_server import get_llm_server
 
                     server = await get_llm_server()
                     stats = server.get_stats()
                     if stats.get("queue_size", 0) > 0:
-                        model_lock_held.set(1)
+                        app_state.model_lock_held.set(1)
                     else:
-                        model_lock_held.set(0)
+                        app_state.model_lock_held.set(0)
                 except Exception as e:
                     logger.warning(f"Could not update GPU metrics: {e}")
 
@@ -117,11 +107,11 @@ def setup_health_routes(app: FastAPI):
     @app.get("/health/simple")
     async def simple_health_check():
         """Simple health check for load balancers (returns 200 OK if healthy)."""
-        if not health_checker:
+        if not app_state.health_checker:
             raise HTTPException(status_code=503, detail="Health checker not initialized")
 
         try:
-            health_status = await health_checker.get_overall_health()
+            health_status = await app_state.health_checker.get_overall_health()
             if health_status["status"] == "healthy":
                 return {"status": "ok"}
             elif health_status["status"] == "degraded":
@@ -168,7 +158,7 @@ def setup_health_routes(app: FastAPI):
     @app.get("/api/memory-stats")
     async def memory_stats():
         """Get personal memory system statistics."""
-        if not personal_memory:
+        if not app_state.personal_memory:
             return {"error": "Memory system not initialized"}
 
         return get_memory_stats()
@@ -176,7 +166,7 @@ def setup_health_routes(app: FastAPI):
     @app.post("/api/core-memory/{key}")
     async def set_core_memory(key: str, request: dict):
         """Set a core memory (persistent fact about the user)."""
-        if not personal_memory:
+        if not app_state.personal_memory:
             return {"error": "Memory system not initialized"}
 
         value = request.get("value", "")
@@ -185,14 +175,14 @@ def setup_health_routes(app: FastAPI):
         if not value:
             raise HTTPException(status_code=400, detail="Value is required")
 
-        await personal_memory.set_core_memory(key, value, category)
+        await app_state.personal_memory.set_core_memory(key, value, category)
         return {"success": True, "key": key, "value": value}
 
     @app.get("/api/core-memories")
     async def get_core_memories():
         """Get all core memories."""
-        if not personal_memory:
+        if not app_state.personal_memory:
             return {"error": "Memory system not initialized"}
 
-        memories = await personal_memory.get_all_core_memories()
+        memories = await app_state.personal_memory.get_all_core_memories()
         return {"core_memories": memories}

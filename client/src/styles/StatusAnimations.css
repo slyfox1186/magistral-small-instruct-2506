@@ -1,0 +1,482 @@
+/* State-of-the-art Status Animations - Veridian Twilight Theme */
+
+/* Register custom properties for smooth animations */
+@property --gradient-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@property --particle-spread {
+  syntax: '<length>';
+  initial-value: 0px;
+  inherits: false;
+}
+
+@property --glow-radius {
+  syntax: '<length>';
+  initial-value: 0px;
+  inherits: false;
+}
+
+/* Apple-inspired cubic-bezier curves */
+:root {
+  --transition-curve-apple: cubic-bezier(0.6, 0, 0.4, 1);
+  --transition-curve-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  --transition-curve-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ===== Status Indicator Styles ===== */
+
+.status-indicator {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+}
+
+/* Size variants */
+.status-indicator.size-small { width: 20px; height: 20px; }
+.status-indicator.size-medium { width: 24px; height: 24px; }
+.status-indicator.size-large { width: 32px; height: 32px; }
+
+/* SVG container */
+.status-svg {
+  position: relative;
+  z-index: 2;
+  filter: drop-shadow(0 0 8px currentColor);
+  transition: filter 0.3s var(--transition-curve-apple);
+}
+
+/* The morphing path */
+.status-path {
+  transition: 
+    d 0.5s var(--transition-curve-apple),
+    stroke 0.3s var(--transition-curve-apple),
+    opacity 0.3s var(--transition-curve-apple);
+  transform-origin: center;
+}
+
+/* Status-specific animations */
+
+/* Thinking - Pulsing circle with dots */
+.status-thinking .status-svg {
+  animation: subtle-pulse 2s ease-in-out infinite;
+}
+
+.status-thinking .thinking-dots circle {
+  animation: dot-fade 1.5s ease-in-out infinite;
+  opacity: 0;
+}
+
+.status-thinking .thinking-dots circle:nth-child(1) { animation-delay: 0s; }
+.status-thinking .thinking-dots circle:nth-child(2) { animation-delay: 0.2s; }
+.status-thinking .thinking-dots circle:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes dot-fade {
+  0%, 60%, 100% { opacity: 0; transform: scale(0.8); }
+  30% { opacity: 1; transform: scale(1.2); }
+}
+
+/* Streaming - Wave animation */
+.status-streaming .streaming-wave {
+  animation: wave-flow 2s linear infinite;
+  stroke-dasharray: 5 3;
+}
+
+.status-streaming .status-path {
+  animation: stream-glow 1.5s ease-in-out infinite alternate;
+}
+
+@keyframes wave-flow {
+  from { stroke-dashoffset: 0; }
+  to { stroke-dashoffset: -8; }
+}
+
+@keyframes stream-glow {
+  from { filter: drop-shadow(0 0 4px currentColor); }
+  to { filter: drop-shadow(0 0 12px currentColor); }
+}
+
+/* Processing - Spinning gear effect */
+.status-processing .status-path {
+  animation: spin 1s linear infinite;
+  stroke-dasharray: 50 10;
+  stroke-dashoffset: 0;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Success & Error - Scale bounce */
+.status-success .status-path,
+.status-error .status-path {
+  animation: success-bounce 0.6s var(--transition-curve-bounce);
+}
+
+@keyframes success-bounce {
+  0% { transform: scale(0); opacity: 0; }
+  50% { transform: scale(1.2); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* Warning - Attention pulse */
+.status-warning .status-svg {
+  animation: warning-pulse 1s ease-in-out infinite;
+}
+
+@keyframes warning-pulse {
+  0%, 100% { transform: scale(1); filter: drop-shadow(0 0 4px var(--accent-warning)); }
+  50% { transform: scale(1.05); filter: drop-shadow(0 0 12px var(--accent-warning)); }
+}
+
+/* Info - Gentle fade */
+.status-info .status-path {
+  animation: info-fade 0.5s ease-out;
+}
+
+@keyframes info-fade {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Subtle pulse animation */
+@keyframes subtle-pulse {
+  0%, 100% { opacity: 0.8; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.05); }
+}
+
+/* ===== Particle Effects (CSS-only) ===== */
+
+.particle-container {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Particle emitter using radial gradient technique */
+.particle-emitter {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  animation: fade-in-particles 0.5s var(--transition-curve-apple) forwards;
+}
+
+.particle-emitter::before,
+.particle-emitter::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(circle, currentColor 1px, transparent 1.5px);
+  background-size: 10px 10px;
+  animation: dissolve 1s var(--transition-curve-apple) forwards;
+}
+
+.particle-emitter::after {
+  animation-delay: 0.2s;
+  transform: scale(0.8);
+}
+
+/* Success particles - green */
+.particle-success {
+  color: var(--accent-success);
+}
+
+/* Error particles - red */
+.particle-error {
+  color: var(--accent-danger);
+}
+
+@keyframes fade-in-particles {
+  to { opacity: 0.6; }
+}
+
+@keyframes dissolve {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.5);
+  }
+}
+
+/* ===== Notification Toast Styles ===== */
+
+.alert-container {
+  position: fixed;
+  top: 2rem;
+  right: 2rem;
+  left: auto;
+  bottom: auto;
+  z-index: 999999;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  pointer-events: none;
+  max-width: 420px;
+  width: calc(100vw - 4rem);
+  max-width: 420px;
+  /* Ensure it's above everything */
+  isolation: isolate;
+}
+
+.notification-toast {
+  position: relative;
+  background: rgba(26, 27, 35, 0.95);
+  backdrop-filter: blur(20px) saturate(200%);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 
+    0 20px 40px rgba(0, 0, 0, 0.4),
+    0 12px 28px rgba(0, 0, 0, 0.3),
+    0 0 80px rgba(163, 125, 157, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  pointer-events: all;
+  transform-origin: top right;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: all 0.3s var(--transition-curve-apple);
+  /* High quality rendering */
+  will-change: transform, opacity;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Animated gradient border */
+.toast-border {
+  position: absolute;
+  inset: -2px;
+  background: conic-gradient(
+    from var(--gradient-angle),
+    var(--accent-primary),
+    var(--accent-info),
+    var(--accent-primary)
+  );
+  border-radius: 12px;
+  z-index: -1;
+  animation: gradient-spin 4s linear infinite;
+  opacity: 0.6;
+}
+
+/* Type-specific border colors */
+.toast-success .toast-border {
+  background: conic-gradient(
+    from var(--gradient-angle),
+    var(--accent-success),
+    #4ade80,
+    var(--accent-success)
+  );
+}
+
+.toast-error .toast-border {
+  background: conic-gradient(
+    from var(--gradient-angle),
+    var(--accent-danger),
+    #f87171,
+    var(--accent-danger)
+  );
+}
+
+.toast-warning .toast-border {
+  background: conic-gradient(
+    from var(--gradient-angle),
+    var(--accent-warning),
+    #fbbf24,
+    var(--accent-warning)
+  );
+}
+
+@keyframes gradient-spin {
+  0% { --gradient-angle: 0deg; }
+  100% { --gradient-angle: 360deg; }
+}
+
+/* Toast content */
+.toast-content {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.25rem 1.5rem;
+  position: relative;
+  background: rgba(26, 27, 35, 0.6);
+  border-radius: 14px;
+  /* Inner glow for depth */
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.toast-icon {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.toast-icon svg {
+  width: 20px;
+  height: 20px;
+  stroke-width: 2.5;
+}
+
+.toast-success .toast-icon { 
+  color: var(--accent-success);
+  background: rgba(34, 197, 94, 0.15);
+  box-shadow: 0 0 20px rgba(34, 197, 94, 0.2);
+}
+.toast-error .toast-icon { 
+  color: var(--accent-danger);
+  background: rgba(239, 68, 68, 0.15);
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.2);
+}
+.toast-warning .toast-icon { 
+  color: var(--accent-warning);
+  background: rgba(245, 158, 11, 0.15);
+  box-shadow: 0 0 20px rgba(245, 158, 11, 0.2);
+}
+.toast-info .toast-icon { 
+  color: var(--accent-info);
+  background: rgba(124, 152, 133, 0.15);
+  box-shadow: 0 0 20px rgba(124, 152, 133, 0.2);
+}
+
+.toast-message {
+  flex: 1;
+  color: var(--text-primary);
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
+.toast-close {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s var(--transition-curve-apple);
+}
+
+.toast-close:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: var(--text-primary);
+  transform: scale(1.05);
+}
+
+.toast-close:active {
+  transform: scale(0.95);
+}
+
+/* Progress bar */
+.toast-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  width: 100%;
+  background: linear-gradient(90deg, currentColor, transparent);
+  transform-origin: left;
+  animation: shrink-width linear forwards;
+}
+
+.toast-success .toast-progress { color: var(--accent-success); }
+.toast-error .toast-progress { color: var(--accent-danger); }
+.toast-warning .toast-progress { color: var(--accent-warning); }
+.toast-info .toast-progress { color: var(--accent-info); }
+
+@keyframes shrink-width {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+
+/* Enter/Exit animations */
+.toast-enter {
+  animation: toast-slide-in 0.3s var(--transition-curve-apple) forwards;
+}
+
+.toast-exit {
+  animation: toast-slide-out 0.3s var(--transition-curve-apple) forwards;
+}
+
+@keyframes toast-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(100%) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes toast-slide-out {
+  from {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(100%) scale(0.9);
+  }
+}
+
+/* ===== Accessibility ===== */
+
+/* Respect user's motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    animation-delay: 0.01ms !important;
+  }
+  
+  .particle-emitter {
+    display: none;
+  }
+  
+  .status-path {
+    transition: stroke 0.3s ease, opacity 0.3s ease;
+  }
+  
+  .toast-border {
+    animation: none;
+    background: linear-gradient(45deg, var(--accent-primary), var(--accent-info));
+  }
+}
+
+/* Mobile responsiveness */
+@media (max-width: 480px) {
+  .alert-container {
+    top: 1rem;
+    left: 1rem;
+    right: 1rem;
+    max-width: none;
+    width: calc(100vw - 2rem);
+  }
+  
+  .notification-toast {
+    font-size: 0.875rem;
+  }
+  
+  .toast-content {
+    padding: 1rem 1.25rem;
+  }
+}
