@@ -711,6 +711,58 @@ body {
   padding-bottom: 2.5rem; /* Extra space for status indicator */
 }
 
+/* Chat Input Component Styles */
+.chat-input-form {
+  width: 100%;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.chat-input-container {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: rgba(44, 51, 46, 0.5);
+  border: 1px solid rgba(163, 125, 157, 0.2);
+  border-radius: 0.75rem;
+  padding: 0.5rem;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.chat-input-container:focus-within {
+  border-color: #A37D9D;
+  box-shadow: 0 0 0 3px rgba(163, 125, 157, 0.15);
+}
+
+.chat-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-size: 16px;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-weight: 400;
+  padding: 0.875rem 1rem 0.625rem 1rem;
+  resize: none;
+  outline: none;
+  line-height: 1.4;
+  border-radius: 0.5rem;
+  box-sizing: border-box;
+}
+
+.chat-input::placeholder {
+  color: var(--text-tertiary);
+  font-weight: 300;
+}
+
+.streaming-indicator {
+  margin-top: 0.5rem;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  font-style: italic;
+}
+
 /* Copy button for message bubbles */
 .copy-button {
   position: absolute;
@@ -809,16 +861,16 @@ body {
   max-width: 1000px;
   width: 100%;
   display: flex;
-  align-items: center;
+  align-items: center; /* Center all children vertically */
   gap: 0.75rem;
   background: rgba(44, 51, 46, 0.5); /* Veridian Twilight: Semi-transparent forest green */
   border: 1px solid rgba(163, 125, 157, 0.2);
   border-radius: 0.75rem;
-  padding: 0.5rem; /* Reduced padding for more compact design */
+  padding: 0.625rem; /* Balanced padding for better vertical centering */
   transition:
     border-color 0.2s ease,
     box-shadow 0.2s ease;
-  min-height: 3rem; /* Significantly reduced from 4.75rem */
+  min-height: 3rem; /* Exact height for single line with padding */
   height: auto;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
   position: relative;
@@ -845,18 +897,20 @@ body {
     BlinkMacSystemFont,
     sans-serif;
   font-weight: 400;
-  padding: 0.75rem 1.25rem;
+  padding: 0.875rem 1rem 0.625rem 1rem; /* Asymmetric padding: more top, less bottom for visual centering */
   resize: none;
   outline: none;
-  min-height: 3rem; /* Adjusted to account for padding and line-height */
+  min-height: auto; /* Let padding control height */
   max-height: 8rem;
-  line-height: 1.5;
-  height: 3rem; /* Set initial height to match calculated size */
+  line-height: 1.4; /* Slightly tighter line height */
+  height: auto; /* Let content + padding determine height */
   overflow-y: hidden; /* Hide scrollbar by default */
   transition: none; /* Remove transition to prevent visual jump */
-  border-radius: 1rem;
+  border-radius: 0.5rem;
   position: relative;
   z-index: 1;
+  box-sizing: border-box;
+  align-self: center; /* Force center alignment within flex container */
 }
 
 /* Ensure no outline on focus */
