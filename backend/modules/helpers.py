@@ -4,10 +4,15 @@
 import asyncio
 import logging
 import time
-from datetime import datetime, timezone
-UTC = timezone.utc
+from datetime import UTC, datetime
 
-from constants import DEFAULT_IMPORTANCE_SCORE, ECHO_SIMILARITY_THRESHOLD, MEMORY_CONSOLIDATION_INTERVAL
+UTC = UTC
+
+from constants import (
+    DEFAULT_IMPORTANCE_SCORE,
+    ECHO_SIMILARITY_THRESHOLD,
+    MEMORY_CONSOLIDATION_INTERVAL,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +24,7 @@ async def periodic_memory_consolidation():
         try:
             # Import here to avoid circular imports
             from .globals import app_state
-            
+
             if app_state.personal_memory:
                 await app_state.personal_memory.consolidate_old_memories()
                 logger.debug("Memory consolidation completed")
@@ -85,7 +90,7 @@ async def store_conversation_memory(user_prompt: str, assistant_response: str, s
     try:
         # Import here to avoid circular imports
         from .globals import app_state
-        
+
         if app_state.personal_memory:
             start_time = time.time()
             logger.debug(f"[MEMORY_STORE] Storing memory for session {session_id}")

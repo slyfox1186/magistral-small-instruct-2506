@@ -1276,7 +1276,8 @@ a:active::before,
   overflow: hidden;
 }
 
-.loading::after {
+/* Apply shimmer only to loading containers, not status indicators */
+.loading:not(.status-indicator)::after {
   content: '';
   position: absolute;
   top: 0;

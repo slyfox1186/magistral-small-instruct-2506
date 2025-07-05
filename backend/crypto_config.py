@@ -8,7 +8,7 @@ including common cryptocurrencies, sentiment words, and API settings.
 # Common cryptocurrency mappings
 CRYPTO_MAPPINGS = {
     "bitcoin": "BTC",
-    "ethereum": "ETH", 
+    "ethereum": "ETH",
     "binance": "BNB",
     "cardano": "ADA",
     "solana": "SOL",
@@ -90,7 +90,7 @@ COINTELEGRAPH_API_CONFIG = {
 NEWS_CATEGORIES = [
     "all",
     "bitcoin",
-    "ethereum", 
+    "ethereum",
     "altcoins",
     "blockchain",
     "defi",

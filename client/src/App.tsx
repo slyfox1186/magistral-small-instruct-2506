@@ -40,16 +40,47 @@ const MarkdownItRenderer = lazy(() =>
   import('./components/MarkdownItRenderer')
     .then((module) => {
       logger.debug('MarkdownItRenderer component loaded');
-      return module;
+      return { default: module.default };
     })
     .catch((error) => {
       logger.error('Failed to load MarkdownItRenderer:', error);
-      throw error;
+      // Return a fallback component instead of throwing
+      return {
+        default: ({ markdown }: { markdown: string }) => (
+          <div className="markdown-fallback">
+            <pre>{markdown}</pre>
+          </div>
+        )
+      };
     })
 );
 
 // Fix timeout type compatibility
 type TimeoutType = ReturnType<typeof setTimeout>;
+
+// Safe wrapper component for MarkdownItRenderer
+const SafeMarkdownRenderer: React.FC<{
+  markdown: string;
+  isStreaming?: boolean;
+  className?: string;
+}> = ({ markdown, isStreaming = false, className = '' }) => {
+  return (
+    <Suspense 
+      fallback={
+        <div className="markdown-loading">
+          <StatusIndicator status="thinking" size="small" />
+          <span>Loading markdown...</span>
+        </div>
+      }
+    >
+      <MarkdownItRenderer 
+        markdown={markdown} 
+        isStreaming={isStreaming} 
+        className={className} 
+      />
+    </Suspense>
+  );
+};
 
 const SendIcon = () => (
   <svg
@@ -81,13 +112,6 @@ const CopyIcon = () => (
   </svg>
 );
 
-const ThinkingDots = () => (
-  <div className="thinking-dots">
-    <span></span>
-    <span></span>
-    <span></span>
-  </div>
-);
 
 function App() {
   // Get alert functions
@@ -95,15 +119,8 @@ function App() {
   // Use fixed session ID from environment or generated ID
   const sessionId = MEMORY_SESSION_ID;
 
-  // Initialize cache management for development
-  useEffect(() => {
-    if (import.meta.env.DEV) {
-      CacheManager.clearDevelopmentCaches();
-      console.log('🔄 App initialized with fresh cache');
-    }
-  }, []);
-
-  // Load messages from localStorage on initial render with type safety
+  // State declarations (must be before useEffects that reference them)
+  const [isLoading, setIsLoading] = useState(false);
   const [messages, setMessages] = useState<AppMessage[]>(() => {
     const savedMessages = safeGetFromLocalStorage(
       `chat_history_${MEMORY_SESSION_ID}`,
@@ -118,40 +135,168 @@ function App() {
     }));
   });
   const [inputMessage, setInputMessage] = useState('');
-  // This state now holds the raw Markdown being streamed
   const [currentResponseRaw, setCurrentResponseRaw] = useState('');
-  // Separate state for thinking content and final response
   const [currentThinking, setCurrentThinking] = useState('');
   const [currentFinalResponse, setCurrentFinalResponse] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [streamingComplete, setStreamingComplete] = useState(false);
   const [currentMessageStatus, setCurrentMessageStatus] = useState<Status>('thinking');
 
-  // Store the accumulated response for final message creation
+  // Refs for managing state during streaming
   const accumulatedResponseRef = useRef<string>('');
-
   const safetyTimerRef = useRef<TimeoutType | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
-  // Ref for current abort controller
-  const currentAbortControllerRef = useRef<AbortController | null>(null);
-  // Ref for paste timeout cleanup
-  const pasteTimeoutRef = useRef<TimeoutType | null>(null);
-
-  // Ref for inactivity timer cleanup to prevent memory leaks
-  const inactivityTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  // Refs for streaming UI elements - simplified as we render Markdown directly
-  const streamingRef = useRef<HTMLDivElement>(null);
-
-  // CRITICAL FIX: Add a stream debounce mechanism to prevent false completions
-  const streamingCompleteRef = useRef(false);
-  const streamCompletionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // At the top of the component, right after the state declarations
-  // Add a flag to track if we're actively accumulating a message
+  const streamingCompleteRef = useRef<boolean>(false);
   const isAccumulatingMessageRef = useRef<boolean>(false);
+  const isFinalCompletionRef = useRef<boolean>(false);
+  const currentAbortControllerRef = useRef<AbortController | null>(null);
+
+  // Initialize cache management for development
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      CacheManager.clearDevelopmentCaches();
+      console.log('🔄 App initialized with fresh cache');
+    }
+    
+    // Check if app was previously in a streaming state and reset if needed
+    const checkPreviousStreamingState = () => {
+      try {
+        const lastCleanup = localStorage.getItem('app_cleanup_timestamp');
+        const streamingState = localStorage.getItem('streaming_state');
+        
+        if (streamingState && !lastCleanup) {
+          console.log('🔄 Detected previous streaming state, resetting...');
+          // Force reset all streaming state
+          setIsLoading(false);
+          setCurrentResponseRaw('');
+          setCurrentThinking('');
+          setCurrentFinalResponse('');
+          setStreamingComplete(true);
+          setCurrentMessageStatus('success');
+          
+          // Reset all refs
+          accumulatedResponseRef.current = '';
+          streamingCompleteRef.current = true;
+          isAccumulatingMessageRef.current = false;
+          isFinalCompletionRef.current = true;
+          
+          // Clear the streaming state
+          localStorage.removeItem('streaming_state');
+        }
+        
+        // Clear cleanup timestamp (it's served its purpose)
+        if (lastCleanup) {
+          localStorage.removeItem('app_cleanup_timestamp');
+        }
+      } catch (e) {
+        console.warn('Failed to check previous streaming state:', e);
+      }
+    };
+    
+    checkPreviousStreamingState();
+  }, []);
+
+  // Handle browser refresh/close - stop streaming and reset state
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      // Send stop signal to backend if currently streaming
+      if (isLoading || !streamingCompleteRef.current) {
+        try {
+          const stopSignal = new Blob([JSON.stringify({ session_id: sessionId })], { type: 'application/json' });
+          navigator.sendBeacon(`${config.API_URL}/stop-stream`, stopSignal);
+          console.log('🛑 SENT STOP SIGNAL to backend');
+        } catch (e) {
+          console.warn('Failed to send stop signal:', e);
+        }
+      }
+      
+      // IMMEDIATELY abort any active streaming
+      if (currentAbortControllerRef.current) {
+        console.log('🔄 ABORTING STREAM: Page refresh detected');
+        currentAbortControllerRef.current.abort();
+        currentAbortControllerRef.current = null;
+      }
+      
+      // Reset all streaming state immediately
+      setIsLoading(false);
+      setStreamingComplete(true);
+      streamingCompleteRef.current = true;
+      isAccumulatingMessageRef.current = false;
+      isFinalCompletionRef.current = true;
+      accumulatedResponseRef.current = '';
+      setCurrentResponseRaw('');
+      setCurrentMessageStatus('success');
+      
+      // Clear all timeouts immediately
+      if (streamCompletionTimerRef.current) {
+        clearTimeout(streamCompletionTimerRef.current);
+        streamCompletionTimerRef.current = null;
+      }
+      if (safetyTimerRef.current) {
+        clearTimeout(safetyTimerRef.current);
+        safetyTimerRef.current = null;
+      }
+      if (checkBottomTimeoutRef.current) {
+        clearTimeout(checkBottomTimeoutRef.current);
+        checkBottomTimeoutRef.current = null;
+      }
+      if (pasteTimeoutRef.current) {
+        clearTimeout(pasteTimeoutRef.current);
+        pasteTimeoutRef.current = null;
+      }
+      
+      // Reset all refs immediately (these work even during unload)
+      accumulatedResponseRef.current = '';
+      streamingCompleteRef.current = true;
+      isAccumulatingMessageRef.current = false;
+      isFinalCompletionRef.current = true;
+      lastUserInteractionRef.current = 0;
+      
+      // Clear localStorage streaming state
+      try {
+        localStorage.removeItem('streaming_state');
+        localStorage.setItem('app_cleanup_timestamp', Date.now().toString());
+      } catch (e) {
+        console.warn('Failed to clear streaming state from localStorage:', e);
+      }
+      
+      console.log('🔄 Page unload cleanup completed');
+    };
+
+    // Also handle page visibility change for mobile/tab switching
+    const handleVisibilityChange = () => {
+      if (document.hidden && (isLoading || !streamingCompleteRef.current)) {
+        console.log('🔄 Page hidden during streaming, cleaning up...');
+        
+        // Cancel ongoing requests
+        if (currentAbortControllerRef.current) {
+          currentAbortControllerRef.current.abort();
+          currentAbortControllerRef.current = null;
+        }
+        
+        // Reset streaming flags
+        streamingCompleteRef.current = true;
+        isAccumulatingMessageRef.current = false;
+        isFinalCompletionRef.current = true;
+        accumulatedResponseRef.current = '';
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [isLoading]); // Add isLoading dependency so it updates
+
+  // Additional refs not declared above
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const pasteTimeoutRef = useRef<TimeoutType | null>(null);
+  const inactivityTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const streamingRef = useRef<HTMLDivElement>(null);
+  const streamCompletionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // State for copy feedback
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
@@ -284,9 +429,8 @@ function App() {
           clearChatHistory();
           clearAdditionalState();
 
-          // Show success message briefly
-          setError(`✅ Successfully cleared ${data.deleted_count} memories`);
-          setTimeout(() => setError(null), 3000);
+          // Show success message using alert system
+          alert.success(`Successfully cleared ${data.deleted_count} memories`);
         } catch (jsonError) {
           logger.error('Failed to parse JSON response:', jsonError);
           setError('Memory cleared but response format was unexpected');
@@ -303,8 +447,6 @@ function App() {
       setClearingMemory(false);
     }
   }, [clearingMemory, clearChatHistory, clearAdditionalState]);
-  // Add flag to track if we have a confirmed final completion from backend
-  const isFinalCompletionRef = useRef<boolean>(false);
 
   // Refs for direct DOM manipulation for streaming
   const streamingContentRef = useRef<HTMLDivElement | null>(null);
@@ -380,6 +522,13 @@ function App() {
               setStreamingComplete(false);
               streamingCompleteRef.current = false;
               isFinalCompletionRef.current = false;
+              
+              // Clear streaming state from localStorage (successful completion)
+              try {
+                localStorage.removeItem('streaming_state');
+              } catch (e) {
+                console.warn('Failed to clear streaming state on completion:', e);
+              }
             });
 
             // Clean up after DOM is guaranteed to be updated
@@ -436,33 +585,41 @@ function App() {
     const clientHeight = container.clientHeight;
     const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
 
-    // Only disable autoscroll if user scrolls significantly away from bottom
-    // Be more forgiving to prevent accidental disabling
-    const isNearBottom = distanceFromBottom < 100; // Increased threshold
+    // Make it easier for users to break out of auto-scroll
+    // Lower threshold for more responsive scroll control
+    const isNearBottom = distanceFromBottom < 30; // Reduced threshold for easier break-out
 
     if (!isNearBottom) {
       // User has scrolled away from bottom - immediately disable autoscroll
-      setAutoScrollEnabled(false);
-      setShowScrollButton(true);
-
-      // Clear any existing timeout that might re-enable autoscroll
-      if (checkBottomTimeoutRef.current) {
-        clearTimeout(checkBottomTimeoutRef.current);
-        checkBottomTimeoutRef.current = null;
+      if (autoScrollEnabled === true) {
+        setAutoScrollEnabled(false);
+        setShowScrollButton(true);
+        
+        // Clear any existing timeout that might re-enable autoscroll
+        if (checkBottomTimeoutRef.current) {
+          clearTimeout(checkBottomTimeoutRef.current);
+          checkBottomTimeoutRef.current = null;
+        }
       }
       return;
     }
 
-    // User is at bottom - immediately re-enable autoscroll
+    // User is near bottom - re-enable autoscroll if it was disabled
     if (autoScrollEnabled === false) {
-      setAutoScrollEnabled(true);
-      setShowScrollButton(false);
-    }
-
-    // Clear any existing timeout since we're at bottom
-    if (checkBottomTimeoutRef.current) {
-      clearTimeout(checkBottomTimeoutRef.current);
-      checkBottomTimeoutRef.current = null;
+      // Use a very short delay to prevent rapid toggling
+      if (checkBottomTimeoutRef.current) {
+        clearTimeout(checkBottomTimeoutRef.current);
+      }
+      
+      checkBottomTimeoutRef.current = setTimeout(() => {
+        // Double-check we're still at bottom after delay
+        const currentDistanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+        if (currentDistanceFromBottom < 30) {
+          setAutoScrollEnabled(true);
+          setShowScrollButton(false);
+        }
+        checkBottomTimeoutRef.current = null;
+      }, 150); // Short delay to prevent flicker
     }
   }, [autoScrollEnabled]);
   // --- End of ULTRATHINK scroll handler ---
@@ -524,7 +681,7 @@ function App() {
 
     // Check if user has manually scrolled away from bottom recently
     const timeSinceLastInteraction = Date.now() - lastUserInteractionRef.current;
-    const hasRecentUserInteraction = timeSinceLastInteraction < 1000; // Reduced to 1 second
+    const hasRecentUserInteraction = timeSinceLastInteraction < 500; // Reduced to 0.5 seconds for more responsive re-engagement
 
     // CRITICAL FIX: Always autoscroll when actively streaming
     // Detect streaming by either loading state or current response content
@@ -761,6 +918,17 @@ function App() {
     accumulatedResponseRef.current = ''; // Clear accumulated response
     streamingCompleteRef.current = false; // Reset streaming complete flag
 
+    // Track streaming state in localStorage for refresh detection
+    try {
+      localStorage.setItem('streaming_state', JSON.stringify({
+        isStreaming: true,
+        timestamp: Date.now(),
+        sessionId: sessionId
+      }));
+    } catch (e) {
+      console.warn('Failed to save streaming state to localStorage:', e);
+    }
+
     // CRITICAL: Enable auto-scroll when starting a new message
     setAutoScrollEnabled(true);
     setShowScrollButton(false);
@@ -945,10 +1113,25 @@ function App() {
 
                 // Check if this is the completion signal
                 if (isDoneChunk(data)) {
-                  isFinalCompletionRef.current = true;
-                  setStreamingComplete(true);
-                  logger.debug('(handleSend) Received JSON done signal.');
-                  break;
+                  try {
+                    isFinalCompletionRef.current = true;
+                    setStreamingComplete(true);
+                    logger.debug('(handleSend) Received JSON done signal.');
+                    
+                    // Clean up any pending state safely
+                    setCurrentMessageStatus('success');
+                    
+                    // Final update to ensure response is rendered
+                    if (accumulatedResponseRef.current) {
+                      setCurrentResponseRaw(accumulatedResponseRef.current);
+                    }
+                    
+                    break;
+                  } catch (completionError) {
+                    logger.error('Error during stream completion:', completionError);
+                    setError('Error completing response');
+                    break;
+                  }
                 }
 
                 // Check if this is an error
@@ -1032,13 +1215,28 @@ function App() {
       // CRITICAL: Ensure final state update after loop completes
       setCurrentResponseRaw(accumulatedResponseRef.current);
     } catch (err) {
-      // Handle aborted requests
+      // Handle aborted requests (like from page refresh)
       if (controller && controller.signal.aborted) {
-        // Just clean up, don't show error for intentional abort
+        console.log('🔄 STREAM ABORTED: Cleaning up and resetting for new stream');
+        
+        // COMPLETE reset - ready for new stream
         setIsLoading(false);
+        setStreamingComplete(true);
+        streamingCompleteRef.current = true;
+        isAccumulatingMessageRef.current = false;
+        isFinalCompletionRef.current = true;
         setCurrentResponseRaw('');
         accumulatedResponseRef.current = '';
-        setStreamingComplete(false);
+        setCurrentMessageStatus('success');
+        
+        // Clear streaming state from localStorage
+        try {
+          localStorage.removeItem('streaming_state');
+        } catch (e) {
+          console.warn('Failed to clear streaming state on abort:', e);
+        }
+        
+        console.log('🔄 STREAM CLEANUP COMPLETE: Ready for new stream');
         return;
       }
 
@@ -1068,6 +1266,13 @@ function App() {
       setCurrentResponseRaw('');
       accumulatedResponseRef.current = '';
       setStreamingComplete(false);
+      
+      // Clear streaming state from localStorage
+      try {
+        localStorage.removeItem('streaming_state');
+      } catch (e) {
+        console.warn('Failed to clear streaming state on error:', e);
+      }
 
       // Add error message to chat - ensuring it's added even on network error
       setMessages((prev) => {
@@ -1095,6 +1300,13 @@ function App() {
       // Ensure the loading state is reset even if errors occur before reader setup
       if (isLoading) {
         setIsLoading(false);
+        
+        // Clear streaming state from localStorage (final cleanup)
+        try {
+          localStorage.removeItem('streaming_state');
+        } catch (e) {
+          console.warn('Failed to clear streaming state in finally block:', e);
+        }
       }
       // Reset abort controller ref if it belongs to this request
       if (currentAbortControllerRef.current === controller) {
@@ -1242,10 +1454,8 @@ function App() {
                       )}
                     </button>
                     <div className="message-content">
-                      {/* Render final messages using MarkdownItRenderer */}
-                      <Suspense fallback={<div>Loading markdown...</div>}>
-                        <MarkdownItRenderer markdown={message.content ?? ''} />
-                      </Suspense>
+                      {/* Render final messages using SafeMarkdownRenderer */}
+                      <SafeMarkdownRenderer markdown={message.content ?? ''} />
                     </div>
                   </div>
                 </div>
@@ -1275,10 +1485,10 @@ function App() {
                   </button>
                 )}
                 <div className="message-content">
-                  {/* Show thinking dots when no content yet */}
+                  {/* Show status indicator when no content yet */}
                   {!currentResponseRaw ? (
                     <div className="loading">
-                      <ThinkingDots />
+                      <StatusIndicator status="thinking" size="medium" />
                     </div>
                   ) : (
                     <>
@@ -1287,51 +1497,30 @@ function App() {
                         <div className="assistant-thinking">
                           <div className="thinking-header">🤔 Thinking...</div>
                           <div className="thinking-content">
-                            <Suspense
-                              fallback={
-                                <div className="loading">
-                                  <ThinkingDots />
-                                </div>
-                              }
-                            >
-                              <MarkdownItRenderer
-                                markdown={currentThinking}
-                                isStreaming={true}
-                                className="thinking-markdown"
-                              />
-                            </Suspense>
+                            <SafeMarkdownRenderer
+                              markdown={currentThinking}
+                              isStreaming={true}
+                              className="thinking-markdown"
+                            />
                           </div>
                         </div>
                       )}
                       {/* Show final response if available */}
                       {currentFinalResponse && (
                         <div className="assistant-response">
-                          <Suspense
-                            fallback={
-                              <div className="loading">
-                                <ThinkingDots />
-                              </div>
-                            }
-                          >
-                            <MarkdownItRenderer
-                              markdown={currentFinalResponse}
-                              isStreaming={true}
-                              className="response-markdown"
-                            />
-                          </Suspense>
+                          <SafeMarkdownRenderer
+                            markdown={currentFinalResponse}
+                            isStreaming={true}
+                            className="response-markdown"
+                          />
                         </div>
                       )}
                       {/* Fallback to show raw content if no parsing happened */}
                       {!currentThinking && !currentFinalResponse && (
-                        <Suspense
-                          fallback={
-                            <div className="loading">
-                              <ThinkingDots />
-                            </div>
-                          }
-                        >
-                          <MarkdownItRenderer markdown={currentResponseRaw} isStreaming={true} />
-                        </Suspense>
+                        <SafeMarkdownRenderer 
+                          markdown={currentResponseRaw} 
+                          isStreaming={true} 
+                        />
                       )}
                     </>
                   )}

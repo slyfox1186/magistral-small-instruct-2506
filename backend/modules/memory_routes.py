@@ -8,8 +8,8 @@ from datetime import datetime
 
 from fastapi import FastAPI, HTTPException
 
-from circuit_breaker import circuit_breaker_manager
 import monitoring
+from circuit_breaker import circuit_breaker_manager
 
 # Import from our modules
 from .globals import app_state
@@ -20,7 +20,6 @@ logger = logging.getLogger(__name__)
 
 def setup_memory_routes(app: FastAPI):
     """Setup memory management and distributed component routes."""
-
     # ===================== API Endpoints for Distributed Components =====================
 
     @app.post("/api/v1/memory/ingest/scraped")

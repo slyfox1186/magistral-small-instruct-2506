@@ -18,8 +18,8 @@ import collections
 import logging
 import threading
 import time
-from collections.abc import Callable
 from typing import Any, Optional
+from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +93,7 @@ class ResourceManager:
             return "cuda"  # Force CUDA even without PyTorch
 
     def get_model(
-        self, model_identifier: str, force_device: Optional[str] = None
+        self, model_identifier: str, force_device: str | None = None
     ) -> tuple[Any, Optional[threading.Lock]]:
         """Get a model instance with thread-safe loading and caching.
 
@@ -211,7 +211,7 @@ class ResourceManager:
         self,
         model_identifier: str,
         task_function: Callable[[Any], Any],
-        force_device: Optional[str] = None,
+        force_device: str | None = None,
     ) -> Any:
         """Run inference with proper resource locking.
 
@@ -269,7 +269,7 @@ class ResourceManager:
             "gpu_lock_enabled": self._gpu_execution_lock is not None,
         }
 
-    def clear_cache(self, model_identifier: Optional[str] = None) -> None:
+    def clear_cache(self, model_identifier: str | None = None) -> None:
         """Clear model cache.
 
         Args:

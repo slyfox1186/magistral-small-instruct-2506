@@ -17,18 +17,18 @@ License: MIT
 import logging
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
-UTC = timezone.utc
+from datetime import UTC, datetime
+
+UTC = UTC
 from typing import Any
 
 import requests
 
 # Import configuration
 from crypto_config import (
+    COINTELEGRAPH_API_CONFIG,
     CRYPTO_MAPPINGS,
     SENTIMENT_WORDS,
-    COINTELEGRAPH_API_CONFIG,
-    NEWS_CATEGORIES
 )
 
 # Configure logging

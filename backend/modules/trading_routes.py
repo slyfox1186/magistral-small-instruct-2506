@@ -6,14 +6,15 @@ import logging
 
 from fastapi import FastAPI, HTTPException
 
+from .globals import app_state
+
 # Import models and globals
 from .models import (
-    CryptoQuoteRequest,
     CryptoDataResponse,
-    StockQuoteRequest,
+    CryptoQuoteRequest,
     StockDataResponse,
+    StockQuoteRequest,
 )
-from .globals import app_state
 
 logger = logging.getLogger(__name__)
 

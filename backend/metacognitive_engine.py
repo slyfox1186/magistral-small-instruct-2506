@@ -9,7 +9,6 @@ import logging
 from dataclasses import asdict, dataclass
 from enum import Enum
 
-
 import utils
 from gpu_lock import GPULock, Priority
 
@@ -144,7 +143,7 @@ class HeuristicEvaluator:
         # Check for question words in query
         question_words = ["what", "how", "why", "when", "where", "who", "which"]
         query_lower = user_query.lower()
-        
+
         # If query asks specific questions, give bonus for longer responses
         query_has_question = any(word in query_lower for word in question_words)
         if query_has_question and len(response) > 100:
@@ -164,7 +163,7 @@ class HeuristicEvaluator:
         # Trust the LLM to produce coherent responses
         # Use a high base score with minor adjustments for length
         score = 0.8  # Higher base score - trust the model
-        
+
         response_length = len(response.strip())
         if response_length < 20:
             # Very short responses might lack coherence
@@ -172,7 +171,7 @@ class HeuristicEvaluator:
         elif response_length > 100:
             # Longer responses likely have better structure
             score += 0.1
-            
+
         return max(0.0, min(1.0, score))
 
     def _evaluate_relevance(self, response: str, user_query: str) -> float:
@@ -201,14 +200,14 @@ class HeuristicEvaluator:
         """Evaluate how helpful the response is."""
         # Trust the model to be helpful by default
         score = 0.7  # Higher base score
-        
+
         # Simple length-based heuristic
         response_length = len(response.strip())
         if response_length < 30:
             score -= 0.3  # Very short responses are less helpful
         elif response_length > 100:
             score += 0.2  # Longer responses tend to be more helpful
-            
+
         return max(0.0, min(1.0, score))
 
     def _evaluate_confidence(self, response: str) -> float:
@@ -216,7 +215,7 @@ class HeuristicEvaluator:
         # Trust the model's natural confidence level
         # Use response length as a simple proxy
         response_length = len(response.strip())
-        
+
         if response_length < 20:
             return 0.5  # Very short responses show less confidence
         elif response_length < 100:
@@ -334,7 +333,7 @@ Format your response as JSON:
             # Try to find JSON-like content by looking for curly braces
             start_idx = evaluation_text.find('{')
             end_idx = evaluation_text.rfind('}')
-            
+
             if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
                 json_str = evaluation_text[start_idx:end_idx + 1]
                 eval_data = json.loads(json_str)

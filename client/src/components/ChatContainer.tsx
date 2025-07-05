@@ -3,14 +3,8 @@ import { TransitionGroup, CSSTransition } from 'react-transition-group';
 import { AppMessage } from '../utils/messageUtils';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
+import { StatusIndicator } from './status/StatusIndicator';
 
-const ThinkingDots = () => (
-  <div className="thinking-dots">
-    <span></span>
-    <span></span>
-    <span></span>
-  </div>
-);
 
 interface ChatContainerProps {
   messages: AppMessage[];
@@ -98,7 +92,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
          messages[messages.length - 1].role === 'assistant' && 
          !streamingContent && (
           <div className="thinking-indicator">
-            <ThinkingDots />
+            <StatusIndicator status="thinking" size="medium" />
           </div>
         )}
         

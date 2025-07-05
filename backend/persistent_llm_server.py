@@ -91,7 +91,7 @@ class PersistentLLMServer:
                 from llama_cpp import Llama
             except ImportError:
                 raise ImportError("llama-cpp-python is not installed. The LLM server cannot start without it.")
-                
+
             self.model = Llama(
                 model_path=self.model_path,
                 n_gpu_layers=MODEL_CONFIG.get("n_gpu_layers", -1),
@@ -234,6 +234,15 @@ class PersistentLLMServer:
                         )
 
                         for output in stream:
+                            # Check if session should stop (import inline to avoid circular imports)
+                            try:
+                                from modules.chat_routes import active_streams
+                                if session_id and session_id not in active_streams:
+                                    logger.info(f"🛑 LLM STREAM STOPPED: Session {session_id} removed from active_streams")
+                                    break
+                            except ImportError:
+                                pass  # Fallback if chat_routes not available
+                                
                             if isinstance(output, dict) and "choices" in output:
                                 token = output["choices"][0].get("text", "")
                                 if token:

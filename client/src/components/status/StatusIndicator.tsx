@@ -8,22 +8,22 @@ const sizes = {
   large: 32,
 };
 
-// Status colors aligned with Veridian Twilight theme
+// Status colors aligned with Veridian Twilight theme - using actual color values for SVG compatibility
 const statusColors: Record<Status, string> = {
-  thinking: 'var(--accent-info)',      // Sage green
-  streaming: 'var(--accent-primary)',  // Dusty mauve
-  processing: 'var(--accent-info)',    // Sage green
-  success: 'var(--accent-success)',    // Bright green
-  error: 'var(--accent-danger)',       // Red
-  warning: 'var(--accent-warning)',    // Amber
-  info: 'var(--accent-info)',          // Sage green
+  thinking: '#7C9885',      // Sage green
+  streaming: '#A37D9D',     // Dusty mauve
+  processing: '#7C9885',    // Sage green
+  success: '#22c55e',       // Bright green
+  error: '#ef4444',         // Red
+  warning: '#f59e0b',       // Amber
+  info: '#7C9885',          // Sage green
 };
 
 // All paths have identical structure for smooth morphing
 // Base shape is an 8-point circle that morphs into other shapes
 const statusPaths: Record<Status, string> = {
-  // Base: 8-point circle
-  thinking:   "M12 4 C7.58 4 4 7.58 4 12 C4 16.42 7.58 20 12 20 C16.42 20 20 16.42 20 12 C20 7.58 16.42 4 12 4 Z",
+  // Thinking uses dots instead of a path
+  thinking:   "",
   streaming:  "M12 4 C7.58 4 4 7.58 4 12 C4 16.42 7.58 20 12 20 C16.42 20 20 16.42 20 12 C20 7.58 16.42 4 12 4 Z",
   processing: "M12 4 C7.58 4 4 7.58 4 12 C4 16.42 7.58 20 12 20 C16.42 20 20 16.42 20 12 C20 7.58 16.42 4 12 4 Z",
   
@@ -97,34 +97,29 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
         fill="none"
         className="status-svg"
       >
-        <path
-          ref={pathRef}
-          d={statusPaths[status]}
-          stroke={statusColors[status]}
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className="status-path"
-        />
+        {/* Only render path for success and error statuses */}
+        {(status === 'success' || status === 'error' || status === 'warning' || status === 'info') && (
+          <path
+            ref={pathRef}
+            d={statusPaths[status]}
+            className="status-path"
+          />
+        )}
         
         {/* Additional elements for specific statuses */}
         {status === 'thinking' && (
           <g className="thinking-dots">
-            <circle cx="8" cy="12" r="1.5" fill={statusColors[status]} />
-            <circle cx="12" cy="12" r="1.5" fill={statusColors[status]} />
-            <circle cx="16" cy="12" r="1.5" fill={statusColors[status]} />
+            <circle cx="8" cy="12" r="4" />
+            <circle cx="12" cy="12" r="4" />
+            <circle cx="16" cy="12" r="4" />
           </g>
         )}
         
         {status === 'streaming' && (
-          <g className="streaming-wave">
-            <path
-              d="M4 12 Q8 6, 12 12 T20 12"
-              stroke={statusColors[status]}
-              strokeWidth="1.5"
-              fill="none"
-              opacity="0.6"
-            />
+          <g className="thinking-dots">
+            <circle cx="8" cy="12" r="4" />
+            <circle cx="12" cy="12" r="4" />
+            <circle cx="16" cy="12" r="4" />
           </g>
         )}
       </svg>

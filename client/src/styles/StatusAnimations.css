@@ -45,17 +45,89 @@
 .status-svg {
   position: relative;
   z-index: 2;
-  filter: drop-shadow(0 0 8px currentColor);
   transition: filter 0.3s var(--transition-curve-apple);
+}
+
+/* Status-specific drop shadows */
+.status-thinking .status-svg {
+  filter: drop-shadow(0 0 8px #7C9885);
+}
+
+.status-streaming .status-svg {
+  filter: drop-shadow(0 0 8px #A37D9D);
+}
+
+.status-success .status-svg {
+  filter: drop-shadow(0 0 8px #22c55e);
+}
+
+.status-error .status-svg {
+  filter: drop-shadow(0 0 8px #ef4444);
 }
 
 /* The morphing path */
 .status-path {
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
   transition: 
     d 0.5s var(--transition-curve-apple),
     stroke 0.3s var(--transition-curve-apple),
     opacity 0.3s var(--transition-curve-apple);
   transform-origin: center;
+}
+
+/* Status-specific path colors */
+.status-thinking .status-path {
+  display: none !important; /* Completely hide the circle for thinking */
+}
+
+.status-streaming .status-path {
+  stroke: #A37D9D !important; /* Show streaming circle in mauve */
+}
+
+.status-success .status-path {
+  stroke: #22c55e !important; /* Bright green */
+}
+
+.status-error .status-path {
+  stroke: #ef4444 !important; /* Red */
+}
+
+/* Green flashing dots for thinking AND streaming */
+.status-thinking .thinking-dots circle,
+.status-streaming .thinking-dots circle {
+  fill: #22c55e !important; /* BRIGHT GREEN color */
+  stroke: none !important;
+  animation: simple-dot-fade 1.4s ease-in-out infinite both;
+  opacity: 1; /* Make sure they're visible */
+}
+
+.status-thinking .thinking-dots circle:nth-child(1),
+.status-streaming .thinking-dots circle:nth-child(1) { animation-delay: -0.32s; }
+.status-thinking .thinking-dots circle:nth-child(2),
+.status-streaming .thinking-dots circle:nth-child(2) { animation-delay: -0.16s; }  
+.status-thinking .thinking-dots circle:nth-child(3),
+.status-streaming .thinking-dots circle:nth-child(3) { animation-delay: 0s; }
+
+@keyframes simple-dot-fade {
+  0%, 80%, 100% { 
+    opacity: 0.3;
+    transform: scale(0.8); 
+  }
+  40% { 
+    opacity: 1;
+    transform: scale(1); 
+  }
+}
+
+/* Streaming path styling */
+.status-streaming .streaming-path {
+  fill: none;
+  stroke: #A37D9D !important; /* Dusty mauve */
+  stroke-width: 1.5;
+  opacity: 0.6;
 }
 
 /* Status-specific animations */

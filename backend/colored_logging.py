@@ -5,8 +5,9 @@ Provides intelligent color coding, structured formatting, and enhanced readabili
 
 import logging
 import sys
-from datetime import datetime, timezone
-UTC = timezone.utc
+from datetime import UTC, datetime
+
+UTC = UTC
 
 
 class ColorCodes:
@@ -115,7 +116,7 @@ class IntelligentColorFormatter(logging.Formatter):
             "parameter": ColorCodes.BRIGHT_MAGENTA,
             "value": ColorCodes.WHITE,
         }
-        
+
         # Pre-compile regex patterns for performance
         self._compile_regex_patterns()
 
@@ -128,19 +129,19 @@ class IntelligentColorFormatter(logging.Formatter):
             "transformer", "neural", "ai", "redis", "database", "cache",
             "session", "api", "endpoint"
         ]
-        
+
         # Success terms for simple string matching
         self.success_terms = [
             "success", "loaded", "initialized", "connected",
             "ready", "ok", "completed"
         ]
-        
+
         # Error terms for simple string matching
         self.error_terms = [
             "error", "failed", "failure", "exception",
             "warning", "timeout", "abort"
         ]
-        
+
         # Memory operation strings and their colors
         self.memory_strings = [
             ("🧠", "neural", "memory", ColorCodes.MEMORY_NEURAL + ColorCodes.BOLD),
@@ -164,29 +165,29 @@ class IntelligentColorFormatter(logging.Formatter):
         # Split message into words for easier processing
         words = message.split()
         colored_words = []
-        
+
         for word in words:
             colored_word = word
-            
+
             # Simple path detection (starts with /)
             if word.startswith('/') and len(word) > 1:
                 colored_word = f"{ColorCodes.CYAN}{word}{ColorCodes.RESET}"
-            
+
             # Simple URL detection (starts with http:// or https://)
             elif word.startswith(('http://', 'https://')):
                 colored_word = f"{ColorCodes.BRIGHT_CYAN}{ColorCodes.UNDERLINE}{word}{ColorCodes.RESET}"
-            
+
             # Simple number detection
             elif self._is_number(word):
                 colored_word = f"{ColorCodes.BRIGHT_GREEN}{word}{ColorCodes.RESET}"
-            
+
             # Simple key=value detection
             elif '=' in word and not word.startswith('=') and not word.endswith('='):
                 parts = word.split('=', 1)
                 if len(parts) == 2:
                     key, value = parts
                     colored_word = f"{ColorCodes.BRIGHT_MAGENTA}{key}{ColorCodes.RESET}={ColorCodes.WHITE}{value}{ColorCodes.RESET}"
-            
+
             # Check for technical terms
             else:
                 word_lower = word.lower()
@@ -194,25 +195,25 @@ class IntelligentColorFormatter(logging.Formatter):
                     if term in word_lower:
                         colored_word = f"{ColorCodes.YELLOW}{word}{ColorCodes.RESET}"
                         break
-                
+
                 # Check for success terms
                 if colored_word == word:
                     for term in self.success_terms:
                         if term in word_lower:
                             colored_word = f"{ColorCodes.GREEN}{word}{ColorCodes.RESET}"
                             break
-                
+
                 # Check for error terms
                 if colored_word == word:
                     for term in self.error_terms:
                         if term in word_lower:
                             colored_word = f"{ColorCodes.RED}{word}{ColorCodes.RESET}"
                             break
-            
+
             colored_words.append(colored_word)
-        
+
         return ' '.join(colored_words)
-    
+
     def _is_number(self, s: str) -> bool:
         """Check if a string is a number."""
         # Remove trailing punctuation
@@ -240,11 +241,11 @@ class IntelligentColorFormatter(logging.Formatter):
                             idx = parts[1].find(end_char)
                             if idx != -1 and idx < end_idx:
                                 end_idx = idx
-                        
+
                         colored_part = parts[1][:end_idx]
                         rest = parts[1][end_idx:]
                         message = parts[0] + f"{color}{string_to_find}{colored_part}{ColorCodes.RESET}" + rest
-            
+
             elif len(item) == 4:
                 # Multi-string pattern
                 str1, str2, str3, color = item

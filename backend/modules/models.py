@@ -5,7 +5,6 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-
 # ===================== Chat Models =====================
 
 class Message(BaseModel):
