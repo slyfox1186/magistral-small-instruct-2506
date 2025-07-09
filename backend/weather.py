@@ -74,6 +74,15 @@ def normalize_city_query(city: str) -> str:
                 return f"{city_name}, {US_STATE_MAPPING[state_part.upper()]}"
             # If it's already a full state name or country, leave as is
             return city
+    else:
+        # Handle "City ST" format (space-separated)
+        parts = city.split()
+        if len(parts) >= 2:
+            # Check if the last part is a state abbreviation
+            potential_state = parts[-1].upper()
+            if potential_state in US_STATE_MAPPING:
+                city_name = ' '.join(parts[:-1])
+                return f"{city_name}, {US_STATE_MAPPING[potential_state]}"
     return city
 
 
@@ -158,35 +167,81 @@ class WeatherService:
         try:
             data = await self._make_request(url, params)
             locations = []
+            
+            # If we have a state in the query, filter results by state
+            state_filter = None
+            if ',' in normalized_city:
+                parts = normalized_city.split(',')
+                if len(parts) > 1:
+                    state_filter = parts[1].strip()
+                    
             for item in data:
-                locations.append(LocationData(
+                location = LocationData(
                     name=item.get("name", ""),
                     country=item.get("country", ""),
                     state=item.get("state"),
                     lat=item.get("lat", 0.0),
                     lon=item.get("lon", 0.0)
-                ))
+                )
+                
+                # If we have a state filter, only include matching states
+                if state_filter:
+                    item_state = item.get("state", "")
+                    if item_state and item_state.lower() == state_filter.lower():
+                        locations.append(location)
+                else:
+                    locations.append(location)
             
-            # If no results and we had a state, try without state
+            # If no results and we had a state, try without state and filter results
             if not locations and ',' in normalized_city:
-                city_name_only = normalized_city.split(',')[0].strip()
-                logger.info(f"Geocoding fallback: trying '{city_name_only}' without state")
+                parts = normalized_city.split(',')
+                city_name_only = parts[0].strip()
+                state_name = parts[1].strip() if len(parts) > 1 else None
+                logger.info(f"Geocoding fallback: trying '{city_name_only}' without state, will filter by '{state_name}'")
                 
                 fallback_params = {
                     "q": city_name_only,
-                    "limit": limit,
+                    "limit": 50,  # Get more results to filter
                     "appid": self.api_key
                 }
                 
                 fallback_data = await self._make_request(url, fallback_params)
+                
+                # Filter results by state if state was specified
+                filtered_locations = []
                 for item in fallback_data:
-                    locations.append(LocationData(
+                    location = LocationData(
                         name=item.get("name", ""),
                         country=item.get("country", ""),
                         state=item.get("state"),
                         lat=item.get("lat", 0.0),
                         lon=item.get("lon", 0.0)
-                    ))
+                    )
+                    
+                    # If we have a state filter, try to match it
+                    if state_name:
+                        item_state = item.get("state", "")
+                        # Check for exact match or state abbreviation to full name match
+                        if item_state:
+                            # Direct match (case insensitive)
+                            if item_state.lower() == state_name.lower():
+                                filtered_locations.append(location)
+                            # Check if the state name was originally an abbreviation that got expanded
+                            elif state_name in US_STATE_MAPPING.values():
+                                # Find the abbreviation for this full state name
+                                state_abbrev = None
+                                for abbrev, full_name in US_STATE_MAPPING.items():
+                                    if full_name == state_name:
+                                        state_abbrev = abbrev
+                                        break
+                                # Match against the abbreviation
+                                if state_abbrev and item_state.upper() == state_abbrev:
+                                    filtered_locations.append(location)
+                    else:
+                        filtered_locations.append(location)
+                
+                # Take only the requested limit from filtered results
+                locations.extend(filtered_locations[:limit])
             
             return locations
         except Exception as e:
