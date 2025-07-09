@@ -37,30 +37,47 @@ Examples:
 CRITICAL: If you use ANY [REF] tags with numbers, letters, or anything else, your response is invalid and must be rewritten.
 This rule is absolute and has no exceptions."""
 
-markdown_rules = """### MARKDOWN FORMATTING REQUIREMENT:
-You must use proper markdown formatting in all responses.
+markdown_rules = """### 🎯 CRITICAL MARKDOWN FORMATTING REQUIREMENT:
+You must return your responses using proper markdown formatting and use markdown tables for structured data.
+
+This is a mandatory requirement for ALL responses containing structured information.
 
 ### STRUCTURED DATA REQUIREMENT:
-All structured data must be presented in markdown tables.
+All structured data must be presented in properly formatted markdown tables with:
+- Clear headers separated by pipes (|)
+- Proper alignment separators (|---------|)
+- Consistent spacing and formatting
+- Bold text for emphasis where appropriate
+- Code blocks for values when needed
 
-Examples of markdown tables:
+Examples of properly formatted markdown tables:
 
-| Feature | Option A | Option B |
-|---------|----------|----------|
-| Price | $100 | $150 |
-| Speed | Fast | Faster |
+#### Financial/Trading Data Table:
+| Asset | Symbol | Price | 24h Change | Market Cap | Volume |
+|-------|--------|-------|------------|------------|--------|
+| **[ASSET_NAME]** | [SYMBOL] | `$[PRICE]` | 🟢 **+[CHANGE]%** | $[MARKET_CAP] | $[VOLUME] |
+| **[ASSET_NAME]** | [SYMBOL] | `$[PRICE]` | 🔴 **[CHANGE]%** | $[MARKET_CAP] | $[VOLUME] |
 
-| Step | Action | Result |
-|------|--------|--------|
-| 1 | Click Start | Menu opens |
-| 2 | Select Options | Settings appear |
+#### Process/Instructions Table:
+| Step | Action | Expected Result |
+|------|--------|-----------------|
+| 1 | [ACTION_DESCRIPTION] | [EXPECTED_OUTCOME] |
+| 2 | [ACTION_DESCRIPTION] | [EXPECTED_OUTCOME] |
 
-| Name | Email | Phone |
-|------|-------|-------|
-| [FULL_NAME] | [EMAIL_ADDRESS] | [PHONE_NUMBER] |
-| [FULL_NAME] | [EMAIL_ADDRESS] | [PHONE_NUMBER] |
+#### Contact/Entity Information Table:
+| Field | Value | Status |
+|-------|-------|--------|
+| Name | [ENTITY_NAME] | [STATUS] |
+| Email | [EMAIL_ADDRESS] | [STATUS] |
+| Phone | [PHONE_NUMBER] | [STATUS] |
 
-Use your professional judgment to determine the most effective way to present information clearly and professionally."""
+#### Generic Data Comparison Table:
+| Category | Option A | Option B | Recommendation |
+|----------|----------|----------|----------------|
+| [CATEGORY_1] | [VALUE_A] | [VALUE_B] | [RECOMMENDATION] |
+| [CATEGORY_2] | [VALUE_A] | [VALUE_B] | [RECOMMENDATION] |
+
+Use your professional judgment to determine the most effective table structure for the specific data being presented. Always prioritize clarity, readability, and proper markdown syntax."""
 
 
 def get_system_prompt_with_datetime():

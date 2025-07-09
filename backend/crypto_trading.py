@@ -346,41 +346,63 @@ class CryptoTrading:
             return []
     
     def format_crypto_data_with_sources(self, coin_ids: list[str]) -> tuple[str, list[dict[str, str]]]:
-        """Format cryptocurrency data with proper source URLs for citations.
+        """Format cryptocurrency data with proper markdown table formatting.
         
         Args:
             coin_ids (list[str]): List of coin IDs to get data for
         
         Returns:
-            tuple[str, list[dict[str, str]]]: Formatted data and sources
+            tuple[str, list[dict[str, str]]]: Formatted markdown table and sources
         """
         quotes = self.get_multiple_crypto_quotes(coin_ids)
         
         if not quotes:
             return "No cryptocurrency data available.", []
         
-        # Build markdown table
-        table = "| Coin | Price (USD) | 24h Change | Market Cap | Volume (24h) |\n"
-        table += "|------|-------------|------------|------------|-------------|\n"
+        # Build properly formatted markdown table with enhanced styling
+        table = "## Cryptocurrency Market Data\n\n"
+        table += "| Cryptocurrency | Price (USD) | 24h Change | Market Cap Rank | Market Cap | Volume (24h) |\n"
+        table += "|----------------|-------------|------------|-----------------|------------|---------------|\n"
         
         sources = []
         
         for quote in quotes:
-            price_change_color = "🟢" if quote.price_change_percentage_24h >= 0 else "🔴"
+            # Enhanced formatting with proper alignment and styling
+            price_change_emoji = "🟢" if quote.price_change_percentage_24h >= 0 else "🔴"
             change_sign = "+" if quote.price_change_percentage_24h >= 0 else ""
             
-            table += f"| {quote.name} ({quote.symbol}) | ${quote.current_price:,.2f} | {price_change_color} {change_sign}{quote.price_change_percentage_24h:.2f}% | ${quote.market_cap:,.0f} | ${quote.volume_24h:,.0f} |\n"
+            # Format large numbers with proper abbreviations
+            market_cap_formatted = self._format_large_number(quote.market_cap)
+            volume_formatted = self._format_large_number(quote.volume_24h)
+            
+            table += f"| **{quote.name}** ({quote.symbol}) | `${quote.current_price:,.4f}` | {price_change_emoji} **{change_sign}{quote.price_change_percentage_24h:.2f}%** | #{quote.market_cap_rank} | ${market_cap_formatted} | ${volume_formatted} |\n"
             
             # Create source entry
             sources.append({
-                "title": f"{quote.name} ({quote.symbol}) Price Data",
+                "title": f"{quote.name} ({quote.symbol}) Market Data",
                 "url": f"https://www.coingecko.com/en/coins/{quote.id}",
                 "date": datetime.now(UTC).isoformat(),
-                "source": "CoinGecko",
-                "category": "Cryptocurrency",
+                "source": "CoinGecko API",
+                "category": "Cryptocurrency Market Data",
             })
         
+        # Add data timestamp
+        table += f"\n*Data retrieved: {datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S UTC')}*\n"
+        
         return table, sources
+    
+    def _format_large_number(self, number: float) -> str:
+        """Format large numbers with appropriate abbreviations (K, M, B, T)."""
+        if number >= 1_000_000_000_000:  # Trillion
+            return f"{number/1_000_000_000_000:.2f}T"
+        elif number >= 1_000_000_000:  # Billion
+            return f"{number/1_000_000_000:.2f}B"
+        elif number >= 1_000_000:  # Million
+            return f"{number/1_000_000:.2f}M"
+        elif number >= 1_000:  # Thousand
+            return f"{number/1_000:.2f}K"
+        else:
+            return f"{number:,.2f}"
     
     # Compatibility methods for news functionality
     def get_crypto_news(self, limit: int = 20, category: Optional[str] = None) -> list[CryptoNews]:

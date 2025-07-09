@@ -3,6 +3,23 @@
 
 This module contains all configuration data for the crypto trading system,
 including common cryptocurrencies, sentiment words, and API settings.
+
+Example Generic Markdown Table Format:
+=====================================
+
+| Asset Name | Symbol | Price | Change (24h) | Market Cap | Volume |
+|------------|--------|-------|--------------|------------|--------|
+| [ASSET_NAME_1] | [SYMBOL_1] | [PRICE_1] | [CHANGE_1] | [MARKET_CAP_1] | [VOLUME_1] |
+| [ASSET_NAME_2] | [SYMBOL_2] | [PRICE_2] | [CHANGE_2] | [MARKET_CAP_2] | [VOLUME_2] |
+| [ASSET_NAME_3] | [SYMBOL_3] | [PRICE_3] | [CHANGE_3] | [MARKET_CAP_3] | [VOLUME_3] |
+
+Generic Entity Examples:
+- [CRYPTO_NAME]: Bitcoin, Ethereum, Cardano
+- [SYMBOL]: BTC, ETH, ADA
+- [PRICE_VALUE]: $45,123.45, $2,987.23
+- [PERCENTAGE_CHANGE]: +5.24%, -2.18%
+- [MARKET_CAP_VALUE]: $850.2B, $356.7M
+- [VOLUME_VALUE]: $12.4B, $876.3M
 """
 
 # Common cryptocurrency mappings
