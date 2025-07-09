@@ -454,7 +454,7 @@ ONLY USE: [Description](URL) format for ALL links
                     # Handle storing personal information
                     logger.info(f"🧠 MEMORY STORE: Processing store_personal_info intent")
                     
-                    yield f"data: {json.dumps({'token': {'text': '🧠 Storing your information...\n\n'}})}\n\n"
+                    yield f"data: {json.dumps({'token': {'text': '🧠 Storing your information...\n\n---\n\n'}})}\n\n"
                     
                     try:
                         if app_state.personal_memory:
@@ -474,16 +474,24 @@ ONLY USE: [Description](URL) format for ALL links
                             from persistent_llm_server import get_llm_server
                             llm_server = await get_llm_server()
                             
-                            system_prompt = """You are Jane, a helpful AI assistant. The user has just shared personal information with you, and you have successfully stored it in your memory. 
+                            system_prompt = """You are Jane, a helpful AI assistant with a warm, caring personality. The user has just shared personal information with you, and you have successfully stored it in your memory. 
 
-Respond naturally and warmly to acknowledge that you've saved their information and will remember it. Keep your response brief, friendly, and conversational. Don't be overly formal or robotic."""
+You must return your responses using proper markdown formatting and use markdown tables for structured data.
+
+When creating tables, use this format:
+| Category | Details |
+|----------|---------|
+| Field1 | Value1 |
+| Field2 | Value2 |
+
+Be genuinely warm and appreciative that they shared personal details with you. Acknowledge what they shared, express that you'll remember it, and show how this helps you understand them better. Keep it conversational and natural - like a friend would respond. Be brief but meaningful."""
                             
                             formatted_prompt = utils.format_prompt(system_prompt, f"I just told you: {user_prompt}")
                             
                             # Stream the natural response
                             async for token in llm_server.generate_stream(
                                 prompt=formatted_prompt,
-                                max_tokens=150,
+                                max_tokens=300,  # Increased to allow for better formatted responses
                                 temperature=0.7,  # Slightly higher temperature for natural responses
                                 top_p=0.95,
                                 session_id=session_id,
