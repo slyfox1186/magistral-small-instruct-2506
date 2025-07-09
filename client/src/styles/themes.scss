@@ -204,6 +204,46 @@ $theme-nebula: (
 );
 
 // =====================================================
+// Crimson Ember Theme Map
+// =====================================================
+
+$theme-crimson-ember: (
+  // Base Background Colors
+  bg-primary: #1c1616,        // Deep, warm charcoal brown
+  bg-secondary: #2a2222,      // Rich, dark crimson-brown
+  bg-tertiary: #382d2d,       // Muted crimson for interactive surfaces
+  bg-elevated: #453838,       // Lighter, elevated crimson-brown
+  bg-input-area: #1a1414,     // Darker input area for contrast
+  bg-user-bubble: #4a3f3f,    // User bubble with a hint of crimson
+
+  // Text Colors
+  text-primary: #f5e6e0,      // Soft, warm off-white
+  text-secondary: #e0c8c1,    // Muted rose-tan for secondary text
+  text-tertiary: #c7a8a1,     // Faded crimson-tan for less important text
+
+  // Border Colors
+  border-color: #5a4a4a,
+  border-light: rgba(245, 230, 224, 0.1),
+  border-table: #4f4141,
+  border-strong: #6b5a5a,
+
+  // Accent Colors
+  accent-primary: #ff8c42,    // Fiery amber
+  accent-success: #66bb6a,    // A complementary, slightly muted green
+  accent-danger: #ef5350,     // A clear, vibrant red
+  accent-warning: #ffa726,    // Warm, golden-orange for warnings
+  accent-info: #42a5f5,       // A cool, contrasting blue for info
+
+  // Interactive Colors
+  interactive-normal: #382d2d,
+  interactive-hover: rgba(255, 140, 66, 0.15),
+  interactive-active: rgba(255, 140, 66, 0.25),
+
+  // Overlay Colors
+  overlay-light: rgba(245, 230, 224, 0.1)
+);
+
+// =====================================================
 // Theme Application Mixin
 // =====================================================
 
@@ -375,4 +415,30 @@ $theme-nebula: (
   --accent-info-faded: rgba(88, 166, 255, 0.15);
   --accent-info-glow: rgba(88, 166, 255, 0.2);
   --accent-info-alpha-0: rgba(88, 166, 255, 0);
+}
+
+// Apply Crimson Ember theme
+[data-theme='crimson-ember'] {
+  @include apply-theme($theme-crimson-ember);
+
+  // Alpha variants using Crimson Ember colors
+  --bg-primary-alpha-95: rgba(28, 22, 22, 0.95);
+  --bg-primary-alpha-60: rgba(28, 22, 22, 0.6);
+  --bg-secondary-alpha-01: rgba(42, 34, 34, 0.01);
+  --bg-secondary-alpha-03: rgba(42, 34, 34, 0.03);
+  --bg-secondary-alpha-90: rgba(42, 34, 34, 0.9);
+  --bg-tertiary-alpha-90: rgba(56, 45, 45, 0.9);
+  --bg-input-area-alpha-50: rgba(26, 20, 20, 0.5);
+  --accent-primary-faded: rgba(255, 140, 66, 0.12);
+  --accent-primary-glow: rgba(255, 140, 66, 0.2);
+  --accent-primary-alpha-80: rgba(255, 140, 66, 0.8);
+  --accent-success-faded: rgba(102, 187, 106, 0.15);
+  --accent-success-glow: rgba(102, 187, 106, 0.2);
+  --accent-danger-faded: rgba(239, 83, 80, 0.15);
+  --accent-danger-glow: rgba(239, 83, 80, 0.2);
+  --accent-warning-faded: rgba(255, 167, 38, 0.15);
+  --accent-warning-glow: rgba(255, 167, 38, 0.2);
+  --accent-info-faded: rgba(66, 165, 245, 0.15);
+  --accent-info-glow: rgba(66, 165, 245, 0.2);
+  --accent-info-alpha-0: rgba(66, 165, 245, 0);
 }

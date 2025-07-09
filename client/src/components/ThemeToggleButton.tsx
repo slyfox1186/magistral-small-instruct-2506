@@ -16,6 +16,8 @@ export const ThemeToggleButton: React.FC = () => {
         return 'Hunter\'s Vision';
       case 'nebula':
         return 'Celestial Indigo';
+      case 'crimson-ember':
+        return 'Crimson Ember';
       default:
         return themeName;
     }
