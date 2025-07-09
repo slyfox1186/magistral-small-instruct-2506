@@ -18,6 +18,8 @@ export const ThemeToggleButton: React.FC = () => {
         return 'Celestial Indigo';
       case 'crimson-ember':
         return 'Crimson Ember';
+      case 'cyberpunk-neon':
+        return 'Cyberpunk Neon';
       default:
         return themeName;
     }

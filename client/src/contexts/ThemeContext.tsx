@@ -1,8 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 
 // Define the theme names for TypeScript safety
-export type Theme = 'celestial-indigo' | 'veridian-twilight' | 'solaris-flare' | 'hunters-vision' | 'nebula' | 'crimson-ember';
-const THEMES: Theme[] = ['celestial-indigo', 'veridian-twilight', 'solaris-flare', 'hunters-vision', 'nebula', 'crimson-ember'];
+export type Theme = 'celestial-indigo' | 'veridian-twilight' | 'solaris-flare' | 'hunters-vision' | 'nebula' | 'crimson-ember' | 'cyberpunk-neon';
+const THEMES: Theme[] = ['celestial-indigo', 'veridian-twilight', 'solaris-flare', 'hunters-vision', 'nebula', 'crimson-ember', 'cyberpunk-neon'];
 
 interface ThemeContextType {
   theme: Theme;

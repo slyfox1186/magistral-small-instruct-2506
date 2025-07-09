@@ -244,6 +244,46 @@ $theme-crimson-ember: (
 );
 
 // =====================================================
+// Cyberpunk Neon Theme Map
+// =====================================================
+
+$theme-cyberpunk-neon: (
+  // Base Background Colors
+  bg-primary: #0a0f1e,        // Deep midnight blue
+  bg-secondary: #1a1f36,      // Dark indigo for secondary surfaces
+  bg-tertiary: #2a2f4d,       // Muted purple for interactive surfaces
+  bg-elevated: #3a3f64,       // Lighter, elevated purple-blue
+  bg-input-area: #080c1a,     // Darker input area for high contrast
+  bg-user-bubble: #2a2f4d,    // User bubble with a cool tone
+
+  // Text Colors
+  text-primary: #e0e0ff,      // Soft, glowing lavender-white
+  text-secondary: #a0a0e0,    // Muted lavender for secondary text
+  text-tertiary: #8080c0,     // Faded purple-gray for less important text
+
+  // Border Colors
+  border-color: #4a4a7f,
+  border-light: rgba(224, 224, 255, 0.1),
+  border-table: #3e3e6b,
+  border-strong: #5a5a94,
+
+  // Accent Colors
+  accent-primary: #ff00ff,    // Electric magenta/pink
+  accent-success: #00ffcc,    // Bright, glowing cyan
+  accent-danger: #ff4d4d,     // A vibrant, sharp red
+  accent-warning: #ffcc00,    // Electric yellow for warnings
+  accent-info: #00ccff,       // Bright, futuristic blue
+
+  // Interactive Colors
+  interactive-normal: #2a2f4d,
+  interactive-hover: rgba(255, 0, 255, 0.15),
+  interactive-active: rgba(255, 0, 255, 0.25),
+
+  // Overlay Colors
+  overlay-light: rgba(224, 224, 255, 0.1)
+);
+
+// =====================================================
 // Theme Application Mixin
 // =====================================================
 
@@ -441,4 +481,30 @@ $theme-crimson-ember: (
   --accent-info-faded: rgba(66, 165, 245, 0.15);
   --accent-info-glow: rgba(66, 165, 245, 0.2);
   --accent-info-alpha-0: rgba(66, 165, 245, 0);
+}
+
+// Apply Cyberpunk Neon theme
+[data-theme='cyberpunk-neon'] {
+  @include apply-theme($theme-cyberpunk-neon);
+
+  // Alpha variants using Cyberpunk Neon colors
+  --bg-primary-alpha-95: rgba(10, 15, 30, 0.95);
+  --bg-primary-alpha-60: rgba(10, 15, 30, 0.6);
+  --bg-secondary-alpha-01: rgba(26, 31, 54, 0.01);
+  --bg-secondary-alpha-03: rgba(26, 31, 54, 0.03);
+  --bg-secondary-alpha-90: rgba(26, 31, 54, 0.9);
+  --bg-tertiary-alpha-90: rgba(42, 47, 77, 0.9);
+  --bg-input-area-alpha-50: rgba(8, 12, 26, 0.5);
+  --accent-primary-faded: rgba(255, 0, 255, 0.12);
+  --accent-primary-glow: rgba(255, 0, 255, 0.2);
+  --accent-primary-alpha-80: rgba(255, 0, 255, 0.8);
+  --accent-success-faded: rgba(0, 255, 204, 0.15);
+  --accent-success-glow: rgba(0, 255, 204, 0.2);
+  --accent-danger-faded: rgba(255, 77, 77, 0.15);
+  --accent-danger-glow: rgba(255, 77, 77, 0.2);
+  --accent-warning-faded: rgba(255, 204, 0, 0.15);
+  --accent-warning-glow: rgba(255, 204, 0, 0.2);
+  --accent-info-faded: rgba(0, 204, 255, 0.15);
+  --accent-info-glow: rgba(0, 204, 255, 0.2);
+  --accent-info-alpha-0: rgba(0, 204, 255, 0);
 }
