@@ -1,0 +1,30 @@
+fastapi==0.115.6
+uvicorn[standard]==0.35.0
+pydantic==2.10.5
+python-dotenv==1.0.1
+llama-cpp-python==0.3.4
+redis==5.2.1
+torch==2.5.1
+python-multipart==0.0.20
+httptools==0.6.4
+websockets==14.1
+httpx==0.28.1
+aiohttp==3.11.13
+beautifulsoup4==4.12.3
+cachetools==5.5.0
+PyJWT==2.10.1
+# Optional dependencies for enhanced functionality
+tiktoken==0.8.0  # For accurate token counting in token_manager.py
+sentence-transformers==3.3.1  # For embedding models
+duckduckgo-search==7.1.1  # For web search functionality
+lancedb==0.17.0  # For vector database storage
+aiosqlite==0.20.0  # For async SQLite operations
+# Trading module dependencies
+pycoingecko==3.1.0  # For cryptocurrency data from CoinGecko API
+yfinance==0.2.51  # For stock market data from Yahoo Finance
+pandas==2.2.3  # For data manipulation and analysis
+numpy==2.2.1  # For numerical computations
+google-api-python-client==2.157.0  # For Google search functionality
+# NLP dependencies for advanced memory importance scoring
+spacy>=3.7.0  # For NLP analysis in memory importance scoring
+spacytextblob>=4.0.0  # For sentiment analysis

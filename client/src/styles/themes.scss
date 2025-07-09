@@ -1,0 +1,378 @@
+// Theme System - Celestial Indigo and Additional Themes
+// This file defines all color themes for the application
+
+@use "sass:map";
+
+// =====================================================
+// Celestial Indigo Theme Map (Default)
+// =====================================================
+
+$theme-celestial-indigo: (
+  // Base Background Colors
+  bg-primary: #1B2621,        // Very dark, desaturated green base
+  bg-secondary: #243229,      // Slightly lighter forest green
+  bg-tertiary: #2D3E32,       // Interactive surface green
+  bg-elevated: #364A3C,       // Elevated modal green
+  bg-input-area: #1A241F,     // Darker input contrast
+  bg-user-bubble: #2A352E,    // User bubble background
+
+  // Text Colors
+  text-primary: #FAF8F5,      // Warm cream-white for readability
+  text-secondary: #E8DCC6,    // Gentle tan for secondary text
+  text-tertiary: #C7B299,     // Muted tan for less important text
+
+  // Border Colors
+  border-color: #455A4F,
+  border-light: rgba(232, 220, 198, 0.1),
+  border-table: #3D4F44,
+  border-strong: #556B60,
+
+  // Accent Colors
+  accent-primary: #A37D9D,    // Deep, muted plum
+  accent-success: #7C9885,    // Forest green success
+  accent-danger: #D17A7A,     // Muted red danger
+  accent-warning: #D4B86A,    // Warm amber warning
+  accent-info: #8FA8A3,       // Sage green info
+
+  // Interactive Colors
+  interactive-normal: #2D3E32,
+  interactive-hover: rgba(163, 125, 157, 0.15),
+  interactive-active: rgba(163, 125, 157, 0.25),
+
+  // Overlay Colors
+  overlay-light: rgba(250, 248, 245, 0.1)
+);
+
+// =====================================================
+// Veridian Twilight Theme Map
+// =====================================================
+
+$theme-veridian-twilight: (
+  // Base Background Colors
+  bg-primary: #1a1b23,
+  bg-secondary: #252730,
+  bg-tertiary: #2f3349,
+  bg-elevated: #3c4165,
+  bg-input-area: #191C19,
+  bg-user-bubble: #4A3F52,
+
+  // Text Colors
+  text-primary: #FAF8F5,
+  text-secondary: #D4CFC6,
+  text-tertiary: #A69F92,
+
+  // Border Colors
+  border-color: #7A6F63,
+  border-light: rgba(122, 111, 99, 0.15),
+  border-table: rgba(122, 111, 99, 0.3),
+  border-strong: rgba(122, 111, 99, 0.5),
+
+  // Accent Colors
+  accent-primary: #A37D9D,
+  accent-success: #22c55e,
+  accent-danger: #ef4444,
+  accent-warning: #f59e0b,
+  accent-info: #7C9885,
+
+  // Interactive Colors
+  interactive-normal: rgba(163, 125, 157, 0.08),
+  interactive-hover: rgba(163, 125, 157, 0.15),
+  interactive-active: rgba(163, 125, 157, 0.25),
+
+  // Overlay Colors
+  overlay-light: rgba(250, 248, 245, 0.1)
+);
+
+// =====================================================
+// Solaris Flare Theme Map
+// =====================================================
+
+$theme-solaris-flare: (
+  // Base Background Colors
+  bg-primary: #1C1A1A,        // Deep space charcoal
+  bg-secondary: #2A2727,      // Slightly lighter for secondary surfaces
+  bg-tertiary: #383535,       // Interactive surface
+  bg-elevated: #454242,       // Elevated modal backgrounds
+  bg-input-area: #1A1818,     // Darker input contrast
+  bg-user-bubble: #332F2F,    // User bubble background
+
+  // Text Colors
+  text-primary: #FFF5E1,      // Warm cream for comfortable reading
+  text-secondary: #E8D5B7,    // Warm tan for secondary text
+  text-tertiary: #C7A882,     // Muted brown for less important text
+
+  // Border Colors
+  border-color: #4A4444,
+  border-light: rgba(255, 245, 225, 0.1),
+  border-table: #3E3B3B,
+  border-strong: #5A5454,
+
+  // Accent Colors
+  accent-primary: #FF4D4D,    // Energizing saturated red
+  accent-success: #4CAF50,    // Green success (contrast to red)
+  accent-danger: #F44336,     // Slightly darker red for danger
+  accent-warning: #FF9800,    // Warm orange warning
+  accent-info: #2196F3,       // Blue info (cool contrast)
+
+  // Interactive Colors
+  interactive-normal: #383535,
+  interactive-hover: rgba(255, 77, 77, 0.15),
+  interactive-active: rgba(255, 77, 77, 0.25),
+
+  // Overlay Colors
+  overlay-light: rgba(255, 245, 225, 0.1)
+);
+
+// =====================================================
+// Hunter's Vision Theme Map
+// =====================================================
+
+$theme-hunters-vision: (
+  // Base Background Colors
+  bg-primary: #1B1D1A,        // Deep charcoal with olive undertones
+  bg-secondary: #232621,      // Slightly lighter for secondary surfaces
+  bg-tertiary: #2C2F28,       // Interactive surface
+  bg-elevated: #35382F,       // Elevated modal backgrounds
+  bg-input-area: #191B18,     // Darker input contrast
+  bg-user-bubble: #282B25,    // User bubble background
+
+  // Text Colors
+  text-primary: #EAEAEA,      // Clean, crisp almost-white gray
+  text-secondary: #C5C5C5,    // Lighter gray for secondary text
+  text-tertiary: #A0A0A0,     // Muted gray for less important text
+
+  // Border Colors
+  border-color: #404340,
+  border-light: rgba(234, 234, 234, 0.1),
+  border-table: #363A33,
+  border-strong: #4A4D47,
+
+  // Accent Colors
+  accent-primary: #00CC66,    // Muted HUD green (more comfortable)
+  accent-success: #00DD55,    // Slightly brighter success green
+  accent-danger: #FF3030,     // Bright danger red
+  accent-warning: #FFAA00,    // Amber warning
+  accent-info: #00AAFF,       // Cyan blue info
+
+  // Interactive Colors
+  interactive-normal: #2C2F28,
+  interactive-hover: rgba(0, 204, 102, 0.15),
+  interactive-active: rgba(0, 204, 102, 0.25),
+
+  // Overlay Colors
+  overlay-light: rgba(234, 234, 234, 0.1)
+);
+
+// =====================================================
+// Nebula Theme Map
+// =====================================================
+
+$theme-nebula: (
+  // Base Background Colors
+  bg-primary: #0D1117,      // Deep, rich indigo
+  bg-secondary: #161B22,    // Slightly lighter, for secondary surfaces
+  bg-tertiary: #1F242C,     // For interactive elements
+  bg-elevated: #282E36,     // For elevated surfaces like modals
+  bg-input-area: #101419,   // Darker input area for contrast
+  bg-user-bubble: #21262F,  // User's chat bubble background
+
+  // Text Colors
+  text-primary: #E6EDF3,    // Soft, off-white for readability
+  text-secondary: #A3B3C2,  // Lighter gray for secondary text
+  text-tertiary: #7D8590,   // Muted gray for less important text
+
+  // Border Colors
+  border-color: #30363D,
+  border-light: rgba(163, 179, 194, 0.1),
+  border-table: #2A3038,
+  border-strong: #4A5562,
+
+  // Accent Colors
+  accent-primary: #C778DD,  // Vibrant, yet soft purple
+  accent-success: #56D364,  // A clear, positive green
+  accent-danger: #F85149,   // A distinct but not jarring red
+  accent-warning: #DBA92A,  // Warm amber/gold for warnings
+  accent-info: #58A6FF,     // A calm, informative blue
+
+  // Interactive Colors
+  interactive-normal: #1F242C,
+  interactive-hover: rgba(199, 120, 221, 0.15),
+  interactive-active: rgba(199, 120, 221, 0.25),
+
+  // Overlay Colors
+  overlay-light: rgba(230, 237, 243, 0.1)
+);
+
+// =====================================================
+// Theme Application Mixin
+// =====================================================
+
+@mixin apply-theme($theme-map) {
+  // Base Backgrounds
+  --bg-primary: #{map.get($theme-map, bg-primary)};
+  --bg-secondary: #{map.get($theme-map, bg-secondary)};
+  --bg-tertiary: #{map.get($theme-map, bg-tertiary)};
+  --bg-elevated: #{map.get($theme-map, bg-elevated)};
+  --bg-input-area: #{map.get($theme-map, bg-input-area)};
+  --bg-user-bubble: #{map.get($theme-map, bg-user-bubble)};
+
+  // Text Colors
+  --text-primary: #{map.get($theme-map, text-primary)};
+  --text-secondary: #{map.get($theme-map, text-secondary)};
+  --text-tertiary: #{map.get($theme-map, text-tertiary)};
+
+  // Border Colors
+  --border-color: #{map.get($theme-map, border-color)};
+  --border-light: #{map.get($theme-map, border-light)};
+  --border-table: #{map.get($theme-map, border-table)};
+  --border-strong: #{map.get($theme-map, border-strong)};
+
+  // Accent Colors
+  --accent-primary: #{map.get($theme-map, accent-primary)};
+  --accent-success: #{map.get($theme-map, accent-success)};
+  --accent-danger: #{map.get($theme-map, accent-danger)};
+  --accent-warning: #{map.get($theme-map, accent-warning)};
+  --accent-info: #{map.get($theme-map, accent-info)};
+
+  // Interactive Colors
+  --interactive-normal: #{map.get($theme-map, interactive-normal)};
+  --interactive-hover: #{map.get($theme-map, interactive-hover)};
+  --interactive-active: #{map.get($theme-map, interactive-active)};
+
+  // Overlay Colors
+  --overlay-light: #{map.get($theme-map, overlay-light)};
+}
+
+// =====================================================
+// Theme Selectors
+// =====================================================
+
+// Apply Celestial Indigo theme (default)
+[data-theme='celestial-indigo'] {
+  @include apply-theme($theme-celestial-indigo);
+
+  // Alpha variants using Celestial Indigo colors
+  --bg-primary-alpha-95: rgba(27, 38, 33, 0.95);
+  --bg-primary-alpha-60: rgba(27, 38, 33, 0.6);
+  --bg-secondary-alpha-01: rgba(36, 50, 41, 0.01);
+  --bg-secondary-alpha-03: rgba(36, 50, 41, 0.03);
+  --bg-secondary-alpha-90: rgba(36, 50, 41, 0.9);
+  --bg-tertiary-alpha-90: rgba(45, 62, 50, 0.9);
+  --bg-input-area-alpha-50: rgba(26, 36, 31, 0.5);
+  --accent-primary-faded: rgba(163, 125, 157, 0.12);
+  --accent-primary-glow: rgba(163, 125, 157, 0.2);
+  --accent-primary-alpha-80: rgba(163, 125, 157, 0.8);
+  --accent-success-faded: rgba(124, 152, 133, 0.15);
+  --accent-success-glow: rgba(124, 152, 133, 0.2);
+  --accent-danger-faded: rgba(209, 122, 122, 0.15);
+  --accent-danger-glow: rgba(209, 122, 122, 0.2);
+  --accent-warning-faded: rgba(212, 184, 106, 0.15);
+  --accent-warning-glow: rgba(212, 184, 106, 0.2);
+  --accent-info-faded: rgba(143, 168, 163, 0.15);
+  --accent-info-glow: rgba(143, 168, 163, 0.2);
+  --accent-info-alpha-0: rgba(143, 168, 163, 0);
+}
+
+// Apply Veridian Twilight theme
+[data-theme='veridian-twilight'] {
+  @include apply-theme($theme-veridian-twilight);
+
+  // Alpha variants using Veridian Twilight colors
+  --bg-primary-alpha-95: rgba(26, 27, 35, 0.95);
+  --bg-primary-alpha-60: rgba(26, 27, 35, 0.6);
+  --bg-secondary-alpha-01: rgba(37, 39, 48, 0.01);
+  --bg-secondary-alpha-03: rgba(37, 39, 48, 0.03);
+  --bg-secondary-alpha-90: rgba(37, 39, 48, 0.9);
+  --bg-tertiary-alpha-90: rgba(47, 51, 73, 0.9);
+  --bg-input-area-alpha-50: rgba(25, 28, 25, 0.5);
+  --accent-primary-faded: rgba(163, 125, 157, 0.12);
+  --accent-primary-glow: rgba(163, 125, 157, 0.2);
+  --accent-primary-alpha-80: rgba(163, 125, 157, 0.8);
+  --accent-success-faded: rgba(34, 197, 94, 0.15);
+  --accent-success-glow: rgba(34, 197, 94, 0.2);
+  --accent-danger-faded: rgba(239, 68, 68, 0.15);
+  --accent-danger-glow: rgba(239, 68, 68, 0.2);
+  --accent-warning-faded: rgba(245, 158, 11, 0.15);
+  --accent-warning-glow: rgba(245, 158, 11, 0.2);
+  --accent-info-faded: rgba(124, 152, 133, 0.15);
+  --accent-info-glow: rgba(124, 152, 133, 0.2);
+  --accent-info-alpha-0: rgba(124, 152, 133, 0);
+}
+
+// Apply Solaris Flare theme
+[data-theme='solaris-flare'] {
+  @include apply-theme($theme-solaris-flare);
+
+  // Alpha variants using Solaris Flare colors
+  --bg-primary-alpha-95: rgba(28, 26, 26, 0.95);
+  --bg-primary-alpha-60: rgba(28, 26, 26, 0.6);
+  --bg-secondary-alpha-01: rgba(42, 39, 39, 0.01);
+  --bg-secondary-alpha-03: rgba(42, 39, 39, 0.03);
+  --bg-secondary-alpha-90: rgba(42, 39, 39, 0.9);
+  --bg-tertiary-alpha-90: rgba(56, 53, 53, 0.9);
+  --bg-input-area-alpha-50: rgba(26, 24, 24, 0.5);
+  --accent-primary-faded: rgba(255, 77, 77, 0.12);
+  --accent-primary-glow: rgba(255, 77, 77, 0.2);
+  --accent-primary-alpha-80: rgba(255, 77, 77, 0.8);
+  --accent-success-faded: rgba(76, 175, 80, 0.15);
+  --accent-success-glow: rgba(76, 175, 80, 0.2);
+  --accent-danger-faded: rgba(244, 67, 54, 0.15);
+  --accent-danger-glow: rgba(244, 67, 54, 0.2);
+  --accent-warning-faded: rgba(255, 152, 0, 0.15);
+  --accent-warning-glow: rgba(255, 152, 0, 0.2);
+  --accent-info-faded: rgba(33, 150, 243, 0.15);
+  --accent-info-glow: rgba(33, 150, 243, 0.2);
+  --accent-info-alpha-0: rgba(33, 150, 243, 0);
+}
+
+// Apply Hunter's Vision theme
+[data-theme='hunters-vision'] {
+  @include apply-theme($theme-hunters-vision);
+
+  // Alpha variants using Hunter's Vision colors
+  --bg-primary-alpha-95: rgba(27, 29, 26, 0.95);
+  --bg-primary-alpha-60: rgba(27, 29, 26, 0.6);
+  --bg-secondary-alpha-01: rgba(35, 38, 33, 0.01);
+  --bg-secondary-alpha-03: rgba(35, 38, 33, 0.03);
+  --bg-secondary-alpha-90: rgba(35, 38, 33, 0.9);
+  --bg-tertiary-alpha-90: rgba(44, 47, 40, 0.9);
+  --bg-input-area-alpha-50: rgba(25, 27, 24, 0.5);
+  --accent-primary-faded: rgba(0, 204, 102, 0.12);
+  --accent-primary-glow: rgba(0, 204, 102, 0.2);
+  --accent-primary-alpha-80: rgba(0, 204, 102, 0.8);
+  --accent-success-faded: rgba(0, 221, 85, 0.15);
+  --accent-success-glow: rgba(0, 221, 85, 0.2);
+  --accent-danger-faded: rgba(255, 48, 48, 0.15);
+  --accent-danger-glow: rgba(255, 48, 48, 0.2);
+  --accent-warning-faded: rgba(255, 170, 0, 0.15);
+  --accent-warning-glow: rgba(255, 170, 0, 0.2);
+  --accent-info-faded: rgba(0, 170, 255, 0.15);
+  --accent-info-glow: rgba(0, 170, 255, 0.2);
+  --accent-info-alpha-0: rgba(0, 170, 255, 0);
+}
+
+// Apply Nebula theme
+[data-theme='nebula'] {
+  @include apply-theme($theme-nebula);
+
+  // Alpha variants using Celestial Indigo colors
+  --bg-primary-alpha-95: rgba(13, 17, 23, 0.95);
+  --bg-primary-alpha-60: rgba(13, 17, 23, 0.6);
+  --bg-secondary-alpha-01: rgba(22, 27, 34, 0.01);
+  --bg-secondary-alpha-03: rgba(22, 27, 34, 0.03);
+  --bg-secondary-alpha-90: rgba(22, 27, 34, 0.9);
+  --bg-tertiary-alpha-90: rgba(31, 36, 44, 0.9);
+  --bg-input-area-alpha-50: rgba(16, 20, 25, 0.5);
+  --accent-primary-faded: rgba(199, 120, 221, 0.12);
+  --accent-primary-glow: rgba(199, 120, 221, 0.2);
+  --accent-primary-alpha-80: rgba(199, 120, 221, 0.8);
+  --accent-success-faded: rgba(86, 211, 100, 0.15);
+  --accent-success-glow: rgba(86, 211, 100, 0.2);
+  --accent-danger-faded: rgba(248, 81, 73, 0.15);
+  --accent-danger-glow: rgba(248, 81, 73, 0.2);
+  --accent-warning-faded: rgba(219, 169, 42, 0.15);
+  --accent-warning-glow: rgba(219, 169, 42, 0.2);
+  --accent-info-faded: rgba(88, 166, 255, 0.15);
+  --accent-info-glow: rgba(88, 166, 255, 0.2);
+  --accent-info-alpha-0: rgba(88, 166, 255, 0);
+}

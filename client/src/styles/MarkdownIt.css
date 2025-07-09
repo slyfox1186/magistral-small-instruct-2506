@@ -1,0 +1,561 @@
+/* Base styles for markdown content */
+.markdown-content {
+  color: #f8fafc; /* Clean white */
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans',
+    'Helvetica Neue', sans-serif;
+  line-height: 1.6;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  word-break: break-word;
+  font-size: 1rem;
+  display: block; /* Ensure block display */
+  width: 100%; /* Full width */
+  box-sizing: border-box; /* Include padding in width calculation */
+}
+
+/* Fix for split content issue */
+.markdown-content > * {
+  white-space: normal !important; /* Prevent content from being treated as whitespace */
+}
+
+/* Fix for div.markdown-content to prevent splitting */
+div.markdown-content {
+  display: block !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+/* Headers */
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3,
+.markdown-content h4,
+.markdown-content h5,
+.markdown-content h6 {
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--accent-primary); /* Use theme-aware accent color */
+}
+
+/* Remove top margin when header is first element in markdown content */
+.markdown-content > h1:first-child,
+.markdown-content > h2:first-child,
+.markdown-content > h3:first-child,
+.markdown-content > h4:first-child,
+.markdown-content > h5:first-child,
+.markdown-content > h6:first-child {
+  margin-top: 0;
+}
+
+.markdown-content h1 {
+  font-size: 2em;
+  border-bottom: 0.0625rem solid rgba(59, 130, 246, 0.3); /* Blue border */
+  padding-bottom: 0.3em;
+}
+
+.markdown-content h2 {
+  font-size: 1.5em;
+  border-bottom: 0.0625rem solid rgba(148, 163, 184, 0.2); /* Subtle border */
+  padding-bottom: 0.2em;
+}
+
+.markdown-content h3 {
+  font-size: 1.25em;
+}
+
+.markdown-content h4 {
+  font-size: 1em;
+}
+
+.markdown-content h5 {
+  font-size: 0.875em;
+}
+
+.markdown-content h6 {
+  font-size: 0.85em;
+  color: var(--text-secondary); /* Use theme-aware secondary text color for h6 */
+}
+
+/* Lists */
+.markdown-content ul,
+.markdown-content ol {
+  padding-left: 2em;
+  margin: 1em 0;
+}
+
+.markdown-content li {
+  margin: 0.5em 0;
+  position: relative;
+}
+
+/* Ensure list markers render properly */
+.markdown-content ol {
+  list-style-type: decimal;
+  counter-reset: item;
+}
+
+.markdown-content ol ol {
+  list-style-type: lower-alpha;
+}
+
+.markdown-content ol ol ol {
+  list-style-type: lower-roman;
+}
+
+/* Unordered lists with proper bullets and spacing */
+.markdown-content ul {
+  list-style-type: disc;
+}
+
+.markdown-content ul ul {
+  list-style-type: circle;
+}
+
+.markdown-content ul ul ul {
+  list-style-type: square;
+}
+
+/* Links */
+.markdown-content a {
+  color: #8b5cf6; /* Elegant purple */
+  text-decoration: none;
+  transition: color 0.2s ease;
+  position: relative;
+}
+
+.markdown-content a:hover {
+  text-decoration: underline;
+  color: #a855f7; /* Lighter elegant purple for hover */
+}
+
+/* Code */
+.markdown-content code {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  background-color: #334155;
+  padding: 0.2em 0.4em;
+  border-radius: 0.25rem;
+  font-size: 0.9em;
+  word-break: keep-all;
+  color: #cbd5e1; /* Light gray for code */
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.markdown-content pre {
+  background-color: #111827;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  overflow: auto;
+  font-size: 0.9em;
+  margin: 1em 0;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.markdown-content pre code {
+  background-color: transparent;
+  padding: 0;
+  white-space: pre;
+  word-break: normal;
+  color: inherit;
+  line-height: 1.5;
+  font-size: 0.9em;
+}
+
+/* Blockquotes */
+.markdown-content blockquote {
+  border-left: 0.25rem solid #8b5cf6;
+  padding: 1rem;
+  margin: 1em 0;
+  color: #cbd5e1; /* Light gray */
+  font-style: italic;
+  background: #1e293b;
+  border-radius: 0.5rem;
+}
+
+/* Image handling styles */
+.markdown-image {
+  max-width: 100%;
+  height: auto;
+  display: inline-block;
+  transition:
+    opacity 0.3s ease,
+    border 0.2s ease;
+  border: 0.125rem solid transparent;
+  border-radius: 0.25rem;
+}
+
+.loading-images .markdown-image {
+  opacity: 0.7;
+}
+
+/* Indicate image load errors */
+.image-load-error {
+  border: 0.125rem solid rgba(255, 80, 80, 0.5);
+  position: relative;
+  min-height: 2.5rem;
+  background-color: rgba(255, 50, 50, 0.1);
+}
+
+/* Fix layout shift by setting min-height for images */
+.markdown-image:not([height]) {
+  min-height: 1.5rem;
+}
+
+/* Images */
+.markdown-content img {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* Horizontal Rule */
+.markdown-content hr {
+  height: 0.0625rem;
+  border: none;
+  background: rgba(148, 163, 184, 0.3);
+  margin: 1.5rem 0;
+}
+
+/* Table container for horizontal scrolling */
+.table-container {
+  overflow-x: auto; /* Enable horizontal scrolling ONLY when needed */
+  overflow-y: visible; /* Prevent vertical scrollbar */
+  width: 100%;
+  max-width: 100%; /* Ensure container doesn't exceed parent */
+  -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+  margin: 1.5em 0; /* Consistent spacing */
+  border-radius: 0.5rem; /* Match table border radius */
+  box-sizing: border-box; /* Include padding in width */
+}
+
+/* ===========================================
+   THEME-AWARE TABLE SCROLLBAR STYLING
+   =========================================== */
+
+/* Universal table scrollbar sizing */
+.table-container::-webkit-scrollbar {
+  height: 12px;
+}
+
+/* NUCLEAR OVERRIDE: Target ALL possible container patterns */
+.table-container,
+div.table-container,
+.markdown-content .table-container,
+.message-content .table-container,
+.message-bubble .table-container,
+body .table-container {
+  scrollbar-color: unset !important;
+  scrollbar-width: auto !important;
+  overflow-x: auto !important;
+}
+
+/* THEME-AWARE SCROLLBAR COLORS (FIREFOX/CROSS-BROWSER) */
+.table-container {
+  scrollbar-width: thin !important;
+}
+
+/* Celestial Indigo Theme */
+html[data-theme="celestial-indigo"] .table-container,
+html:not([data-theme]) .table-container {
+  scrollbar-color: #A37D9D rgba(27, 38, 33, 0.8) !important;
+}
+
+/* Veridian Twilight Theme */
+html[data-theme="veridian-twilight"] .table-container {
+  scrollbar-color: #10b981 rgba(20, 83, 45, 0.8) !important;
+}
+
+/* Solaris Flare Theme */
+html[data-theme="solaris-flare"] .table-container {
+  scrollbar-color: #FF4D4D rgba(28, 26, 26, 0.8) !important;
+}
+
+/* Hunter's Vision Theme */
+html[data-theme="hunters-vision"] .table-container {
+  scrollbar-color: #00CC66 rgba(27, 29, 26, 0.8) !important;
+}
+
+/* Nebula Theme */
+html[data-theme="nebula"] .table-container {
+  scrollbar-color: #C778DD rgba(13, 17, 23, 0.8) !important;
+}
+
+/* WEBKIT BACKUP (STILL TRY) */
+*::-webkit-scrollbar-thumb {
+  background: #ff0000 !important;
+  border-radius: 0 !important;
+  border: none !important;
+  box-shadow: none !important;
+  opacity: 1 !important;
+}
+
+*::-webkit-scrollbar-track {
+  background: #00ff00 !important;
+  border-radius: 0 !important;
+}
+
+*::-webkit-scrollbar {
+  height: 20px !important;
+  width: 20px !important;
+}
+
+/* Celestial Indigo Theme Table Scrollbar */
+html[data-theme="celestial-indigo"] .table-container::-webkit-scrollbar-track,
+html:not([data-theme]) .table-container::-webkit-scrollbar-track {
+  background: rgba(27, 38, 33, 0.8) !important;
+  border-radius: 6px !important;
+}
+
+html[data-theme="celestial-indigo"] .table-container::-webkit-scrollbar-thumb,
+html:not([data-theme]) .table-container::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #A37D9D, #B68BAA) !important;
+  border-radius: 6px !important;
+  border: 2px solid rgba(27, 38, 33, 0.5) !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3) !important;
+}
+
+html[data-theme="celestial-indigo"] .table-container::-webkit-scrollbar-thumb:hover,
+html:not([data-theme]) .table-container::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, #B68BAA, #C299B7) !important;
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* Veridian Twilight Theme Table Scrollbar */
+html[data-theme="veridian-twilight"] .table-container::-webkit-scrollbar-track {
+  background: rgba(20, 83, 45, 0.8) !important;
+  border-radius: 6px !important;
+}
+
+html[data-theme="veridian-twilight"] .table-container::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #10b981, #34d399) !important;
+  border-radius: 6px !important;
+  border: 2px solid rgba(20, 83, 45, 0.5) !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3) !important;
+}
+
+html[data-theme="veridian-twilight"] .table-container::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, #34d399, #6ee7b7) !important;
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* Solaris Flare Theme Table Scrollbar */
+html[data-theme="solaris-flare"] .table-container::-webkit-scrollbar-track {
+  background: rgba(28, 26, 26, 0.8) !important;
+  border-radius: 6px !important;
+}
+
+html[data-theme="solaris-flare"] .table-container::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #FF4D4D, #FF6B6B) !important;
+  border-radius: 6px !important;
+  border: 2px solid rgba(28, 26, 26, 0.5) !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3) !important;
+}
+
+html[data-theme="solaris-flare"] .table-container::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, #FF6B6B, #FF8A8A) !important;
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* Hunter's Vision Theme Table Scrollbar */
+html[data-theme="hunters-vision"] .table-container::-webkit-scrollbar-track {
+  background: rgba(27, 29, 26, 0.8) !important;
+  border-radius: 6px !important;
+}
+
+html[data-theme="hunters-vision"] .table-container::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #00CC66, #00DD77) !important;
+  border-radius: 6px !important;
+  border: 2px solid rgba(27, 29, 26, 0.5) !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3) !important;
+}
+
+html[data-theme="hunters-vision"] .table-container::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, #00DD77, #00EE88) !important;
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* Nebula Theme Table Scrollbar */
+html[data-theme="nebula"] .table-container::-webkit-scrollbar-track {
+  background: rgba(13, 17, 23, 0.8) !important;
+  border-radius: 6px !important;
+}
+
+html[data-theme="nebula"] .table-container::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #C778DD, #B56BD6) !important;
+  border-radius: 6px !important;
+  border: 2px solid rgba(13, 17, 23, 0.5) !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3) !important;
+}
+
+html[data-theme="nebula"] .table-container::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, #B56BD6, #A85FD1) !important;
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* Tables */
+.markdown-content table {
+  border-collapse: collapse;
+  width: max-content; /* Allow table to expand beyond container width */
+  min-width: 100%; /* Ensure minimum width of 100% */
+  margin: 0; /* Remove margin since container handles it */
+  border-radius: 0.5rem;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  display: table;
+  table-layout: auto; /* Let browser calculate optimal widths for content */
+  background-color: #374151;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  overflow: hidden; /* For border-radius to work properly */
+}
+
+/* --- Clean Column Sizing --- */
+.markdown-content th,
+.markdown-content td {
+  padding: 0.5rem 0.75rem; /* Reduced padding for tighter spacing */
+  border-bottom: 1px solid #3a3a3a;
+  text-align: center; /* Center align all content by default */
+  /* Prevent text wrapping for content with icons/symbols */
+  white-space: nowrap;
+  /* Size cells to fit content without excess space */
+  width: 1%; /* Force browser to calculate minimal width */
+  min-width: max-content; /* But ensure content fits */
+  /* Consistent top alignment */
+  vertical-align: top;
+  /* Handle overflow by expanding horizontally */
+  overflow: visible;
+}
+
+/* Left align text columns (Symbol, Name) */
+.markdown-content th:nth-child(1),
+.markdown-content td:nth-child(1),
+.markdown-content th:nth-child(2),
+.markdown-content td:nth-child(2) {
+  text-align: left;
+}
+
+/* Explicitly center align all numeric columns */
+.markdown-content th:nth-child(3),
+.markdown-content td:nth-child(3),
+.markdown-content th:nth-child(4),
+.markdown-content td:nth-child(4),
+.markdown-content th:nth-child(5),
+.markdown-content td:nth-child(5),
+.markdown-content th:nth-child(6),
+.markdown-content td:nth-child(6),
+.markdown-content th:nth-child(7),
+.markdown-content td:nth-child(7) {
+  text-align: center !important;
+}
+
+/* 
+ * Column sizing optimized for content with icons and symbols
+ * Each column expands to fit its content including visual indicators
+ */
+.markdown-content th,
+.markdown-content td {
+  /* Ensure proper spacing for icon + text content */
+  box-sizing: border-box;
+  /* Professional touch: Ensures digits align perfectly */
+  font-variant-numeric: tabular-nums;
+}
+
+.markdown-content table[style*='border-collapse: separate'] td,
+.markdown-content table[style*='border-collapse: separate'] th {
+  border-left: 1px solid #505050;
+}
+
+.markdown-content table[style*='border-collapse: separate'] th:first-child,
+.markdown-content table[style*='border-collapse: separate'] td:first-child {
+  border-left: none;
+}
+
+/* Table headers */
+.markdown-content th {
+  background: var(--accent-primary);
+  font-weight: 600;
+  text-align: center; /* Center align headers by default */
+  border-bottom: 1px solid rgba(148, 163, 184, 0.3);
+  padding: 0.5rem 0.75rem; /* Match cell padding for consistency */
+  color: #f8fafc; /* Clean white */
+  font-size: 0.85rem; /* Slightly smaller for tighter headers */
+  text-transform: uppercase;
+  letter-spacing: 0.03em; /* Reduced letter spacing */
+  line-height: 1.3;
+  white-space: nowrap; /* Keep headers on one line */
+  width: 1%; /* Force minimal width calculation */
+  min-width: max-content; /* Ensure headers size to content */
+}
+
+/* Table cells */
+.markdown-content td {
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+  border-right: 1px solid rgba(148, 163, 184, 0.1);
+  background-color: transparent;
+  color: #cbd5e1; /* Light gray */
+  font-size: 0.85rem; /* Smaller font for more compact display */
+  line-height: 1.4; /* Tighter line height */
+  hyphens: none; /* Disable auto-hyphenation */
+  text-align: center; /* Center align cells by default */
+  transition: background-color 0.2s ease;
+}
+
+/* Last row of cells */
+.markdown-content tr:last-child td {
+  border-bottom: none;
+}
+
+/* Last cell in row */
+.markdown-content td:last-child {
+  border-right: none;
+}
+
+/* Clean zebra striping */
+.markdown-content tbody tr:nth-child(even) {
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
+/* Subtle hover effect */
+.markdown-content tbody tr:hover {
+  background-color: rgba(163, 125, 157, 0.05);
+  transition: background-color 0.2s ease;
+}
+
+.markdown-content tbody tr:hover td {
+  color: #f8fafc; /* Clean white */
+}
+
+/* Error states and recovery */
+.markdown-error {
+  padding: 0.625rem;
+  margin: 0.625rem 0;
+  border: 0.0625rem solid rgba(255, 100, 100, 0.3);
+  background-color: rgba(255, 50, 50, 0.1);
+  border-radius: 0.25rem;
+  color: #ef4444; /* Red for errors */
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 0.9em;
+}
+
+.markdown-error-recovery {
+  padding: 0.5rem;
+  border-left: 0.1875rem solid #ffcc00;
+  margin: 0.625rem 0;
+  background-color: rgba(255, 204, 0, 0.05);
+  color: #f8fafc; /* Clean white */
+}
+
+/* Render error indicator */
+.has-render-error {
+  position: relative;
+}
+
+.has-render-error::after {
+  content: '⚠️';
+  position: absolute;
+  top: 0.3125rem;
+  right: 0.3125rem;
+  font-size: 1rem;
+  color: var(--accent-warning); /* Use theme-aware warning color */
+  opacity: 0.7;
+}

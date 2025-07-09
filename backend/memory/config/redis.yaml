@@ -1,0 +1,39 @@
+# Redis Stack Connection Configuration
+redis:
+  host: localhost
+  port: 6379
+  db: 0
+  decode_responses: false  # Keep false for binary data (embeddings)
+  max_connections: 50
+  
+  # Redis Stack modules
+  modules:
+    json: enabled
+    search: enabled
+    graph: enabled
+    timeseries: enabled
+    
+# Memory specific settings
+memory:
+  # Short-term memory settings
+  stm:
+    ttl_hours: 48  # How long STM persists
+    max_size: 10000  # Maximum STM entries
+    
+  # Long-term memory settings  
+  ltm:
+    max_size: 100000  # Maximum LTM entries
+    archive_threshold: 0.1  # Retrieval score below which to archive
+    
+  # Vector search settings
+  vector:
+    index_name: memory_vectors
+    dimension: 768  # Qwen3-Embedding-4B dimension
+    distance_metric: cosine
+    initial_cap: 50000
+    
+# Performance settings
+performance:
+  batch_size: 32  # For GPU processing
+  cache_size: 1000  # Frequent embeddings cache
+  connection_pool_size: 10

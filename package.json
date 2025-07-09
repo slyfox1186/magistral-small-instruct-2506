@@ -1,0 +1,37 @@
+{
+  "name": "neural-consciousness-chat-system",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Neural Consciousness Chat System with Python backend and React frontend",
+  "workspaces": [
+    "client"
+  ],
+  "scripts": {
+    "dev": "python start.py",
+    "lint": "npm run lint:python && npm run lint:typescript",
+    "lint:python": "cd backend && ruff check . && mypy .",
+    "lint:python:fix": "cd backend && ruff check . --fix && ruff format .",
+    "lint:typescript": "cd client && npm run lint",
+    "lint:typescript:fix": "cd client && npm run lint:fix && npm run format",
+    "format": "npm run format:python && npm run format:typescript",
+    "format:python": "cd backend && ruff format .",
+    "format:typescript": "cd client && npm run format",
+    "type-check": "npm run type-check:python && npm run type-check:typescript",
+    "type-check:python": "cd backend && mypy .",
+    "type-check:typescript": "cd client && npm run type-check",
+    "pre-commit": "pre-commit run --all-files",
+    "pre-commit:install": "pre-commit install",
+    "security": "cd backend && bandit -r . -f json",
+    "test": "npm run test:python && npm run test:typescript",
+    "test:python": "cd backend && pytest",
+    "test:typescript": "cd client && npm test"
+  },
+  "devDependencies": {
+    "sass-embedded": "^1.89.2"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0",
+    "python": ">=3.11"
+  }
+}
