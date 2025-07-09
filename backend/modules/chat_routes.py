@@ -862,6 +862,141 @@ CRITICAL FORMATTING RULES:
                     
                     yield f"data: {json.dumps({'done': True})}\n\n"
                     
+                elif intent == "query_weather":
+                    # Handle weather queries
+                    logger.info(f"🌤️ WEATHER: Processing weather query: '{user_prompt}'")
+                    
+                    yield f"data: {json.dumps({'token': {'text': '🌤️ Fetching weather data...\n\n'}})}\n\n"
+                    
+                    try:
+                        # Use the weather module directly
+                        from weather import get_weather_for_city, search_locations, format_weather_response
+                        
+                        # Extract city from user query using LLM
+                        from persistent_llm_server import get_llm_server
+                        llm_server = await get_llm_server()
+                        
+                        # System prompt for city extraction
+                        system_prompt = """You are a location extraction expert. Extract the city name from the user's weather query.
+                        
+Return ONLY the city name (e.g., "New York", "London", "Tokyo"). If no specific city is mentioned, return "current location".
+If multiple cities are mentioned, return the first one mentioned.
+
+Examples:
+"What's the weather in Paris?" → "Paris"
+"How hot is it in New York City?" → "New York City"
+"Is it raining in London?" → "London"
+"What's the weather like?" → "current location"
+"Tell me about the weather" → "current location"
+"""
+                        
+                        formatted_prompt = utils.format_prompt(system_prompt, user_prompt)
+                        
+                        # Extract city name
+                        city_response = ""
+                        async for token in llm_server.generate_stream(
+                            prompt=formatted_prompt,
+                            max_tokens=50,
+                            temperature=0.1,
+                            top_p=0.9,
+                            session_id=session_id,
+                            priority=1
+                        ):
+                            if token:
+                                city_response += token
+                        
+                        city_name = city_response.strip()
+                        logger.info(f"🌤️ WEATHER: Extracted city: '{city_name}'")
+                        
+                        # Handle "current location" case
+                        if city_name.lower() == "current location":
+                            yield f"data: {json.dumps({'token': {'text': '📍 Please specify a city name for weather information.\n\n'}})}\n\n"
+                        else:
+                            # Get weather data
+                            weather_data = await get_weather_for_city(city_name)
+                            
+                            if weather_data and "error" not in weather_data:
+                                yield f"data: {json.dumps({'token': {'text': '\n\n📊 Found weather data, generating comprehensive response...\n\n---\n\n'}})}\n\n"
+                                
+                                # Use LLM to generate a comprehensive weather response
+                                weather_system_prompt = """You are Jane, a helpful weather assistant. Use the weather data to provide a comprehensive and natural weather report.
+
+You must return your responses using proper markdown formatting and use markdown tables for structured data when appropriate.
+
+When creating tables, use this format:
+| Category | Details |
+|----------|---------|
+| Field1 | Value1 |
+| Field2 | Value2 |
+
+Format the weather information in a natural, conversational way. Include all the important details like temperature (show both Fahrenheit and Celsius), conditions, humidity, wind speed, pressure, and UV index if available. Be helpful and engaging."""
+                                
+                                # Format weather data for LLM
+                                formatted_weather = format_weather_response(weather_data)
+                                user_content = f"User Query: {user_prompt}\n\nWeather Data:\n{formatted_weather}\n\nPlease provide a comprehensive, natural weather report using the weather data above."
+                                
+                                formatted_prompt = utils.format_prompt(weather_system_prompt, user_content)
+                                
+                                # Stream the response token by token
+                                full_response = ""
+                                async for token in llm_server.generate_stream(
+                                    prompt=formatted_prompt,
+                                    max_tokens=2048,
+                                    temperature=0.7,
+                                    top_p=0.95,
+                                    session_id=session_id,
+                                    priority=1
+                                ):
+                                    if token:
+                                        full_response += token
+                                        yield f"data: {json.dumps({'token': {'text': token}})}\n\n"
+                                
+                                # Add data source
+                                yield f"data: {json.dumps({'token': {'text': '\n\n📊 **Data Source:** [OpenWeatherMap](https://openweathermap.org/)\n\n'}})}\n\n"
+                                
+                                # Store in memory
+                                if app_state.personal_memory and full_response:
+                                    try:
+                                        # Calculate importance
+                                        user_importance = await calculate_message_importance(
+                                            content=user_prompt,
+                                            role="user",
+                                            session_id=session_id,
+                                            messages=request.messages
+                                        )
+                                        
+                                        await app_state.personal_memory.add_memory(
+                                            content=f"User: {user_prompt}",
+                                            conversation_id=session_id,
+                                            importance=user_importance,
+                                        )
+                                        
+                                        assistant_importance = await calculate_message_importance(
+                                            content=full_response,
+                                            role="assistant",
+                                            session_id=session_id,
+                                            messages=request.messages + [{"role": "user", "content": user_prompt}]
+                                        )
+                                        
+                                        await app_state.personal_memory.add_memory(
+                                            content=f"Assistant: {full_response}",
+                                            conversation_id=session_id,
+                                            importance=assistant_importance,
+                                        )
+                                        logger.info(f"🌤️ WEATHER: Stored weather query conversation in memory")
+                                    except Exception as memory_error:
+                                        logger.error(f"🌤️ WEATHER: Failed to store in memory: {memory_error}")
+                            else:
+                                error_msg = weather_data.get("error", "Unable to fetch weather data") if weather_data else "Weather service unavailable"
+                                yield f"data: {json.dumps({'token': {'text': f'❌ {error_msg}\n\n'}})}\n\n"
+                    
+                    except Exception as weather_error:
+                        error_msg = f"Weather error: {weather_error}"
+                        logger.error(f"🌤️ WEATHER: {error_msg}", exc_info=True)
+                        yield f"data: {json.dumps({'token': {'text': f'\n\n❌ {error_msg}\n\n'}})}\n\n"
+                    
+                    yield f"data: {json.dumps({'done': True})}\n\n"
+                    
                 elif intent == "query_cryptocurrency":
                     # Handle cryptocurrency queries
                     logger.info(f"₿ CRYPTO: Processing cryptocurrency query: '{user_prompt}'")

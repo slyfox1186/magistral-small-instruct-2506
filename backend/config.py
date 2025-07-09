@@ -66,6 +66,7 @@ CACHE_CONFIG = {
 EXTERNAL_SERVICES = {
     "google_api_key": os.environ.get("GOOGLE_API_KEY", ""),
     "google_cse_id": os.environ.get("GOOGLE_CSE_ID", ""),
+    "openweather_api_key": os.environ.get("OPENWEATHER_API_KEY", ""),
     "cuda_device": os.environ.get("CUDA_VISIBLE_DEVICES", "0"),
 }
 
