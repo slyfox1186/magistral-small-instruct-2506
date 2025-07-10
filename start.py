@@ -602,7 +602,7 @@ def free_port(port):
         log_debug("SCRIPT", traceback.format_exc())
         return False
 
-def start_frontend(port, build_mode=False):
+def start_frontend(port, build_mode=False, prod_mode=False):
     """Start the frontend server"""
     log_message("FRONTEND", f"Ensuring port {port} is free...", "INFO")
     
@@ -613,10 +613,22 @@ def start_frontend(port, build_mode=False):
     client_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "client")
     os.chdir(client_dir)
     
-    # Always use development mode to ensure proxy settings apply
-    # This ensures API requests get properly forwarded to the backend
-    log_message("FRONTEND", f"Starting development frontend on port {port}...", "INFO")
-    cmd = ["npm", "run", "dev", "--", f"--port={port}"]
+    if prod_mode:
+        # Build and run in production mode
+        log_message("FRONTEND", "Building frontend for production...", "INFO")
+        build_process = subprocess.run(["npm", "run", "build"], capture_output=True, text=True)
+        if build_process.returncode != 0:
+            log_message("FRONTEND", f"Build failed: {build_process.stderr}", "ERROR")
+            return None
+        log_message("FRONTEND", "Build completed successfully", "SUCCESS")
+        
+        log_message("FRONTEND", f"Starting production frontend on port {port}...", "INFO")
+        cmd = ["npm", "run", "start"]
+    else:
+        # Always use development mode to ensure proxy settings apply
+        # This ensures API requests get properly forwarded to the backend
+        log_message("FRONTEND", f"Starting development frontend on port {port}...", "INFO")
+        cmd = ["npm", "run", "dev", "--", f"--port={port}"]
     
     process = subprocess.Popen(
         cmd,
@@ -815,6 +827,7 @@ def main():
     parser.add_argument("--frontend-port", type=int, default=DEFAULT_FRONTEND_PORT, help="Port for the frontend server")
     parser.add_argument("--backend-port", type=int, default=DEFAULT_BACKEND_PORT, help="Port for the backend server")
     parser.add_argument("--build", action="store_true", help="Run frontend in production build mode")
+    parser.add_argument("--prod", action="store_true", help="Build and run frontend in production mode")
     parser.add_argument("--verbose", action="store_true", help="Enable verbose debugging output")
     parser.add_argument("--no-log-file", action="store_true", help="Disable logging to file")
     
@@ -865,7 +878,7 @@ def main():
                 log_message("SCRIPT", f"Warning: Failed to source .bashrc: {e}", "WARNING")
         
         # Start frontend first
-        frontend_process = start_frontend(args.frontend_port, args.build)
+        frontend_process = start_frontend(args.frontend_port, args.build, args.prod)
         if not frontend_process:
             cleanup()
             return 1

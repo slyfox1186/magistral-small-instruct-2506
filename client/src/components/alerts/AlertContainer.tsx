@@ -1,5 +1,5 @@
 import React from 'react';
-import { useAlerts } from '../../contexts/AlertContext';
+import { useAlerts } from '../../hooks/useAlerts';
 import { NotificationToast } from './NotificationToast';
 
 export const AlertContainer: React.FC = () => {

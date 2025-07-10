@@ -34,13 +34,13 @@ const MarkdownItRenderer: React.FC<MarkdownItRendererProps> = ({
 
   // Create markdown-it instance with configuration
   const md = useMemo(() => {
-    const markdownIt = new MarkdownIt({
+    const markdownIt: MarkdownIt = new MarkdownIt({
       html: true,
       xhtmlOut: true,
       breaks: true,
       linkify: true,
       typographer: true,
-      highlight: function (str, lang) {
+      highlight: function (str: string, lang: string): string {
         if (lang && hljs.getLanguage(lang)) {
           try {
             return (
@@ -60,14 +60,14 @@ const MarkdownItRenderer: React.FC<MarkdownItRendererProps> = ({
     // Add link attributes for security
     const defaultRender =
       markdownIt.renderer.rules.link_open ||
-      ((tokens, idx, options, _env, self) => self.renderToken(tokens, idx, options));
+      ((tokens: any, idx: any, options: any, _env: any, self: any) => self.renderToken(tokens, idx, options));
 
-    markdownIt.renderer.rules.link_open = function (tokens, idx, options, _env, self) {
+    markdownIt.renderer.rules.link_open = function (tokens: any, idx: any, options: any, _env: any, self: any) {
       tokens[idx].attrPush(['target', '_blank']);
       tokens[idx].attrPush(['rel', 'noopener noreferrer']);
 
       // Extract category from title and add data-link-category attribute
-      const titleAttr = tokens[idx].attrs.find((attr) => attr[0] === 'title');
+      const titleAttr = tokens[idx].attrs.find((attr: any) => attr[0] === 'title');
       if (titleAttr && typeof titleAttr[1] === 'string' && titleAttr[1].startsWith('category:')) {
         const categoryName = titleAttr[1].substring('category:'.length);
         if (categoryName) {
@@ -82,17 +82,17 @@ const MarkdownItRenderer: React.FC<MarkdownItRendererProps> = ({
     // Wrap tables in a container for horizontal scrolling
     const defaultTableOpen =
       markdownIt.renderer.rules.table_open ||
-      ((tokens, idx, options, _env, self) => self.renderToken(tokens, idx, options));
+      ((tokens: any, idx: any, options: any, _env: any, self: any) => self.renderToken(tokens, idx, options));
 
-    markdownIt.renderer.rules.table_open = function (tokens, idx, options, _env, self) {
+    markdownIt.renderer.rules.table_open = function (tokens: any, idx: any, options: any, _env: any, self: any) {
       return '<div class="table-container">' + defaultTableOpen(tokens, idx, options, _env, self);
     };
 
     const defaultTableClose =
       markdownIt.renderer.rules.table_close ||
-      ((tokens, idx, options, _env, self) => self.renderToken(tokens, idx, options));
+      ((tokens: any, idx: any, options: any, _env: any, self: any) => self.renderToken(tokens, idx, options));
 
-    markdownIt.renderer.rules.table_close = function (tokens, idx, options, _env, self) {
+    markdownIt.renderer.rules.table_close = function (tokens: any, idx: any, options: any, _env: any, self: any) {
       return defaultTableClose(tokens, idx, options, _env, self) + '</div>';
     };
 
@@ -159,9 +159,8 @@ const MarkdownItRenderer: React.FC<MarkdownItRendererProps> = ({
             'style',
             'data-link-category', // Add data-link-category here
           ],
-          ALLOWED_CLASSES: {
-            div: ['table-container'], // Only allow table-container class on divs
-          },
+          ADD_ATTR: ['data-link-category'],
+          ALLOW_DATA_ATTR: true,
         });
 
         contentRef.current.innerHTML = sanitizedHtml;

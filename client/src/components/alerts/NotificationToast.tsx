@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { NotificationToastProps, AlertType } from '../../types/status';
 
 // Icons for different alert types
@@ -33,7 +33,7 @@ const icons: Record<AlertType, JSX.Element> = {
 };
 
 export const NotificationToast: React.FC<NotificationToastProps> = ({
-  id,
+  id: _id,
   type,
   message,
   duration = 5000,
@@ -44,13 +44,13 @@ export const NotificationToast: React.FC<NotificationToastProps> = ({
   const progressRef = useRef<HTMLDivElement>(null);
 
   // Handle dismissal with exit animation
-  const handleDismiss = () => {
+  const handleDismiss = useCallback(() => {
     setIsExiting(true);
     // Wait for exit animation to complete before removing
     setTimeout(() => {
       onDismiss();
     }, 300); // Match this with CSS exit animation duration
-  };
+  }, [onDismiss]);
 
   // Auto-dismiss effect with proper cleanup
   useEffect(() => {
@@ -67,7 +67,7 @@ export const NotificationToast: React.FC<NotificationToastProps> = ({
         }
       };
     }
-  }, [duration]); // Only re-run if duration changes
+  }, [duration, handleDismiss]); // Only re-run if duration or handleDismiss changes
 
   // ARIA live region attributes
   const ariaLive = type === 'error' ? 'assertive' : 'polite';

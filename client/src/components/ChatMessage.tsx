@@ -85,7 +85,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
     if (message.role === 'assistant') {
       return (
         <Suspense fallback={<div className="markdown-loading">Loading...</div>}>
-          <MarkdownItRenderer content={content} />
+          <MarkdownItRenderer markdown={content} />
         </Suspense>
       );
     }
@@ -100,7 +100,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
           {message.role === 'user' ? 'You' : 'Assistant'}
         </span>
         <span className="message-timestamp">
-          {new Date(message.timestamp).toLocaleTimeString()}
+          {new Date().toLocaleTimeString()}
         </span>
       </div>
       <div className="message-content">

@@ -1,5 +1,21 @@
 /// <reference types="vite/client" />
 
+// Ensure DOM types are available
+/// <reference lib="dom" />
+/// <reference lib="dom.iterable" />
+
+// Explicit global declarations for ESLint
+declare global {
+  const File: typeof globalThis.File;
+  const FileReader: typeof globalThis.FileReader;
+  const HTMLInputElement: typeof globalThis.HTMLInputElement;
+  const FileList: typeof globalThis.FileList;
+  const JSX: typeof globalThis.JSX;
+  const SVGPathElement: typeof globalThis.SVGPathElement;
+  const NodeListOf: typeof globalThis.NodeListOf;
+  const HTMLLinkElement: typeof globalThis.HTMLLinkElement;
+}
+
 interface ImportMetaEnv {
   readonly VITE_BACKEND_URL: string;
   readonly VITE_APP_NAME: string;
@@ -63,3 +79,4 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+

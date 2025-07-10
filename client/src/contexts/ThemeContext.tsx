@@ -1,21 +1,5 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, type ReactNode } from 'react';
-
-// Define the theme names for TypeScript safety
-export type Theme = 'celestial-indigo' | 'veridian-twilight' | 'solaris-flare' | 'hunters-vision' | 'nebula' | 'crimson-ember' | 'cyberpunk-neon' | 'obsidian-slate';
-
-const THEMES: Theme[] = ['celestial-indigo', 'veridian-twilight', 'solaris-flare', 'hunters-vision', 'nebula', 'crimson-ember', 'cyberpunk-neon', 'obsidian-slate'];
-
-interface ThemeContextType {
-  theme: Theme;
-  setTheme: (theme: Theme) => void;
-  toggleTheme: () => void;
-  availableThemes: Theme[];
-}
-
-const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
-
-// Define Celestial Indigo as the new default theme
-const DEFAULT_THEME: Theme = 'celestial-indigo';
+import { useState, useEffect, useMemo, type ReactNode } from 'react';
+import { ThemeContext, Theme, DEFAULT_THEME, THEMES } from './ThemeContextDefinition';
 
 interface ThemeProviderProps {
   children: ReactNode;
@@ -66,10 +50,3 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }
 
-export function useTheme() {
-  const context = useContext(ThemeContext);
-  if (context === undefined) {
-    throw new Error('useTheme must be used within a ThemeProvider');
-  }
-  return context;
-}

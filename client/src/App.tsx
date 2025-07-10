@@ -6,7 +6,8 @@ import './styles/App.css';
 import './styles/StatusAnimations.css';
 import './styles/themes.scss';
 // Import status system components
-import { AlertProvider, useAlert } from './contexts/AlertContext';
+import { AlertProvider } from './contexts/AlertContext';
+import { useAlert } from './hooks/useAlerts';
 import { AlertContainer } from './components/alerts/AlertContainer';
 import { StatusIndicator } from './components/status/StatusIndicator';
 import { Status } from './types/status';
@@ -70,6 +71,20 @@ const SendIcon = () => (
   </svg>
 );
 
+const AttachmentIcon = () => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
+  </svg>
+);
+
 const CopyIcon = () => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
@@ -103,7 +118,7 @@ function App() {
   useEffect(() => {
     if (import.meta.env.DEV) {
       CacheManager.clearDevelopmentCaches();
-      console.log('🔄 App initialized with fresh cache');
+      logger.info('🔄 App initialized with fresh cache');
     }
   }, []);
 
@@ -131,6 +146,15 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [streamingComplete, setStreamingComplete] = useState(false);
   const [currentMessageStatus, setCurrentMessageStatus] = useState<Status>('thinking');
+  
+  // File attachment state
+  const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // File size limits
+  const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB per file
+  const MAX_TOTAL_SIZE = 20 * 1024 * 1024; // 20MB total
 
   // Store the accumulated response for final message creation
   const accumulatedResponseRef = useRef<string>('');
@@ -200,6 +224,134 @@ function App() {
     }
   }, []);
 
+  // File attachment handlers
+  const handleAttachFile = useCallback(() => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  }, []);
+
+  const handleFileChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    setFileError(null); // Clear previous errors
+    
+    if (!files || files.length === 0) {
+      return;
+    }
+
+    const fileArray = Array.from(files);
+    
+    // Check individual file sizes
+    const oversizedFiles = fileArray.filter(file => file.size > MAX_FILE_SIZE);
+    if (oversizedFiles.length > 0) {
+      const fileNames = oversizedFiles.map(f => f.name).join(', ');
+      setFileError(`Files too large (max 5MB): ${fileNames}`);
+      return;
+    }
+    
+    // Check total size including existing files
+    const currentTotalSize = attachedFiles.reduce((sum, file) => sum + file.size, 0);
+    const newTotalSize = fileArray.reduce((sum, file) => sum + file.size, 0);
+    if (currentTotalSize + newTotalSize > MAX_TOTAL_SIZE) {
+      setFileError('Total file size would exceed 20MB limit');
+      return;
+    }
+
+    // Filter for text-based files
+    const textFiles = fileArray.filter(file => {
+      const fileType = file.type;
+      const fileName = file.name.toLowerCase();
+      return (
+        fileType.startsWith('text/') ||
+        fileType === 'application/json' ||
+        fileType === 'application/javascript' ||
+        fileType === 'application/typescript' ||
+        fileName.endsWith('.md') ||
+        fileName.endsWith('.txt') ||
+        fileName.endsWith('.js') ||
+        fileName.endsWith('.ts') ||
+        fileName.endsWith('.tsx') ||
+        fileName.endsWith('.jsx') ||
+        fileName.endsWith('.py') ||
+        fileName.endsWith('.sh') ||
+        fileName.endsWith('.sql') ||
+        fileName.endsWith('.css') ||
+        fileName.endsWith('.scss') ||
+        fileName.endsWith('.json') ||
+        fileName.endsWith('.xml') ||
+        fileName.endsWith('.yaml') ||
+        fileName.endsWith('.yml') ||
+        fileName.endsWith('.toml') ||
+        fileName.endsWith('.ini') ||
+        fileName.endsWith('.conf') ||
+        fileName.endsWith('.config')
+      );
+    });
+    
+    const rejectedFiles = fileArray.filter(file => !textFiles.includes(file));
+    if (rejectedFiles.length > 0) {
+      const rejectedNames = rejectedFiles.map(f => f.name).join(', ');
+      const errorMsg = `Unsupported file types: ${rejectedNames}. Please select text-based files only.`;
+      setFileError(errorMsg);
+      alert.error(errorMsg, 5000);
+      if (textFiles.length === 0) {
+        return;
+      }
+    }
+    
+    if (textFiles.length > 0) {
+      setAttachedFiles(prev => [...prev, ...textFiles]);
+      logger.info(`Attached ${textFiles.length} file(s)`);
+      alert.success(`Attached ${textFiles.length} file(s)`, 3000);
+    }
+    
+    // Clear the input so the same file can be selected again
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  }, [attachedFiles, MAX_FILE_SIZE, MAX_TOTAL_SIZE, alert]);
+
+  const handleRemoveFile = useCallback((index: number) => {
+    setAttachedFiles(prev => prev.filter((_, i) => i !== index));
+    setFileError(null); // Clear any file errors when removing files
+  }, []);
+
+  const readFileContent = useCallback(async (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      // Additional validation before reading
+      if (file.size > MAX_FILE_SIZE) {
+        reject(new Error(`File ${file.name} exceeds size limit (${Math.round(MAX_FILE_SIZE / 1024 / 1024)}MB)`));
+        return;
+      }
+      
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const content = e.target?.result as string;
+          if (typeof content !== 'string') {
+            reject(new Error(`Failed to read file content: ${file.name}`));
+            return;
+          }
+          resolve(content);
+        } catch {
+          reject(new Error(`Error processing file content: ${file.name}`));
+        }
+      };
+      reader.onerror = () => {
+        reject(new Error(`Failed to read file: ${file.name}`));
+      };
+      reader.onabort = () => {
+        reject(new Error(`File reading aborted: ${file.name}`));
+      };
+      
+      try {
+        reader.readAsText(file, 'UTF-8');
+      } catch {
+        reject(new Error(`Failed to start reading file: ${file.name}`));
+      }
+    });
+  }, [MAX_FILE_SIZE]);
+
   // Helper function to focus the input field
   const focusInput = useCallback(() => {
     if (inputRef.current) {
@@ -231,6 +383,10 @@ function App() {
 
     // Clear messages from state
     setMessages([]);
+    
+    // Clear attached files and errors
+    setAttachedFiles([]);
+    setFileError(null);
 
     // Clear from localStorage
     try {
@@ -771,6 +927,41 @@ function App() {
     const userMessageText = inputMessage.trim();
 
     // --- Chat Message Sending Logic ---
+    let apiMessageText = userMessageText;
+    
+    // Include attached files content for API (but not in displayed message)
+    if (attachedFiles.length > 0) {
+      try {
+        // Show progress for large file operations
+        if (attachedFiles.some(file => file.size > 1024 * 1024)) { // 1MB threshold
+          alert.info('Reading large files, please wait...', 3000);
+        }
+        
+        const fileContents = await Promise.all(
+          attachedFiles.map(async (file) => {
+            const content = await readFileContent(file);
+            return `\n\n**Attached File: ${file.name}**\n\`\`\`\n${content}\n\`\`\``;
+          })
+        );
+        // Only add file contents to API message, not displayed message
+        apiMessageText = userMessageText + fileContents.join('');
+        
+        // Clear attached files after including them in message
+        setAttachedFiles([]);
+        setFileError(null); // Clear any file errors
+        logger.info(`Included ${attachedFiles.length} attached file(s) in message context`);
+        alert.success(`Included ${attachedFiles.length} file(s) in context`, 2000);
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : 'Failed to read one or more attached files';
+        logger.error('Error reading attached files:', error);
+        setError(errorMsg);
+        alert.error(errorMsg, 5000);
+        setIsLoading(false);
+        return;
+      }
+    }
+
+    // Create user message with only the original text (no file contents in UI)
     const newUserMessage = createUserMessage(userMessageText);
 
     // Clear previous state
@@ -833,7 +1024,7 @@ function App() {
         method: 'POST',
         body: {
           session_id: sessionId,
-          messages: formatMessagesForAPI(messages, inputMessage),
+          messages: formatMessagesForAPI(messages, apiMessageText),
         },
         signal: controller.signal, // Pass the abort controller signal
         retries: 2, // Add retries to handle transient network issues
@@ -1118,6 +1309,8 @@ function App() {
     manageBufferSize,
     currentMessageStatus,
     alert,
+    attachedFiles,
+    readFileContent,
   ]); // Essential dependencies only
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -1386,7 +1579,79 @@ function App() {
         )}
 
         <div className="input-container">
+          {/* File Error Display */}
+          {fileError && (
+            <div className="file-error-container">
+              <div className="file-error-message">
+                ⚠️ {fileError}
+                <button
+                  onClick={() => setFileError(null)}
+                  className="file-error-dismiss"
+                  aria-label="Dismiss error"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+          )}
+          
+          {/* Attached Files Display */}
+          {attachedFiles.length > 0 && (
+            <div className="attached-files-container">
+              <div className="attached-files-header">
+                <span>Attached Files ({attachedFiles.length})</span>
+                <span className="total-size">
+                  {Math.round(attachedFiles.reduce((sum, file) => sum + file.size, 0) / 1024)}KB total
+                </span>
+              </div>
+              <div className="attached-files-list">
+                {attachedFiles.map((file, index) => (
+                  <div key={index} className="attached-file-item">
+                    <span className="file-name">{file.name}</span>
+                    <span className="file-size">({Math.round(file.size / 1024)}KB)</span>
+                    <button
+                      onClick={() => handleRemoveFile(index)}
+                      className="remove-file-button"
+                      aria-label={`Remove ${file.name}`}
+                      title="Remove file"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          
           <div className="input-wrapper">
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              onChange={handleFileChange}
+              multiple
+              accept=".txt,.md,.js,.ts,.tsx,.jsx,.py,.sh,.sql,.css,.scss,.json,.xml,.yaml,.yml,.toml,.ini,.conf,.config,text/*,application/json,application/javascript,application/typescript"
+              style={{ display: 'none' }}
+            />
+            
+            {/* File attachment button */}
+            <button
+              onClick={handleAttachFile}
+              disabled={isLoading}
+              className="attachment-button"
+              aria-label="Attach text-based files"
+              aria-describedby="file-input-help"
+              title="Attach text-based files (scripts, configs, etc.) - Max 5MB per file, 20MB total"
+            >
+              <AttachmentIcon />
+            </button>
+            
+            {/* Screen reader help text */}
+            <span id="file-input-help" className="sr-only">
+              Select text-based files such as scripts, configuration files, or documentation. 
+              Maximum 5MB per file, 20MB total.
+            </span>
+            
             <textarea
               ref={inputRef}
               value={inputMessage}

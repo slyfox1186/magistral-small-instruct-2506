@@ -56,6 +56,9 @@ module.exports = {
     },
   },
   rules: {
+    // Disable no-undef globally for TypeScript projects - TypeScript handles this better
+    'no-undef': 'off',
+    
     // React Refresh
     'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
 

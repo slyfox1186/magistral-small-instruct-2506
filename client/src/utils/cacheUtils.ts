@@ -2,6 +2,8 @@
  * Cache management utilities for the Neural Consciousness Chat System
  */
 
+import { logger } from './index';
+
 export class CacheManager {
   private static readonly CACHE_VERSION_KEY = 'neural_chat_cache_version';
   private static readonly CURRENT_VERSION = Date.now().toString();
@@ -33,7 +35,7 @@ export class CacheManager {
             link.remove();
           });
           
-          console.log(`🔄 CSS cache busted: ${href} → ${newLink.href}`);
+          logger.debug(`🔄 CSS cache busted: ${href} → ${newLink.href}`);
         }
       });
     }
@@ -55,7 +57,7 @@ export class CacheManager {
       
       cacheKeys.forEach(key => {
         localStorage.removeItem(key);
-        console.log(`🗑️ Cleared localStorage: ${key}`);
+        logger.debug(`🗑️ Cleared localStorage: ${key}`);
       });
       
       // Clear sessionStorage items
@@ -65,13 +67,13 @@ export class CacheManager {
       
       sessionKeys.forEach(key => {
         sessionStorage.removeItem(key);
-        console.log(`🗑️ Cleared sessionStorage: ${key}`);
+        logger.debug(`🗑️ Cleared sessionStorage: ${key}`);
       });
       
       // Force reload CSS
       this.forceCSSReload();
       
-      console.log('🧹 Development caches cleared');
+      logger.debug('🧹 Development caches cleared');
     }
   }
 
@@ -83,7 +85,7 @@ export class CacheManager {
       const storedVersion = localStorage.getItem(this.CACHE_VERSION_KEY);
       
       if (!storedVersion || storedVersion !== this.CURRENT_VERSION) {
-        console.log('🔄 Cache version changed, clearing development caches...');
+        logger.debug('🔄 Cache version changed, clearing development caches...');
         this.clearDevelopmentCaches();
         localStorage.setItem(this.CACHE_VERSION_KEY, this.CURRENT_VERSION);
       }
@@ -95,7 +97,7 @@ export class CacheManager {
    */
   static hardReload(): void {
     if (import.meta.env.DEV) {
-      console.log('🔄 Performing hard reload with cache bypass...');
+      logger.debug('🔄 Performing hard reload with cache bypass...');
       window.location.reload();
     }
   }
@@ -105,17 +107,24 @@ export class CacheManager {
    */
   static initDevelopment(): void {
     if (import.meta.env.DEV) {
-      console.log('🚀 Cache management initialized for development');
+      logger.debug('🚀 Cache management initialized for development');
       
       // Check cache version on load
       this.checkCacheVersion();
       
       // Add global cache control functions for debugging
-      (window as any).__clearCache = () => this.clearDevelopmentCaches();
-      (window as any).__hardReload = () => this.hardReload();
-      (window as any).__forceCSSReload = () => this.forceCSSReload();
+      interface WindowWithDebugFunctions extends Window {
+        __clearCache?: () => void;
+        __hardReload?: () => void;
+        __forceCSSReload?: () => void;
+      }
       
-      console.log('💡 Debug functions available: __clearCache(), __hardReload(), __forceCSSReload()');
+      const debugWindow = window as WindowWithDebugFunctions;
+      debugWindow.__clearCache = () => this.clearDevelopmentCaches();
+      debugWindow.__hardReload = () => this.hardReload();
+      debugWindow.__forceCSSReload = () => this.forceCSSReload();
+      
+      logger.debug('💡 Debug functions available: __clearCache(), __hardReload(), __forceCSSReload()');
     }
   }
 }
