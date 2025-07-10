@@ -509,6 +509,15 @@ Be genuinely warm and appreciative that they shared personal details with you. A
                         logger.error(f"🧠 MEMORY STORE: ❌ {error_msg}", exc_info=True)
                         yield f"data: {json.dumps({'token': {'text': f'❌ {error_msg}'}})}\n\n"
                     
+                    # CRITICAL: Use world-class memory processing for personal info storage
+                    if app_state.personal_memory:
+                        try:
+                            asyncio.create_task(
+                                lightweight_memory_processing(user_prompt, "Information successfully stored in memory", session_id)
+                            )
+                        except Exception as memory_error:
+                            logger.error(f"🧠 MEMORY STORE: ❌ Failed to create memory processing task: {memory_error}")
+                    
                     yield f"data: {json.dumps({'done': True})}\n\n"
                     
                 elif intent == "recall_personal_info":
@@ -585,6 +594,15 @@ Answer the user's question based on this information. If the information isn't a
                         error_msg = f"Failed to recall information: {recall_error}"
                         logger.error(f"🧠 MEMORY RECALL: ❌ {error_msg}", exc_info=True)
                         yield f"data: {json.dumps({'token': {'text': f'❌ {error_msg}'}})}\n\n"
+                    
+                    # Background memory processing for recall queries - store the fact that user asked about this topic
+                    if app_state.personal_memory:
+                        try:
+                            asyncio.create_task(
+                                lightweight_memory_processing(user_prompt, "Assistant recalled information from memory", session_id)
+                            )
+                        except Exception as memory_error:
+                            logger.error(f"🧠 MEMORY RECALL: ❌ Failed to create memory processing task: {memory_error}")
                     
                     yield f"data: {json.dumps({'done': True})}\n\n"
                     
@@ -676,6 +694,15 @@ Answer the user's question based on this information. If the information isn't a
                         error_msg = f"Memory retrieval error: {memory_error}"
                         logger.error(f"🧠 MEMORY DEBUG: ❌ {error_msg}", exc_info=True)
                         yield f"data: {json.dumps({'token': {'text': f'\n\n❌ {error_msg}\n\n'}})}\n\n"
+                    
+                    # Background memory processing for conversation history queries
+                    if 'full_response' in locals() and full_response and app_state.personal_memory:
+                        try:
+                            asyncio.create_task(
+                                lightweight_memory_processing(user_prompt, full_response, session_id)
+                            )
+                        except Exception as memory_error:
+                            logger.error(f"🧠 MEMORY DEBUG: ❌ Failed to create memory processing task: {memory_error}")
                     
                     yield f"data: {json.dumps({'done': True})}\n\n"
                     

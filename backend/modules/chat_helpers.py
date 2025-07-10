@@ -353,29 +353,86 @@ async def handle_simple_conversational_request(
 
 
 async def lightweight_memory_processing(user_prompt: str, response: str, session_id: str):
-    """Enhanced memory processing that stores canonical facts in core_memories
-    and avoids redundant storage in the memories table.
+    """World-class memory processing system that intelligently extracts, analyzes,
+    and stores conversational memories using advanced NLP and LLM techniques.
+    
+    This function implements a sophisticated 5-stage memory processing pipeline:
+    1. Content Analysis - LLM-powered content understanding
+    2. Memory Extraction - Structured memory extraction
+    3. Deduplication - Semantic similarity detection
+    4. Storage - Intelligent storage in appropriate tables
+    5. Validation - Post-storage verification
     """
-    logger.info(f"🧠 MEMORY DEBUG: Starting lightweight_memory_processing for session {session_id}")
-    logger.info(f"🧠 MEMORY DEBUG: User prompt length: {len(user_prompt)}, Response length: {len(response)}")
-    logger.info(f"🧠 MEMORY DEBUG: User prompt preview: {user_prompt[:100]}...")
+    logger.info(f"🧠 ADVANCED_MEMORY: Starting world-class memory processing for session {session_id}")
     
     try:
         if not app_state.personal_memory:
-            logger.warning("🧠 MEMORY DEBUG: personal_memory is None, exiting early")
+            logger.warning("🧠 ADVANCED_MEMORY: personal_memory is None, exiting early")
             return
         
-        logger.info(f"🧠 MEMORY DEBUG: personal_memory object available: {type(app_state.personal_memory)}")
-
-        # LLM will handle memory extraction more accurately than regex
-        # Store the conversation for the LLM to process and extract relevant information later
-        logger.info(f"🧠 MEMORY DEBUG: Storing conversation for LLM-based memory extraction")
+        # Import the advanced memory processing system
+        from memory_processing import AdvancedMemoryProcessor, get_config
         
-        # The LLM naturally extracts and remembers information through conversation
-        # No need for weak regex patterns when we have superior NLP capabilities
-        logger.info(f"🧠 MEMORY DEBUG: Memory processing complete for session {session_id}.")
+        # Get production configuration
+        config = get_config('production')
+        
+        # Create advanced memory processor instance
+        processor = AdvancedMemoryProcessor(app_state.personal_memory, config)
+        
+        # Initialize processor with LLM server
+        try:
+            from persistent_llm_server import get_llm_server
+            llm_server = await get_llm_server()
+            await processor.initialize(llm_server)
+            logger.info(f"🧠 ADVANCED_MEMORY: LLM server initialized successfully")
+        except Exception as e:
+            logger.error(f"🧠 ADVANCED_MEMORY: Failed to get LLM server: {e}")
+            return
+        
+        # Process the conversation through the advanced pipeline
+        logger.info(f"🧠 ADVANCED_MEMORY: Processing conversation through 5-stage pipeline")
+        
+        processing_result = await processor.process_with_retry(
+            user_prompt=user_prompt,
+            assistant_response=response,
+            session_id=session_id
+        )
+        
+        # Log processing results
+        if processing_result.success:
+            logger.info(f"🧠 ADVANCED_MEMORY: ✅ Processing successful for session {session_id}")
+            logger.info(f"🧠 ADVANCED_MEMORY: Stored {processing_result.memories_stored} memories "
+                       f"in {processing_result.processing_time:.2f}s")
+            
+            # Log detailed stage timings
+            if processing_result.stage_timings:
+                stage_info = ", ".join([f"{stage}: {time:.2f}s" 
+                                      for stage, time in processing_result.stage_timings.items()])
+                logger.info(f"🧠 ADVANCED_MEMORY: Stage timings - {stage_info}")
+            
+            # Log extraction statistics
+            if processing_result.extraction_stats:
+                stats = processing_result.extraction_stats
+                logger.info(f"🧠 ADVANCED_MEMORY: Extraction stats - "
+                           f"Total: {stats.get('total_memories', 0)}, "
+                           f"Core: {stats.get('core_memories', 0)}, "
+                           f"Regular: {stats.get('regular_memories', 0)}, "
+                           f"Avg importance: {stats.get('avg_importance', 0):.2f}")
+                
+        else:
+            error_msg = processing_result.error_message or "Unknown error"
+            logger.error(f"🧠 ADVANCED_MEMORY: ❌ Processing failed for session {session_id}: {error_msg}")
+        
+        # Log system health periodically
+        stats = processor.get_processing_stats()
+        if stats['total_processed'] % 10 == 0:
+            health = processor.get_health_status()
+            logger.info(f"🧠 ADVANCED_MEMORY: System health - "
+                       f"Status: {health['status']}, "
+                       f"Success rate: {health['success_rate']:.1f}%, "
+                       f"Avg time: {health['avg_processing_time']:.2f}s")
 
     except Exception as e:
-        logger.error(f"🧠 MEMORY DEBUG: ❌ Core memory processing error: {e}", exc_info=True)
+        logger.error(f"🧠 ADVANCED_MEMORY: ❌ Advanced memory processing error: {e}", exc_info=True)
 
 
