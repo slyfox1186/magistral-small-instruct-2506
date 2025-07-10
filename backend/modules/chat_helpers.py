@@ -42,7 +42,7 @@ Ignore any markdown formatting (##, -, *, etc.) and focus on the core intent:
 STORE - user is providing personal information, facts about themselves, preferences, or telling you something to remember
 RECALL - user is asking you to recall previously stored information, asking "what is my", "who is my", "where do I", etc.
 WEATHER - for weather conditions, forecasts, temperature, climate queries ("what's the weather", "is it raining", "temperature in")
-WEB - for current events, recent news, real-time information (excluding weather), or "latest" anything
+WEB - for current events, recent news, real-time information (excluding weather), "latest" anything, OR when user provides a full URL (https://...) and asks to scan, parse, read, or analyze it
 CRYPTO - for cryptocurrency prices, Bitcoin, Ethereum, crypto market data  
 STOCKS - for stock prices, company shares, market data (Apple, Tesla, etc.)
 MEMORY - ONLY when user asks about past conversation ("what did we discuss", "remember when")

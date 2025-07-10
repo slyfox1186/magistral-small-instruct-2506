@@ -1098,7 +1098,23 @@ async def perform_web_search_async(
         Formatted search results, optionally with scraped content if LLM deems necessary
     """
     try:
-        # First, get search results from Google
+        # Check if the query contains a URL - if so, scrape it directly instead of searching
+        import re
+        url_pattern = r'https?://[^\s]+'
+        urls_in_query = re.findall(url_pattern, query)
+        
+        if urls_in_query:
+            # This is a URL to scrape, not a search query
+            url_to_scrape = urls_in_query[0]
+            logger.info(f"Detected URL in query, switching to direct scraping: {url_to_scrape}")
+            
+            scraped_content = await scrape_website(url_to_scrape)
+            if scraped_content:
+                return f"# Content from {url_to_scrape}\n\n{scraped_content}"
+            else:
+                return f"Failed to scrape content from {url_to_scrape}"
+        
+        # Regular search flow
         results = await google_search_async(query, num_results)
         if not results:
             return None
