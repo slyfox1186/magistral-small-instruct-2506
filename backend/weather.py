@@ -47,42 +47,12 @@ logger = logging.getLogger(__name__)
 # Get OpenWeatherMap API credentials from environment variables
 OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
 
-# US State abbreviation to full name mapping
-US_STATE_MAPPING = {
-    'AL': 'Alabama', 'AK': 'Alaska', 'AZ': 'Arizona', 'AR': 'Arkansas', 'CA': 'California',
-    'CO': 'Colorado', 'CT': 'Connecticut', 'DE': 'Delaware', 'FL': 'Florida', 'GA': 'Georgia',
-    'HI': 'Hawaii', 'ID': 'Idaho', 'IL': 'Illinois', 'IN': 'Indiana', 'IA': 'Iowa',
-    'KS': 'Kansas', 'KY': 'Kentucky', 'LA': 'Louisiana', 'ME': 'Maine', 'MD': 'Maryland',
-    'MA': 'Massachusetts', 'MI': 'Michigan', 'MN': 'Minnesota', 'MS': 'Mississippi', 'MO': 'Missouri',
-    'MT': 'Montana', 'NE': 'Nebraska', 'NV': 'Nevada', 'NH': 'New Hampshire', 'NJ': 'New Jersey',
-    'NM': 'New Mexico', 'NY': 'New York', 'NC': 'North Carolina', 'ND': 'North Dakota', 'OH': 'Ohio',
-    'OK': 'Oklahoma', 'OR': 'Oregon', 'PA': 'Pennsylvania', 'RI': 'Rhode Island', 'SC': 'South Carolina',
-    'SD': 'South Dakota', 'TN': 'Tennessee', 'TX': 'Texas', 'UT': 'Utah', 'VT': 'Vermont',
-    'VA': 'Virginia', 'WA': 'Washington', 'WV': 'West Virginia', 'WI': 'Wisconsin', 'WY': 'Wyoming'
-}
-
-
 def normalize_city_query(city: str) -> str:
-    """Normalize city query to work better with geocoding API"""
-    # Handle "City, ST" format by converting state abbreviation to full name
-    if ',' in city:
-        parts = [part.strip() for part in city.split(',')]
-        if len(parts) == 2:
-            city_name, state_part = parts
-            # Check if state_part is a US state abbreviation
-            if state_part.upper() in US_STATE_MAPPING:
-                return f"{city_name}, {US_STATE_MAPPING[state_part.upper()]}"
-            # If it's already a full state name or country, leave as is
-            return city
-    else:
-        # Handle "City ST" format (space-separated)
-        parts = city.split()
-        if len(parts) >= 2:
-            # Check if the last part is a state abbreviation
-            potential_state = parts[-1].upper()
-            if potential_state in US_STATE_MAPPING:
-                city_name = ' '.join(parts[:-1])
-                return f"{city_name}, {US_STATE_MAPPING[potential_state]}"
+    """Normalize city query to work better with geocoding API.
+    
+    Note: State name conversion is now handled in the chat pipeline before
+    this function is called, so this just returns the input as-is.
+    """
     return city
 
 
@@ -153,7 +123,7 @@ class WeatherService:
         if not self.api_key:
             raise ValueError("OpenWeatherMap API key not configured")
             
-        # Normalize city query to handle state abbreviations
+        # Normalize city query (state conversion happens in chat pipeline)
         normalized_city = normalize_city_query(city)
         logger.info(f"Geocoding: '{city}' → '{normalized_city}'")
             
@@ -166,15 +136,15 @@ class WeatherService:
         
         try:
             data = await self._make_request(url, params)
-            locations = []
+            logger.info(f"Geocoding API returned {len(data)} results for '{normalized_city}'")
             
-            # If we have a state in the query, filter results by state
-            state_filter = None
-            if ',' in normalized_city:
-                parts = normalized_city.split(',')
-                if len(parts) > 1:
-                    state_filter = parts[1].strip()
-                    
+            # Log the raw API response for debugging
+            if data:
+                logger.debug(f"First geocoding result: {data[0]}")
+            else:
+                logger.warning(f"No geocoding results found for '{normalized_city}'")
+            
+            locations = []
             for item in data:
                 location = LocationData(
                     name=item.get("name", ""),
@@ -183,67 +153,9 @@ class WeatherService:
                     lat=item.get("lat", 0.0),
                     lon=item.get("lon", 0.0)
                 )
-                
-                # If we have a state filter, only include matching states
-                if state_filter:
-                    item_state = item.get("state", "")
-                    if item_state and item_state.lower() == state_filter.lower():
-                        locations.append(location)
-                else:
-                    locations.append(location)
+                locations.append(location)
             
-            # If no results and we had a state, try without state and filter results
-            if not locations and ',' in normalized_city:
-                parts = normalized_city.split(',')
-                city_name_only = parts[0].strip()
-                state_name = parts[1].strip() if len(parts) > 1 else None
-                logger.info(f"Geocoding fallback: trying '{city_name_only}' without state, will filter by '{state_name}'")
-                
-                fallback_params = {
-                    "q": city_name_only,
-                    "limit": 50,  # Get more results to filter
-                    "appid": self.api_key
-                }
-                
-                fallback_data = await self._make_request(url, fallback_params)
-                
-                # Filter results by state if state was specified
-                filtered_locations = []
-                for item in fallback_data:
-                    location = LocationData(
-                        name=item.get("name", ""),
-                        country=item.get("country", ""),
-                        state=item.get("state"),
-                        lat=item.get("lat", 0.0),
-                        lon=item.get("lon", 0.0)
-                    )
-                    
-                    # If we have a state filter, try to match it
-                    if state_name:
-                        item_state = item.get("state", "")
-                        # Check for exact match or state abbreviation to full name match
-                        if item_state:
-                            # Direct match (case insensitive)
-                            if item_state.lower() == state_name.lower():
-                                filtered_locations.append(location)
-                            # Check if the state name was originally an abbreviation that got expanded
-                            elif state_name in US_STATE_MAPPING.values():
-                                # Find the abbreviation for this full state name
-                                state_abbrev = None
-                                for abbrev, full_name in US_STATE_MAPPING.items():
-                                    if full_name == state_name:
-                                        state_abbrev = abbrev
-                                        break
-                                # Match against the abbreviation
-                                if state_abbrev and item_state.upper() == state_abbrev:
-                                    filtered_locations.append(location)
-                    else:
-                        filtered_locations.append(location)
-                
-                # Take only the requested limit from filtered results
-                locations.extend(filtered_locations[:limit])
-            
-            return locations
+            return locations[:limit]
         except Exception as e:
             logger.error(f"Failed to get coordinates for city {city}: {e}")
             return []

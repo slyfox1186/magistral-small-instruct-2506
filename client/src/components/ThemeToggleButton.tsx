@@ -20,6 +20,8 @@ export const ThemeToggleButton: React.FC = () => {
         return 'Crimson Ember';
       case 'cyberpunk-neon':
         return 'Cyberpunk Neon';
+      case 'obsidian-slate':
+        return 'Obsidian Slate';
       default:
         return themeName;
     }

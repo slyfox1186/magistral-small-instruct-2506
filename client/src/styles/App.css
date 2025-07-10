@@ -105,7 +105,7 @@ body {
   flex-direction: column;
   height: 100vh;
   width: 100vw;
-  background: #000000; /* Pure black for the sides */
+  background: var(--bg-primary, #1a1b23); /* Match the primary background */
   position: fixed; /* Fix to viewport */
   top: 0;
   left: 0;
@@ -209,14 +209,13 @@ body {
   z-index: 1;
   height: 100%;
   overflow: hidden; /* Contain children */
-  width: 100%; /* Always take full available width */
-  max-width: 1000px; /* Match input wrapper width */
-  min-width: min(100%, 800px); /* Prevent collapse but allow mobile responsiveness */
+  width: 100%; /* Take full available width */
+  max-width: 1000px; /* Keep the max-width for larger screens */
   margin: 0 auto; /* Center the container */
-  background: var(--bg-input-area, #1e293b); /* Use theme background for chat area */
+  background: var(--bg-primary, #1a1b23); /* Match the primary background */
   border-left: 1px solid var(--border-light, rgba(230, 230, 230, 0.1));
   border-right: 1px solid var(--border-light, rgba(230, 230, 230, 0.1));
-  box-shadow: 0 0 60px var(--accent-primary-faded, rgba(163, 125, 157, 0.08)); /* Themed glow */
+  box-shadow: 0 0 60px var(--accent-primary-faded, rgba(163, 125, 157, 0.08));
 }
 
 /* Messages area with elegant scrolling */

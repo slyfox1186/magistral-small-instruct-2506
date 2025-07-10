@@ -483,6 +483,7 @@ $theme-cyberpunk-neon: (
   --accent-info-alpha-0: rgba(66, 165, 245, 0);
 }
 
+
 // Apply Cyberpunk Neon theme
 [data-theme='cyberpunk-neon'] {
   @include apply-theme($theme-cyberpunk-neon);
@@ -507,4 +508,71 @@ $theme-cyberpunk-neon: (
   --accent-info-faded: rgba(0, 204, 255, 0.15);
   --accent-info-glow: rgba(0, 204, 255, 0.2);
   --accent-info-alpha-0: rgba(0, 204, 255, 0);
+}
+
+
+// =====================================================
+// Obsidian Slate Theme Map
+// =====================================================
+
+$theme-obsidian-slate: (
+  // Base Background Colors
+  bg-primary: #1e2229,        // Dark, neutral slate
+  bg-secondary: #2c313a,      // Slightly lighter slate for surfaces
+  bg-tertiary: #3a4049,       // Interactive surface
+  bg-elevated: #48505a,       // Elevated modals
+  bg-input-area: #1a1e24,     // Darker input area for clear separation
+  bg-user-bubble: #3b82f6,    // A pleasant, high-contrast blue for user messages
+
+  // Text Colors
+  text-primary: #e5e7eb,      // Bright, clear off-white for main text
+  text-secondary: #9ca3af,    // Softer gray for secondary text
+  text-tertiary: #6b7280,     // Muted gray for less important text
+
+  // Border Colors
+  border-color: #4b5563,
+  border-light: rgba(209, 213, 219, 0.1),
+  border-table: #374151,
+  border-strong: #6b7280,
+
+  // Accent Colors
+  accent-primary: #34d399,    // A vibrant, accessible mint green
+  accent-success: #34d399,    // Consistent success green
+  accent-danger: #f87171,     // A clear, friendly red
+  accent-warning: #fbbf24,    // A bright, attention-grabbing amber
+  accent-info: #60a5fa,       // A calm, informative blue
+
+  // Interactive Colors
+  interactive-normal: #3a4049,
+  interactive-hover: rgba(52, 211, 153, 0.15),
+  interactive-active: rgba(52, 211, 153, 0.25),
+
+  // Overlay Colors
+  overlay-light: rgba(229, 231, 235, 0.1)
+);
+
+// Apply Obsidian Slate theme
+[data-theme='obsidian-slate'] {
+  @include apply-theme($theme-obsidian-slate);
+
+  // Alpha variants for Obsidian Slate
+  --bg-primary-alpha-95: rgba(30, 34, 41, 0.95);
+  --bg-primary-alpha-60: rgba(30, 34, 41, 0.6);
+  --bg-secondary-alpha-01: rgba(44, 49, 58, 0.01);
+  --bg-secondary-alpha-03: rgba(44, 49, 58, 0.03);
+  --bg-secondary-alpha-90: rgba(44, 49, 58, 0.9);
+  --bg-tertiary-alpha-90: rgba(58, 64, 73, 0.9);
+  --bg-input-area-alpha-50: rgba(26, 30, 36, 0.5);
+  --accent-primary-faded: rgba(52, 211, 153, 0.12);
+  --accent-primary-glow: rgba(52, 211, 153, 0.2);
+  --accent-primary-alpha-80: rgba(52, 211, 153, 0.8);
+  --accent-success-faded: rgba(52, 211, 153, 0.15);
+  --accent-success-glow: rgba(52, 211, 153, 0.2);
+  --accent-danger-faded: rgba(248, 113, 113, 0.15);
+  --accent-danger-glow: rgba(248, 113, 113, 0.2);
+  --accent-warning-faded: rgba(251, 191, 36, 0.15);
+  --accent-warning-glow: rgba(251, 191, 36, 0.2);
+  --accent-info-faded: rgba(96, 165, 250, 0.15);
+  --accent-info-glow: rgba(96, 165, 250, 0.2);
+  --accent-info-alpha-0: rgba(96, 165, 250, 0);
 }

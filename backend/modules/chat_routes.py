@@ -191,7 +191,7 @@ def setup_chat_routes(app: FastAPI):
                         logger.warning("🧠 MEMORY DEBUG: personal_memory is None - no memory context available")
                     
                     # Use condensed system prompt with memory context
-                    simple_system_prompt = """You are Aria, a helpful AI assistant. Be natural and conversational.
+                    simple_system_prompt = """You are Jane, a helpful AI assistant. Be natural and conversational.
 
 🚨 CRITICAL: You are NEVER allowed to use [REF] tags in ANY form ([REF]1[/REF], [REF]2[/REF], [REF]anything[/REF]) and must ONLY use proper markdown links: [Text Here](URL)"""
 
@@ -286,9 +286,10 @@ def setup_chat_routes(app: FastAPI):
                         logger.warning("🧠 MEMORY DEBUG: personal_memory is None - no memory context available")
                     
                     # Use memory-aware system prompt 
-                    system_prompt = """You are Aria, a helpful AI assistant. Be natural and conversational.
+                    system_prompt = """You are Jane, a helpful and honest AI assistant. You are always natural and conversational with the user.
 
-🚨 CRITICAL: You are NEVER allowed to use [REF] tags in ANY form ([REF]1[/REF], [REF]2[/REF], [REF]anything[/REF]) and must ONLY use proper markdown links: [Text Here](URL)"""
+### Rules:
+- You are NEVER allowed to use [REF] tags in ANY form ([REF]numbers[/REF], [REF]literally_anything[/REF]) and must ONLY use proper markdown links: [Website Title](URL)"""
 
                     # Add memory context if available
                     if memory_context:
@@ -382,7 +383,7 @@ REMEMBER: NEVER use [REF] tags in any form. Always use proper markdown links and
 
 🚨🚨🚨 FINAL WARNING 🚨🚨🚨
 DO NOT WRITE [REF] FOLLOWED BY ANY TEXT FOLLOWED BY [/REF]
-DO NOT WRITE [REF]1[/REF] OR [REF]2[/REF] OR [REF]URL[/REF] OR ANY VARIANT
+DO NOT WRITE [REF]1[/REF] OR [REF]2[/REF] OR [REF]URL[/REF] OR ANY VJaneNT
 ONLY USE: [Description](URL) format for ALL links
 🚨🚨🚨 FINAL WARNING 🚨🚨🚨"""
 
@@ -912,8 +913,48 @@ Examples:
                         if city_name.lower() == "current location":
                             yield f"data: {json.dumps({'token': {'text': '📍 Please specify a city name for weather information.\n\n'}})}\n\n"
                         else:
-                            # Get weather data
-                            weather_data = await get_weather_for_city(city_name)
+                            # Convert state names to abbreviations using LLM and add country code
+                            state_convert_prompt = f"""You are a helpful and honest AI assistant. Your only job is to convert any USA state names in the following location query to their standard 2-letter abbreviations.
+
+### Rules:
+- Append the country code for US locations ',US'
+- Keep city names unchanged.
+- Use no spaces after commas in the output format.
+- Return only the converted location and nothing else.
+
+### Examples:
+- "Midway Georgia" -> "Midway,GA,US"
+- "Los Angeles California" -> "Los Angeles,CA,US" 
+- "New York" -> "New York,NY,US"
+- "Georgia" -> "GA,US"
+- "Paris France" -> "Paris,FR" (not a US state)
+- "London" -> "London,GB"
+
+### Location(s):
+{city_name}
+
+### Final Instructions:
+- The full output must look exactly like this every time: 'CITY,ABBREVIATED_STATE,US'
+
+Converted:"""
+
+                            state_convert_response = ""
+                            async for token in llm_server.generate_stream(
+                                prompt=utils.format_prompt("You are a precise location converter.", state_convert_prompt),
+                                max_tokens=50,
+                                temperature=0.1,
+                                top_p=0.9,
+                                session_id=session_id,
+                                priority=1
+                            ):
+                                if token:
+                                    state_convert_response += token
+                            
+                            converted_city = state_convert_response.strip()
+                            logger.info(f"🌤️ WEATHER: State conversion: '{city_name}' -> '{converted_city}'")
+                            
+                            # Get weather data with converted city name
+                            weather_data = await get_weather_for_city(converted_city)
                             
                             if weather_data and "error" not in weather_data:
                                 yield f"data: {json.dumps({'token': {'text': '\n\n📊 Found weather data, generating comprehensive response...\n\n---\n\n'}})}\n\n"

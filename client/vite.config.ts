@@ -49,6 +49,14 @@ export default defineConfig({
   css: {
     // Force CSS cache invalidation
     devSourcemap: true,
+    preprocessorOptions: {
+      scss: {
+        // Use modern Sass API to avoid deprecation warnings
+        api: 'modern-compiler',
+        // Silently ignore deprecation warnings if any remain
+        silenceDeprecations: ['legacy-js-api'],
+      },
+    },
   },
   build: {
     sourcemap: false, // Disable sourcemaps in production for smaller files
