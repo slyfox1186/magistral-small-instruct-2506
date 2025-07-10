@@ -1,36 +1,37 @@
 #!/usr/bin/env python3
-"""
-Example Usage of the Advanced Memory Processing System
+"""Example Usage of the Advanced Memory Processing System
 
 This file demonstrates various ways to use the memory processing system
 with different configurations and scenarios.
 """
 
 import asyncio
+
 from memory_processing import AdvancedMemoryProcessor
 from memory_processing.config import get_config, merge_config
+
 
 async def basic_usage_example():
     """Basic usage example with default configuration."""
     print("=== Basic Usage Example ===")
-    
+
     # Assume you have a personal memory system instance
     # personal_memory_system = PersonalMemorySystem("path/to/db")
-    
+
     # Create processor with default configuration
     processor = AdvancedMemoryProcessor(personal_memory_system)
-    
+
     # Process a conversation
     result = await processor.process_conversation(
         user_prompt="Hi, my name is Alice and I'm a data scientist at Microsoft",
         assistant_response="Nice to meet you, Alice! Data science at Microsoft sounds exciting. What kind of projects do you work on?",
         session_id="conversation_001"
     )
-    
+
     # Check results
     if result["success"]:
         metrics = result["metrics"]
-        print(f"✅ Processed successfully")
+        print("✅ Processed successfully")
         print(f"   Stored {metrics['stored_memories']} memories")
         print(f"   Processing time: {result['processing_time']:.2f}s")
         print(f"   Analysis confidence: {metrics.get('analysis_confidence', 0):.2f}")
@@ -40,7 +41,7 @@ async def basic_usage_example():
 async def production_configuration_example():
     """Example using production configuration with custom overrides."""
     print("\n=== Production Configuration Example ===")
-    
+
     # Start with production config and customize
     config = merge_config(
         get_config("production"),
@@ -57,9 +58,9 @@ async def production_configuration_example():
             }
         }
     )
-    
+
     processor = AdvancedMemoryProcessor(personal_memory_system, config)
-    
+
     # Process multiple conversations
     conversations = [
         {
@@ -73,7 +74,7 @@ async def production_configuration_example():
             "session": "session_birthday"
         }
     ]
-    
+
     for conv in conversations:
         result = await processor.process_conversation(
             user_prompt=conv["user"],
@@ -85,11 +86,11 @@ async def production_configuration_example():
 async def fast_processing_example():
     """Example using fast configuration for high-volume scenarios."""
     print("\n=== Fast Processing Example ===")
-    
+
     # Use fast configuration for high-volume processing
     config = get_config("fast")
     processor = AdvancedMemoryProcessor(personal_memory_system, config)
-    
+
     # Simulate high-volume processing
     conversations = [
         ("Hello", "Hi there!", "fast_001"),
@@ -98,10 +99,10 @@ async def fast_processing_example():
         ("I like pizza", "Pizza is delicious! What's your favorite topping?", "fast_004"),
         ("Thanks for the help", "You're welcome! Happy to help.", "fast_005")
     ]
-    
+
     results = []
     start_time = asyncio.get_event_loop().time()
-    
+
     for user_msg, assistant_msg, session in conversations:
         result = await processor.process_conversation(
             user_prompt=user_msg,
@@ -109,10 +110,10 @@ async def fast_processing_example():
             session_id=session
         )
         results.append(result["success"])
-    
+
     end_time = asyncio.get_event_loop().time()
     processing_time = end_time - start_time
-    
+
     success_rate = sum(results) / len(results)
     print(f"Processed {len(conversations)} conversations in {processing_time:.2f}s")
     print(f"Success rate: {success_rate:.2%}")
@@ -121,16 +122,16 @@ async def fast_processing_example():
 async def monitoring_example():
     """Example of monitoring and health checking."""
     print("\n=== Monitoring Example ===")
-    
+
     processor = AdvancedMemoryProcessor(personal_memory_system)
-    
+
     # Process some conversations first
     await processor.process_conversation(
         user_prompt="I live in New York City",
         assistant_response="NYC is an amazing city! Which borough do you live in?",
         session_id="monitor_001"
     )
-    
+
     # Get processing metrics
     metrics = processor.get_processing_metrics()
     print("📊 Processing Metrics:")
@@ -139,12 +140,12 @@ async def monitoring_example():
     print(f"   Average processing time: {metrics['average_processing_time']:.2f}s")
     print(f"   Memories stored: {metrics['memories_stored']}")
     print(f"   Duplicates removed: {metrics['duplicates_removed']}")
-    
+
     # Perform health check
     health = await processor.health_check()
-    print(f"\n🏥 Health Check:")
+    print("\n🏥 Health Check:")
     print(f"   Overall status: {health['status']}")
-    print(f"   Components:")
+    print("   Components:")
     for component, info in health['components'].items():
         status = info.get('status', 'unknown')
         print(f"      {component}: {status}")
@@ -152,7 +153,7 @@ async def monitoring_example():
 async def error_handling_example():
     """Example of error handling and recovery."""
     print("\n=== Error Handling Example ===")
-    
+
     # Create processor with very strict timeouts to trigger errors
     config = merge_config(
         get_config("default"),
@@ -161,21 +162,21 @@ async def error_handling_example():
             "min_confidence_threshold": 0.99     # Very high confidence requirement
         }
     )
-    
+
     processor = AdvancedMemoryProcessor(personal_memory_system, config)
-    
+
     result = await processor.process_conversation(
         user_prompt="This will probably timeout due to the short processing time limit",
         assistant_response="Yes, this is likely to cause a timeout error for demonstration",
         session_id="error_example"
     )
-    
+
     if not result["success"]:
         print("❌ Expected error occurred:")
         for error in result["errors"]:
             print(f"   - {error}")
         print(f"   Processing still attempted for: {result['processing_time']:.3f}s")
-    
+
     # Show that the system continues working with normal config
     processor = AdvancedMemoryProcessor(personal_memory_system)
     result2 = await processor.process_conversation(
@@ -183,13 +184,13 @@ async def error_handling_example():
         assistant_response="Yes, this should process successfully",
         session_id="recovery_example"
     )
-    
+
     print(f"✅ Recovery successful: {result2['success']}")
 
 async def custom_configuration_example():
     """Example of creating a custom configuration."""
     print("\n=== Custom Configuration Example ===")
-    
+
     # Create a custom configuration for a specific use case
     custom_config = {
         "max_processing_time": 25.0,
@@ -224,9 +225,9 @@ async def custom_configuration_example():
             "metric_logging_interval": 1
         }
     }
-    
+
     processor = AdvancedMemoryProcessor(personal_memory_system, custom_config)
-    
+
     # Test with a rich conversation that should trigger multiple memory types
     result = await processor.process_conversation(
         user_prompt="Hi! My name is Dr. Sarah Johnson, I'm a cardiologist at Stanford Hospital. "
@@ -238,7 +239,7 @@ async def custom_configuration_example():
                           "and Mark meet?",
         session_id="rich_conversation"
     )
-    
+
     if result["success"]:
         analysis = result["analysis"]
         print("🧠 Rich conversation analysis:")
@@ -254,12 +255,12 @@ async def main():
     # In practice, you would initialize it like this:
     # from personal_memory_system import PersonalMemorySystem
     # personal_memory_system = PersonalMemorySystem("path/to/your/database.db")
-    
+
     print("Advanced Memory Processing System - Usage Examples")
     print("=" * 60)
     print("Note: These examples assume you have initialized personal_memory_system")
     print("=" * 60)
-    
+
     # Uncomment these to run with actual personal memory system
     # await basic_usage_example()
     # await production_configuration_example()
@@ -267,7 +268,7 @@ async def main():
     # await monitoring_example()
     # await error_handling_example()
     # await custom_configuration_example()
-    
+
     print("\n✅ All examples completed!")
     print("\nTo run these examples with a real memory system:")
     print("1. Initialize PersonalMemorySystem with your database")

@@ -5,6 +5,7 @@ import { CacheManager } from './utils/cacheUtils';
 import './styles/App.css';
 import './styles/StatusAnimations.css';
 import './styles/themes.scss';
+import './styles/Crud.css';
 // Import status system components
 import { AlertProvider } from './contexts/AlertContext';
 import { useAlert } from './hooks/useAlerts';
@@ -14,6 +15,7 @@ import { Status } from './types/status';
 // Import theme system
 import { ThemeProvider } from './contexts/ThemeContext';
 import { ThemeToggleButton } from './components/ThemeToggleButton';
+import ErrorBoundary from './components/ErrorBoundary';
 // Import configuration
 import config from './utils/config';
 // Import constants
@@ -28,6 +30,8 @@ import {
 } from './utils/messageUtils';
 // Import utilities
 import { logger, networkService, performanceMonitor } from './utils';
+// Import chat integration
+import { chatIntegration } from './utils/chatIntegration';
 // Import type guards for safe JSON parsing
 import {
   isAppMessageArray,
@@ -49,6 +53,19 @@ const MarkdownItRenderer = lazy(() =>
     })
     .catch((error) => {
       logger.error('Failed to load MarkdownItRenderer:', error);
+      throw error;
+    })
+);
+
+// Lazy load CRUD interface
+const CrudInterface = lazy(() =>
+  import('./components/crud/CrudInterface')
+    .then((module) => {
+      logger.debug('CrudInterface component loaded');
+      return { default: module.CrudInterface };
+    })
+    .catch((error) => {
+      logger.error('Failed to load CrudInterface:', error);
       throw error;
     })
 );
@@ -113,6 +130,10 @@ function App() {
   const alert = useAlert();
   // Use fixed session ID from environment or generated ID
   const sessionId = MEMORY_SESSION_ID;
+  // Interface mode state
+  const [interfaceMode, setInterfaceMode] = useState<'chat' | 'crud'>('chat');
+  // Backend health state  
+  const [,] = useState<boolean | null>(null);
 
   // Initialize cache management for development
   useEffect(() => {
@@ -396,6 +417,15 @@ function App() {
       logger.error('Failed to clear chat history from localStorage:', error);
     }
 
+    // Archive current conversation in CRUD database
+    try {
+      chatIntegration.archiveCurrentConversation();
+      logger.info('Archived current conversation in CRUD database');
+    } catch (error) {
+      logger.error('Failed to archive conversation in CRUD database:', error);
+      // Don't block the chat flow if CRUD archiving fails
+    }
+
     focusInput(); // Focus input after clearing history
   }, [isLoading, focusInput, messages.length]);
 
@@ -502,6 +532,32 @@ function App() {
     }
   }, [focusInput]);
 
+  // Initialize chat integration and sync existing messages
+  useEffect(() => {
+    const initializeChatIntegration = async () => {
+      try {
+        if (messages.length > 0) {
+          // Initialize conversation with first user message
+          const firstUserMessage = messages.find(m => m.role === 'user');
+          await chatIntegration.initializeConversation(
+            sessionId, 
+            firstUserMessage?.content || undefined
+          );
+          
+          // Save existing messages to CRUD database
+          await chatIntegration.saveMessages(messages);
+          logger.info('Synced existing chat messages to CRUD database');
+        }
+      } catch (error) {
+        logger.error('Failed to initialize chat integration:', error);
+        // Don't block the app if CRUD integration fails
+      }
+    };
+
+    // Only run once on component mount
+    initializeChatIntegration();
+  }, [messages, sessionId]); // Include dependencies but still only run when they change
+
   // Simplified effect to handle stream completion
   useEffect(() => {
     if (streamingComplete && streamingCompleteRef.current === false) {
@@ -528,6 +584,25 @@ function App() {
 
             // Add the complete message without flushSync to prevent layout shifts
             setMessages((prevMessages) => [...prevMessages, newMessage]);
+
+            // Save assistant message to CRUD database
+            (async () => {
+              try {
+                await chatIntegration.saveMessage(newMessage);
+                // Auto-update conversation title after first exchange
+                setMessages((currentMessages) => {
+                  if (currentMessages.length === 2) { // First user + first assistant message
+                    chatIntegration.autoUpdateTitle(currentMessages).catch((error) => {
+                      logger.error('Failed to auto-update conversation title:', error);
+                    });
+                  }
+                  return currentMessages; // Return unchanged since we already added the message
+                });
+              } catch (error) {
+                logger.error('Failed to save assistant message to CRUD database:', error);
+                // Don't block the chat flow if CRUD saving fails
+              }
+            })();
 
             // Show success status briefly
             setCurrentMessageStatus('success');
@@ -979,6 +1054,15 @@ function App() {
     setMessages((prev) => [...prev, newUserMessage]);
     setInputMessage('');
 
+    // Initialize conversation and save user message to CRUD database
+    try {
+      await chatIntegration.initializeConversation(sessionId, userMessageText);
+      await chatIntegration.saveMessage(newUserMessage);
+    } catch (error) {
+      logger.error('Failed to save user message to CRUD database:', error);
+      // Don't block the chat flow if CRUD saving fails
+    }
+
     // Reset textarea height immediately and again after DOM updates
     if (inputRef.current) {
       inputRef.current.style.height = `${config.DEFAULT_TEXTAREA_HEIGHT_REM}rem`;
@@ -1384,25 +1468,38 @@ function App() {
       <div className="corner-controls">
         <ThemeToggleButton />
         <button
-          onClick={handleClearMemoryAndHistory}
-          disabled={isLoading || clearingMemory}
-          className="clear-memory-button"
-          title="Clear assistant's memory AND chat history"
+          onClick={() => setInterfaceMode(interfaceMode === 'chat' ? 'crud' : 'chat')}
+          className="interface-toggle-button"
+          title={interfaceMode === 'chat' ? 'Switch to CRUD Interface' : 'Switch to Chat Interface'}
         >
-          {clearingMemory ? 'Clearing...' : 'Clear Memory & History'}
+          {interfaceMode === 'chat' ? '📁 Manage' : '💬 Chat'}
         </button>
-        <button
-          onClick={clearChatHistory}
-          disabled={isLoading || messages.length === 0}
-          className="clear-history-button"
-          title="Clear chat history"
-        >
-          Clear History
-        </button>
+        {interfaceMode === 'chat' && (
+          <>
+            <button
+              onClick={handleClearMemoryAndHistory}
+              disabled={isLoading || clearingMemory}
+              className="clear-memory-button"
+              title="Clear assistant's memory AND chat history"
+            >
+              {clearingMemory ? 'Clearing...' : 'Clear Memory & History'}
+            </button>
+            <button
+              onClick={clearChatHistory}
+              disabled={isLoading || messages.length === 0}
+              className="clear-history-button"
+              title="Clear chat history"
+            >
+              Clear History
+            </button>
+          </>
+        )}
       </div>
-      <div className="chat-container">
-        {/* Messages container with autoscroll control */}
-        <div ref={scrollContainerRef} className="messages-container">
+      
+      {interfaceMode === 'chat' ? (
+        <div className="chat-container">
+          {/* Messages container with autoscroll control */}
+          <div ref={scrollContainerRef} className="messages-container">
           <TransitionGroup component={null}>
             {messages.map((message) => (
               <CSSTransition
@@ -1674,7 +1771,12 @@ function App() {
             </button>
           </div>
         </div>
-      </div>
+        </div>
+      ) : (
+        <Suspense fallback={<div className="loading">Loading CRUD interface...</div>}>
+          <CrudInterface userId={sessionId} />
+        </Suspense>
+      )}
     </div>
   );
 }
@@ -1682,12 +1784,14 @@ function App() {
 // Wrap App with ThemeProvider and AlertProvider
 const AppWithProviders = () => {
   return (
-    <ThemeProvider>
-      <AlertProvider>
-        <App />
-        <AlertContainer />
-      </AlertProvider>
-    </ThemeProvider>
+    <ErrorBoundary>
+      <ThemeProvider>
+        <AlertProvider>
+          <App />
+          <AlertContainer />
+        </AlertProvider>
+      </ThemeProvider>
+    </ErrorBoundary>
   );
 };
 

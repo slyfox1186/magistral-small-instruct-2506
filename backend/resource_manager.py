@@ -55,7 +55,7 @@ class ResourceManager:
             logger.info(f"📱 ResourceManager using device: {self.device}")
 
             # Model cache: {model_id: (model_instance, execution_lock)}
-            self._model_cache: dict[str, tuple[Any, Optional[threading.Lock]]] = {}
+            self._model_cache: dict[str, tuple[Any, threading.Lock | None]] = {}
 
             # Fine-grained loading locks to prevent race conditions during model loading
             self._model_loading_locks = collections.defaultdict(threading.Lock)
@@ -93,8 +93,8 @@ class ResourceManager:
             return "cuda"  # Force CUDA even without PyTorch
 
     def get_model(
-        self, model_identifier: str, force_device: Optional[str] = None
-    ) -> tuple[Any, Optional[threading.Lock]]:
+        self, model_identifier: str, force_device: str | None = None
+    ) -> tuple[Any, threading.Lock | None]:
         """Get a model instance with thread-safe loading and caching.
 
         Args:
@@ -211,7 +211,7 @@ class ResourceManager:
         self,
         model_identifier: str,
         task_function: Callable[[Any], Any],
-        force_device: Optional[str] = None,
+        force_device: str | None = None,
     ) -> Any:
         """Run inference with proper resource locking.
 
@@ -269,7 +269,7 @@ class ResourceManager:
             "gpu_lock_enabled": self._gpu_execution_lock is not None,
         }
 
-    def clear_cache(self, model_identifier: Optional[str] = None) -> None:
+    def clear_cache(self, model_identifier: str | None = None) -> None:
         """Clear model cache.
 
         Args:

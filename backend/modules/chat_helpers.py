@@ -4,17 +4,17 @@
 import asyncio
 import json
 import logging
-import time
-from datetime import datetime
 
 from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
 
-# Import from other modules
-from .models import ChatStreamRequest
-from .globals import app_state, bg_state
 import redis_utils
 import utils
+
+from .globals import app_state
+
+# Import from other modules
+from .models import ChatStreamRequest
 
 logger = logging.getLogger(__name__)
 
@@ -86,10 +86,10 @@ Return ONLY the single word - nothing else."""
         # Map single words to internal categories
         route_mapping = {
             "STORE": "store_personal_info",
-            "RECALL": "recall_personal_info", 
+            "RECALL": "recall_personal_info",
             "WEATHER": "query_weather",
             "WEB": "perform_web_search",
-            "CRYPTO": "query_cryptocurrency", 
+            "CRYPTO": "query_cryptocurrency",
             "STOCKS": "query_stocks",
             "MEMORY": "query_conversation_history",
             "INTERNAL": "conversation",  # Use memory-aware conversation handler
@@ -114,16 +114,16 @@ def check_service_availability() -> None:
     logger.info("🧠 MEMORY DEBUG: Checking service availability")
     logger.info(f"🧠 MEMORY DEBUG: Redis client object: {app_state.redis_client}")
     logger.info(f"🧠 MEMORY DEBUG: Personal memory object: {app_state.personal_memory}")
-    
+
     # LLM availability is now checked by the persistent server on-demand
     # No need to check here since the server loads on first request
     redis_available = redis_utils.is_redis_available(app_state.redis_client)
     logger.info(f"🧠 MEMORY DEBUG: Redis availability check result: {redis_available}")
-    
+
     if not redis_available:
         logger.error("🧠 MEMORY DEBUG: ❌ Redis Service Unavailable - raising HTTPException")
         raise HTTPException(status_code=503, detail="Redis Service Unavailable")
-    
+
     logger.info("🧠 MEMORY DEBUG: ✅ All services available")
 
 # NO FALLBACK MESSAGE CREATION - SYSTEM MUST WORK OR FAIL
@@ -146,7 +146,7 @@ async def handle_simple_conversational_request(
     # Get minimal memory context from personal memory
     memory_context = ""
     logger.info(f"🧠 MEMORY DEBUG: Attempting to get memory context for session {session_id}")
-    
+
     if app_state.personal_memory:
         logger.info(f"🧠 MEMORY DEBUG: personal_memory is available: {type(app_state.personal_memory)}")
         try:
@@ -154,15 +154,15 @@ async def handle_simple_conversational_request(
             logger.info(f"🧠 MEMORY DEBUG: Calling get_relevant_memories with query: '{user_prompt[:50]}...'")
             memories = await app_state.personal_memory.get_relevant_memories(query=user_prompt, limit=5)
             logger.info(f"🧠 MEMORY DEBUG: Retrieved {len(memories) if memories else 0} memories")
-            
+
             # CRITICAL FIX: Also get core memories (user facts)
-            logger.info(f"🧠 MEMORY DEBUG: Getting core memories...")
+            logger.info("🧠 MEMORY DEBUG: Getting core memories...")
             core_memories = await app_state.personal_memory.get_all_core_memories()
             logger.info(f"🧠 MEMORY DEBUG: Retrieved {len(core_memories) if core_memories else 0} core memories")
-            
+
             # Build memory context from both sources
             memory_parts = []
-            
+
             # Add core memories first (most important user facts)
             if core_memories:
                 core_facts = []
@@ -171,13 +171,13 @@ async def handle_simple_conversational_request(
                 if core_facts:
                     memory_parts.append("User Facts:\n" + "\n".join(core_facts))
                     logger.info(f"🧠 MEMORY DEBUG: Added {len(core_facts)} core memory facts")
-            
+
             # Add regular memories
             if memories:
                 regular_memories = [m.content for m in memories[:3]]
                 memory_parts.extend(regular_memories)
                 logger.info(f"🧠 MEMORY DEBUG: Added {len(regular_memories)} regular memories")
-            
+
             if memory_parts:
                 memory_context = "\n\n".join(memory_parts)
                 logger.info(f"🧠 MEMORY DEBUG: ✅ Using combined memory context ({len(memory_context)} chars)")
@@ -192,7 +192,7 @@ async def handle_simple_conversational_request(
     # Get minimal conversation history from personal memory
     history = []
     logger.info(f"🧠 MEMORY DEBUG: Attempting to get conversation history for session {session_id}")
-    
+
     if app_state.personal_memory:
         try:
             logger.info(f"🧠 MEMORY DEBUG: Calling get_conversation_context for session {session_id}")
@@ -200,7 +200,7 @@ async def handle_simple_conversational_request(
                 session_id, max_messages=4
             )  # Last 2 turns
             logger.info(f"🧠 MEMORY DEBUG: Retrieved {len(recent_memories) if recent_memories else 0} conversation memories")
-            
+
             # Convert to history format
             for i in range(0, len(recent_memories), 2):
                 if i + 1 < len(recent_memories):
@@ -308,7 +308,7 @@ async def handle_simple_conversational_request(
         if full_response:
             logger.info(f"🧠 MEMORY DEBUG: Starting background memory processing for session {session_id}")
             logger.info(f"🧠 MEMORY DEBUG: Response length: {len(full_response)} chars")
-            
+
             # Schedule minimal memory processing in background
             try:
                 logger.info("🧠 MEMORY DEBUG: Creating background task for lightweight_memory_processing")
@@ -323,7 +323,7 @@ async def handle_simple_conversational_request(
             try:
                 logger.info(f"🧠 MEMORY DEBUG: Adding conversation to Redis history for session {session_id}")
                 logger.info(f"🧠 MEMORY DEBUG: Redis client available: {app_state.redis_client is not None}")
-                
+
                 # Call async history function directly with ResourceManager-powered embeddings
                 redis_utils.add_to_conversation_history(
                     session_id,
@@ -364,52 +364,52 @@ async def lightweight_memory_processing(user_prompt: str, response: str, session
     5. Validation - Post-storage verification
     """
     logger.info(f"🧠 ADVANCED_MEMORY: Starting world-class memory processing for session {session_id}")
-    
+
     try:
         if not app_state.personal_memory:
             logger.warning("🧠 ADVANCED_MEMORY: personal_memory is None, exiting early")
             return
-        
+
         # Import the advanced memory processing system
         from memory_processing import AdvancedMemoryProcessor, get_config
-        
+
         # Get production configuration
         config = get_config('production')
-        
+
         # Create advanced memory processor instance
         processor = AdvancedMemoryProcessor(app_state.personal_memory, config)
-        
+
         # Initialize processor with LLM server
         try:
             from persistent_llm_server import get_llm_server
             llm_server = await get_llm_server()
             await processor.initialize(llm_server)
-            logger.info(f"🧠 ADVANCED_MEMORY: LLM server initialized successfully")
+            logger.info("🧠 ADVANCED_MEMORY: LLM server initialized successfully")
         except Exception as e:
             logger.error(f"🧠 ADVANCED_MEMORY: Failed to get LLM server: {e}")
             return
-        
+
         # Process the conversation through the advanced pipeline
-        logger.info(f"🧠 ADVANCED_MEMORY: Processing conversation through 5-stage pipeline")
-        
+        logger.info("🧠 ADVANCED_MEMORY: Processing conversation through 5-stage pipeline")
+
         processing_result = await processor.process_with_retry(
             user_prompt=user_prompt,
             assistant_response=response,
             session_id=session_id
         )
-        
+
         # Log processing results
         if processing_result.success:
             logger.info(f"🧠 ADVANCED_MEMORY: ✅ Processing successful for session {session_id}")
             logger.info(f"🧠 ADVANCED_MEMORY: Stored {processing_result.memories_stored} memories "
                        f"in {processing_result.processing_time:.2f}s")
-            
+
             # Log detailed stage timings
             if processing_result.stage_timings:
-                stage_info = ", ".join([f"{stage}: {time:.2f}s" 
+                stage_info = ", ".join([f"{stage}: {time:.2f}s"
                                       for stage, time in processing_result.stage_timings.items()])
                 logger.info(f"🧠 ADVANCED_MEMORY: Stage timings - {stage_info}")
-            
+
             # Log extraction statistics
             if processing_result.extraction_stats:
                 stats = processing_result.extraction_stats
@@ -418,11 +418,11 @@ async def lightweight_memory_processing(user_prompt: str, response: str, session
                            f"Core: {stats.get('core_memories', 0)}, "
                            f"Regular: {stats.get('regular_memories', 0)}, "
                            f"Avg importance: {stats.get('avg_importance', 0):.2f}")
-                
+
         else:
             error_msg = processing_result.error_message or "Unknown error"
             logger.error(f"🧠 ADVANCED_MEMORY: ❌ Processing failed for session {session_id}: {error_msg}")
-        
+
         # Log system health periodically
         stats = processor.get_processing_stats()
         if stats['total_processed'] % 10 == 0:

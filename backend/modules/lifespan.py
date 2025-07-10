@@ -15,7 +15,7 @@ import monitoring
 import redis_utils
 import stock_search
 from colored_logging import create_section_separator, log_startup_banner
-from config import API_CONFIG, MODEL_CONFIG, MODEL_PATH
+from config import MODEL_CONFIG, MODEL_PATH
 from constants import CACHE_TTL
 from llm_optimizer import initialize_llm_optimizer
 from memory_provider import MemoryConfig, get_memory_system
@@ -38,7 +38,6 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application startup and shutdown management."""
-
     print(create_section_separator(" APPLICATION STARTUP", 80))
     logger.info("Starting FastAPI application lifecycle")
 

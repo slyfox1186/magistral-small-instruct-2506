@@ -23,6 +23,12 @@
     /* Add Vite client types */
     "types": ["vite/client"],
 
+    /* Path mapping */
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+
     /* Strict type checking */
     "noImplicitAny": true,
     "strictNullChecks": true,

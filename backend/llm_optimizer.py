@@ -112,7 +112,7 @@ class LLMOptimizer:
             # Make the LLM call - ensure stop tokens are always included
             kwargs_with_stop = kwargs.copy()
             kwargs_with_stop.setdefault("stop", ["[/INST]", "[/SYSTEM_PROMPT]"])
-            
+
             response = llm_instance.create_completion(
                 prompt=prompt, max_tokens=max_tokens, temperature=temperature, **kwargs_with_stop
             )

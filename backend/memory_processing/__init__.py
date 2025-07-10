@@ -1,5 +1,4 @@
-"""
-Advanced Memory Processing System for AI Assistant
+"""Advanced Memory Processing System for AI Assistant
 
 This package provides a world-class, production-ready memory processing system
 that transforms conversations into structured, meaningful memories.
@@ -28,21 +27,21 @@ Usage:
 """
 
 from .advanced_memory_processor import AdvancedMemoryProcessor
-from .config import get_config, MemoryProcessingConfig
+from .config import MemoryProcessingConfig, get_config
 from .content_analyzer import ContentAnalyzer
-from .memory_extractor import MemoryExtractor
 from .deduplication_engine import DeduplicationEngine
-from .utils import extract_entities, calculate_text_similarity, format_memory_content
+from .memory_extractor import MemoryExtractor
+from .utils import calculate_text_similarity, extract_entities, format_memory_content
 
 __version__ = "1.0.0"
 __all__ = [
     "AdvancedMemoryProcessor",
-    "get_config",
-    "MemoryProcessingConfig",
     "ContentAnalyzer",
-    "MemoryExtractor",
     "DeduplicationEngine",
-    "extract_entities",
+    "MemoryExtractor",
+    "MemoryProcessingConfig",
     "calculate_text_similarity",
-    "format_memory_content"
+    "extract_entities",
+    "format_memory_content",
+    "get_config"
 ]

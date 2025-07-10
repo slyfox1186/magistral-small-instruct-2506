@@ -48,6 +48,17 @@
   --shadow-xl: 0 20px 40px rgba(0, 0, 0, 0.35);
   --shadow-glow: 0 0 30px rgba(99, 102, 241, 0.3);
 
+  /* CRUD Interface Colors */
+  --accent-color: var(--accent-primary);
+  --accent-color-bg: var(--accent-primary-faded);
+  --accent-color-hover: var(--accent-primary-hover);
+  --bg-hover: var(--interactive-hover);
+  --error-color: var(--accent-danger);
+  --error-color-hover: #dc2626;
+  --error-bg: rgba(239, 68, 68, 0.1);
+  --warning-color: var(--accent-warning);
+  --warning-bg: rgba(251, 191, 36, 0.1);
+
   /* Sophisticated Glow Effects */
   --glow-primary: 0 0 25px rgba(99, 102, 241, 0.6);
   --glow-success: 0 0 25px rgba(34, 197, 94, 0.6);
@@ -140,7 +151,8 @@ body {
 
 .clear-history-button,
 .clear-memory-button,
-.theme-toggle-button {
+.theme-toggle-button,
+.interface-toggle-button {
   padding: 0.625rem 1.25rem;
   border: 1px solid rgba(148, 163, 184, 0.4);
   border-radius: 0.5rem;

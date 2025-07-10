@@ -10,7 +10,6 @@ from .lifespan import lifespan
 
 def create_app() -> FastAPI:
     """Create and configure FastAPI application."""
-    
     # Create FastAPI app with lifespan management
     app = FastAPI(lifespan=lifespan)
 
@@ -24,9 +23,9 @@ def create_app() -> FastAPI:
     )
 
     # Setup all route modules
+    from .chat_routes import setup_chat_routes
     from .health_routes import setup_health_routes
     from .memory_routes import setup_memory_routes
-    from .chat_routes import setup_chat_routes
     from .trading_routes import setup_trading_routes
 
     setup_health_routes(app)

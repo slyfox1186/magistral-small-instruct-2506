@@ -5,6 +5,7 @@ export interface AlertContextType {
   state: AlertState;
   dispatch: React.Dispatch<AlertAction>;
   addAlert: (alert: Omit<Alert, 'id' | 'timestamp'>) => void;
+  showAlert: (message: string, type: 'success' | 'error' | 'warning' | 'info') => void;
 }
 
 export const AlertContext = createContext<AlertContextType | undefined>(undefined);

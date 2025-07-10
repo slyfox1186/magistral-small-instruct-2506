@@ -7,7 +7,7 @@ import os
 import time
 from collections import deque, namedtuple
 
-from config import API_CONFIG, GENERATION_CONFIG, MODEL_CONFIG, MODEL_PATH
+from config import GENERATION_CONFIG, MODEL_CONFIG, MODEL_PATH
 from constants import (
     BATCH_PROCESSING_SIZE,
     DEFAULT_BATCH_SIZE,
@@ -111,7 +111,7 @@ class ApplicationState:
     This class encapsulates all global state to avoid scattered globals
     and provide better control over initialization and access.
     """
-    
+
     def __init__(self):
         # Core services
         self.llm = None
@@ -119,26 +119,26 @@ class ApplicationState:
         self.token_manager: TokenManager | None = None
         self.redis_client = None
         self.state_manager: RedisStateManager | None = None
-        
+
         # Memory services
         self.personal_memory = None
         self.importance_calculator = None
-        
+
         # Processing engines
         self.ultra_engine = None
         self.metacognitive_engine = None
-        
+
         # Monitoring
         self.health_checker = None
         self.memory_analytics = None
-        
+
         # External services
         self.crypto_trader = None
         self.stock_searcher = None
-        
+
         # Background processing
         self.background_tasks: list = []
-        
+
         # Prometheus metrics (initialized if available)
         self.prometheus_available = PROMETHEUS_AVAILABLE
         self.gpu_queue_depth = None
@@ -152,23 +152,23 @@ class ApplicationState:
         self.memory_consolidation_total = None
         self.memory_consolidation_duration = None
         self.conversation_turns_total = None
-        
+
         # Initialize Prometheus metrics if available
         if PROMETHEUS_AVAILABLE:
             self._init_prometheus_metrics()
-        
+
     def is_initialized(self) -> bool:
         """Check if core services are initialized."""
         return self.llm is not None and self.redis_client is not None
-        
+
     def reset(self):
         """Reset all services to initial state."""
         self.__init__()
-    
+
     def _init_prometheus_metrics(self):
         """Initialize Prometheus metrics."""
         from prometheus_client import Counter, Gauge, Histogram
-        
+
         # 1. LATENCY: Request processing time
         self.request_duration = Histogram(
             "neural_chat_request_duration_seconds",
@@ -242,24 +242,24 @@ class BackgroundProcessingState:
     This class encapsulates all background processing state to avoid
     scattered globals and provide better control.
     """
-    
+
     def __init__(self):
         # Task queues
         self.memory_extraction_queue = deque(maxlen=MAX_MEMORY_EXTRACTION_QUEUE_SIZE)
         self.embedding_queue = deque(maxlen=MAX_EMBEDDING_QUEUE_SIZE)
-        
+
         # Processing state
         self.background_processor_running = False
         self.background_processor_task = None
-        
+
         # Activity tracking
         self.last_chat_activity = 0.0
-        
+
         # Processing parameters
         self.gpu_idle_threshold = 2.0  # Seconds of inactivity before considering GPU idle
         self.batch_size = BATCH_PROCESSING_SIZE  # Process this many memory extractions in one batch
         self.batch_timeout = 10.0  # Max seconds to wait for batch to fill up
-    
+
     def reset(self):
         """Reset background processing state."""
         self.__init__()
@@ -347,7 +347,6 @@ async def intelligent_background_processor():
     - Prioritizes real-time chat responses
     - Prevents concurrent model access (SEGFAULT protection)
     """
-
     logger.debug("Background processor started")
 
     try:

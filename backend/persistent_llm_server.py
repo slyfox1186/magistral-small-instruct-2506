@@ -91,7 +91,7 @@ class PersistentLLMServer:
                 from llama_cpp import Llama
             except ImportError:
                 raise ImportError("llama-cpp-python is not installed. The LLM server cannot start without it.")
-                
+
             self.model = Llama(
                 model_path=self.model_path,
                 n_gpu_layers=MODEL_CONFIG.get("n_gpu_layers", -1),

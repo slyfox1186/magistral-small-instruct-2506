@@ -51,7 +51,7 @@ def calculate_information_density(text: str) -> float:
     has_technical_markers = any(c in text for c in "{}()[];,:")
     # Check for emphasis markers
     has_emphasis = "!" in text or "?" in text or any(word.isupper() and len(word) > 1 for word in text.split())
-    
+
     # Calculate base density
     density = (
         lexical_diversity * 0.4
@@ -87,16 +87,16 @@ def detect_emotional_salience(text: str) -> float:
 
     # Basic keyword presence check without complex regex
     emotion_keywords = [
-        "love", "hate", "adore", "despise", "passionate", "excited", "thrilled", 
-        "devastated", "furious", "terrified", "amazing", "terrible", "horrible", 
-        "wonderful", "fantastic", "awful", "brilliant", "disgusting", "best", 
-        "worst", "favorite", "always", "never", "trauma", "milestone", 
+        "love", "hate", "adore", "despise", "passionate", "excited", "thrilled",
+        "devastated", "furious", "terrified", "amazing", "terrible", "horrible",
+        "wonderful", "fantastic", "awful", "brilliant", "disgusting", "best",
+        "worst", "favorite", "always", "never", "trauma", "milestone",
         "breakthrough", "revelation", "epiphany"
     ]
-    
+
     # Count emotional keywords
     emotional_word_count = sum(1 for word in text_lower.split() if word in emotion_keywords)
-    
+
     # Simple scoring based on presence
     if emotional_word_count > 0:
         salience_score += min(emotional_word_count * 0.15, 0.6)
@@ -367,14 +367,14 @@ def compress_memory_text(text: str) -> str:
     "I work as an AI developer and am the CEO of Myron Labs" → "Role: AI Developer, CEO Myron Labs"
     """
     compressed = text.strip()
-    
+
     # Simple replacements without regex
     # Clean up common verbose phrases
     compressed = compressed.replace(" and ", " | ")
-    
+
     # Remove extra spaces
     compressed = " ".join(compressed.split())
-    
+
     # Remove trailing periods
     compressed = compressed.rstrip(".")
 
@@ -937,7 +937,7 @@ class TokenManager:
             blocks = []
             current_block = []
             lines = web_results.split("\n")
-            
+
             for line in lines:
                 if line.strip() == "" or (line.strip().startswith("-") and len(line.strip()) >= 3 and all(c == "-" for c in line.strip())):
                     if current_block:
@@ -946,7 +946,7 @@ class TokenManager:
                         current_block = []
                 else:
                     current_block.append(line)
-            
+
             if current_block:
                 blocks.append("\n".join(current_block))
             # Preserve important blocks (first few results)
@@ -1015,7 +1015,7 @@ class TokenManager:
         sections = []
         current_section = []
         current_title = ""
-        
+
         lines = system_prompt.split("\n")
         for i, line in enumerate(lines):
             # Check if line is a section header (starts and ends with ---)
@@ -1030,7 +1030,7 @@ class TokenManager:
                 current_title = title
             else:
                 current_section.append(line)
-        
+
         # Add the last section
         if current_section or current_title:
             sections.append("\n".join(current_section))

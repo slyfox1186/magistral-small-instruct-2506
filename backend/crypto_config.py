@@ -25,7 +25,7 @@ Generic Entity Examples:
 # Common cryptocurrency mappings
 CRYPTO_MAPPINGS = {
     "bitcoin": "BTC",
-    "ethereum": "ETH", 
+    "ethereum": "ETH",
     "binance": "BNB",
     "cardano": "ADA",
     "solana": "SOL",
@@ -107,7 +107,7 @@ COINTELEGRAPH_API_CONFIG = {
 NEWS_CATEGORIES = [
     "all",
     "bitcoin",
-    "ethereum", 
+    "ethereum",
     "altcoins",
     "blockchain",
     "defi",

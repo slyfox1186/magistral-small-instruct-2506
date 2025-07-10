@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """System prompt configuration and generation."""
 
-from datetime import datetime, timezone
-UTC = timezone.utc
+from datetime import UTC, datetime
+
+UTC = UTC
 
 # ===================== System Prompt =====================
 web_source_instructions = """### CITING WEB SOURCES:

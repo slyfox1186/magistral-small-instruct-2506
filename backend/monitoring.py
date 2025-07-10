@@ -246,12 +246,23 @@ class HealthChecker:
         """Check Redis health"""
         try:
             start = time.time()
-            await asyncio.to_thread(redis_client.ping)
+            # Check if this is an async Redis client or sync
+            if hasattr(redis_client, 'ping') and asyncio.iscoroutinefunction(redis_client.ping):
+                # Async Redis client
+                await redis_client.ping()
+            else:
+                # Sync Redis client - use thread executor
+                await asyncio.to_thread(redis_client.ping)
             latency_ms = (time.time() - start) * 1000
 
             # Try to get Redis info, handle fallback mode gracefully
             try:
-                info = await asyncio.to_thread(redis_client.info)
+                if hasattr(redis_client, 'info') and asyncio.iscoroutinefunction(redis_client.info):
+                    # Async Redis client
+                    info = await redis_client.info()
+                else:
+                    # Sync Redis client
+                    info = await asyncio.to_thread(redis_client.info)
                 metadata = {
                     "latency_ms": round(latency_ms, 2),
                     "connected_clients": info.get("connected_clients", 0),

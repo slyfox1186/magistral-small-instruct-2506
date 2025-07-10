@@ -2,22 +2,24 @@
 """Main application modules."""
 
 # Import all the modules to make them available
-from . import config
-from . import globals
-from . import helpers
-from . import models
-from . import system_prompt
-from . import lifespan
-from . import health_routes
-from . import memory_routes
+from . import (
+    config,
+    globals,
+    health_routes,
+    helpers,
+    lifespan,
+    memory_routes,
+    models,
+    system_prompt,
+)
 
 __all__ = [
     "config",
-    "globals", 
+    "globals",
+    "health_routes",
     "helpers",
+    "lifespan",
+    "memory_routes",
     "models",
     "system_prompt",
-    "lifespan",
-    "health_routes",
-    "memory_routes",
 ]

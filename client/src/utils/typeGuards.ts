@@ -3,7 +3,7 @@
  * Eliminates 'any' types and provides runtime type safety.
  */
 
-import { AppMessage } from './types';
+import { AppMessage } from './messageUtils';
 
 /**
  * Type guard for saved message data from localStorage

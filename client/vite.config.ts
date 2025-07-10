@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import path from 'path';
 
 // Helper function to check if a string contains a substring (TypeScript-friendly)
 function contains(source: string, searchString: string): boolean {
@@ -33,6 +34,11 @@ function getLangGroup(lang: string): string {
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+    },
+  },
   server: {
     port: 4000,
     // Force cache busting for CSS files during development

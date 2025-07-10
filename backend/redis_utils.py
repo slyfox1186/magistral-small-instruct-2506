@@ -293,7 +293,11 @@ def initialize_redis_connection():
     base_redis_client = redis.Redis(connection_pool=connection_pool)
 
     # Verify connection
-    base_redis_client.ping()
+    try:
+        base_redis_client.ping()
+    except Exception as e:
+        logger.error(f"Failed to ping Redis: {e}")
+        raise
 
     # Create resilient client with fallback if available
     if RESILIENT_CLIENT_AVAILABLE:
@@ -657,7 +661,7 @@ async def get_conversation_history(
 
 
 # --- Similarity Search (Now on JSON Index) ---
-def find_similar_vital_memories(
+async def find_similar_vital_memories(
     query_text: str, top_n: int = 5, min_similarity: float = 0.5, redis_client_instance=None
 ) -> list[tuple[str, float, float | None]]:
     """Finds vital memories (Type B - JSON) semantically similar to the query text.
@@ -698,7 +702,7 @@ def find_similar_vital_memories(
     except redis.exceptions.ResponseError as e:
         if "Unknown index name" in str(e):
             logger.warning(f"Index '{VECTOR_INDEX_NAME}' not found. Attempting to create it now...")
-            index_created = _create_json_vector_index(client)
+            index_created = await _create_json_vector_index(client)
             if not index_created:
                 logger.error(
                     f"Failed to create index '{VECTOR_INDEX_NAME}' on the fly. Cannot perform vector search."
@@ -764,7 +768,7 @@ def find_similar_vital_memories(
 
 
 # --- Vital Memory B Functions (Now using JSON) ---
-def add_vital_memory_b(memory_text: str, importance: float, redis_client_instance=None):
+async def add_vital_memory_b(memory_text: str, importance: float, redis_client_instance=None):
     """Adds or updates a vital memory B as a JSON document."""
     # Use the provided redis_client_instance parameter
     client = redis_client_instance if redis_client_instance is not None else redis_client
@@ -812,7 +816,7 @@ def add_vital_memory_b(memory_text: str, importance: float, redis_client_instanc
     }
     try:
         # Store using the client we determined earlier
-        client.json().set(memory_key, ".", memory_doc)
+        await client.json().set(memory_key, ".", memory_doc)
         logger.info(
             f"Successfully added/updated vital memory B JSON (Key: {memory_key}): '{cleaned_memory[:50]}...'"
         )

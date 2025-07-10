@@ -14,15 +14,15 @@ except ImportError:
     pass
 
 # Import from our modules
-from .globals import app_state
 from memory_provider import get_memory_stats
+
+from .globals import app_state
 
 logger = logging.getLogger(__name__)
 
 
 def setup_health_routes(app: FastAPI):
     """Setup health and monitoring routes."""
-
     # ===================== Health & Monitoring Endpoints =====================
 
     @app.get("/health")

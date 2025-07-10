@@ -17,7 +17,6 @@ from googleapiclient.errors import HttpError
 import utils
 from circuit_breaker import CircuitBreakerError, get_web_scraper_breaker
 from config import CACHE_CONFIG, EXTERNAL_SERVICES
-from gpu_lock import Priority, PriorityLock
 from security import url_validator
 from utils import format_prompt
 
@@ -115,26 +114,26 @@ async def validate_url_accessibility(url: str, timeout_seconds: int = 5) -> bool
             async with session.head(url) as response:
                 status = response.status
                 logger.debug(f"URL validation for {url}: HTTP {status}")
-                
+
                 # Consider these status codes as inaccessible
                 if status in [404, 403, 500, 501, 502, 503, 504]:
                     logger.warning(f"URL {url} returned error status: {status}")
                     return False
-                
+
                 # 401 Unauthorized - might still be scrapeable with different headers
                 if status == 401:
                     logger.info(f"URL {url} requires authentication (401), will try scraping anyway")
                     return True
-                
+
                 # 200-299 range is good, 300-399 redirects are usually fine
                 if 200 <= status < 400:
                     return True
-                
+
                 # Any other status code, be conservative and skip
                 logger.warning(f"URL {url} returned unexpected status: {status}")
                 return False
-                
-    except asyncio.TimeoutError:
+
+    except TimeoutError:
         logger.warning(f"URL validation timeout for {url}")
         return False
     except aiohttp.ClientError as e:
@@ -641,7 +640,7 @@ JSON Response:"""
         # Use persistent LLM server
         from persistent_llm_server import get_llm_server
         llm_server = await get_llm_server()
-        
+
         raw_llm_output = await llm_server.generate(
             prompt=decision_prompt,
             max_tokens=200,
@@ -650,7 +649,7 @@ JSON Response:"""
         )
         # Simple JSON extraction without regex
         llm_response_text = raw_llm_output.strip()
-        
+
         # Check for markdown code blocks
         if "```json" in llm_response_text:
             start = llm_response_text.find("```json") + 7
@@ -660,7 +659,7 @@ JSON Response:"""
             else:
                 # No closing ```, take from start to end
                 llm_response_text = llm_response_text[start:].strip()
-        
+
         # Find JSON object boundaries
         start_idx = llm_response_text.find("{")
         end_idx = llm_response_text.rfind("}")
@@ -856,7 +855,7 @@ Please extract and format the relevant information using markdown."""
         # Use persistent LLM server
         from persistent_llm_server import get_llm_server
         llm_server = await get_llm_server()
-        
+
         # Extract the generated text response
         extracted_data = await llm_server.generate(
             prompt=formatted_prompt,
@@ -1102,18 +1101,18 @@ async def perform_web_search_async(
         import re
         url_pattern = r'https?://[^\s]+'
         urls_in_query = re.findall(url_pattern, query)
-        
+
         if urls_in_query:
             # This is a URL to scrape, not a search query
             url_to_scrape = urls_in_query[0]
             logger.info(f"Detected URL in query, switching to direct scraping: {url_to_scrape}")
-            
+
             scraped_content = await scrape_website(url_to_scrape)
             if scraped_content:
                 return f"# Content from {url_to_scrape}\n\n{scraped_content}"
             else:
                 return f"Failed to scrape content from {url_to_scrape}"
-        
+
         # Regular search flow
         results = await google_search_async(query, num_results)
         if not results:
@@ -1173,7 +1172,7 @@ Search Results:
             # Use persistent LLM server instead of old interface
             from persistent_llm_server import get_llm_server
             llm_server = await get_llm_server()
-            
+
             response_text = await llm_server.generate(
                 prompt=formatted_prompt,
                 max_tokens=200,
@@ -1188,7 +1187,7 @@ Search Results:
 
             # Simple JSON extraction without regex
             json_text = response_text
-            
+
             # Remove markdown code blocks if present
             if "```json" in response_text:
                 start = response_text.find("```json") + 7
@@ -1249,7 +1248,7 @@ Search Results:
                     if not is_accessible:
                         logger.warning(f"Skipping inaccessible URL: {url}")
                         return None
-                    
+
                     logger.info(f"✅ URL accessible, starting scrape: {url}")
                     content = await scrape_website(url=url, timeout_seconds=3, max_retries=1)
                     logger.info(f"🔍 Scrape completed for {url}: {len(content) if content else 0} chars")

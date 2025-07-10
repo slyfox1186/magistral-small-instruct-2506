@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import MarkdownIt from 'markdown-it';
 import hljs from 'highlight.js';
