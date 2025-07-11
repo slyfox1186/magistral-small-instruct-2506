@@ -1,25 +1,21 @@
 #!/usr/bin/env python3
 """Configuration module for FastAPI backend.
+
 Contains all imports, environment setup, and logging configuration.
 """
 
-# Load environment variables FIRST before any other imports
-from dotenv import load_dotenv
-
-load_dotenv()
-
+# Standard library imports
 import logging
 import os
 import tracemalloc
-from datetime import UTC
-
-UTC = UTC
 
 # Third-party imports
+from dotenv import load_dotenv
 
-# Try to import prometheus_client
+# Check for prometheus_client availability
 try:
-    from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
+    # Import is only used to check availability, not actually used in this module
+    import prometheus_client as _prometheus_client  # noqa: F401
 
     PROMETHEUS_AVAILABLE = True
 except ImportError:
@@ -27,6 +23,9 @@ except ImportError:
 
 # Local module imports
 from colored_logging import setup_colored_logging
+
+# Load environment variables FIRST before any other setup
+load_dotenv()
 
 # Environment setup
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -42,3 +41,10 @@ if not PROMETHEUS_AVAILABLE:
 # Configure beautiful colored logging
 setup_colored_logging(level=logging.DEBUG, enable_stream_formatting=True)
 logger = logging.getLogger(__name__)
+
+# API Configuration
+API_CONFIG = {
+    "cors_origins": ["http://localhost:3000", "http://localhost:4000"],
+    "enable_metrics": PROMETHEUS_AVAILABLE,
+    "debug": os.getenv("DEBUG", "false").lower() == "true"
+}

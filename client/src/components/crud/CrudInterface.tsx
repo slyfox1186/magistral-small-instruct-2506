@@ -6,11 +6,12 @@ import { UserSettingsComponent } from './UserSettings';
 
 interface CrudInterfaceProps {
   userId: string;
+  onBackToChat?: (conversationId?: string) => void;
 }
 
 type ActiveView = 'conversations' | 'settings';
 
-export const CrudInterface: React.FC<CrudInterfaceProps> = ({ userId }) => {
+const CrudInterface: React.FC<CrudInterfaceProps> = ({ userId, onBackToChat }) => {
   const [activeView, setActiveView] = useState<ActiveView>('conversations');
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
 
@@ -26,6 +27,15 @@ export const CrudInterface: React.FC<CrudInterfaceProps> = ({ userId }) => {
   return (
     <div className="crud-interface">
       <div className="crud-nav">
+        {onBackToChat && (
+          <button
+            className="nav-button back-button"
+            onClick={() => onBackToChat(selectedConversation?.id)}
+            title="Back to Chat"
+          >
+            ← Back to Chat
+          </button>
+        )}
         <button
           className={`nav-button ${activeView === 'conversations' ? 'active' : ''}`}
           onClick={() => setActiveView('conversations')}
@@ -76,3 +86,5 @@ export const CrudInterface: React.FC<CrudInterfaceProps> = ({ userId }) => {
     </div>
   );
 };
+
+export default CrudInterface;

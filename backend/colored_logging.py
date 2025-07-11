@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Advanced colored logging configuration for professional terminal output.
+
 Provides intelligent color coding, structured formatting, and enhanced readability.
 """
 
@@ -7,7 +8,12 @@ import logging
 import sys
 from datetime import UTC, datetime
 
-UTC = UTC
+# Constants to replace magic values
+PARTS_LENGTH_TWO = 2
+PARTS_LENGTH_FOUR = 4
+PERCENTAGE_PARTS_MIN = 2
+LOGGER_NAME_MAX_LENGTH = 20
+LOGGER_NAME_TRUNCATE_LENGTH = 17
 
 
 class ColorCodes:
@@ -76,13 +82,16 @@ class ColorCodes:
 
 
 class IntelligentColorFormatter(logging.Formatter):
-    """Intelligent logging formatter that applies colors based on:
+    """Intelligent logging formatter that applies colors based on content.
+
+    Applies colors based on:
     - Log level (ERROR, WARNING, INFO, DEBUG)
     - Content type (numbers, strings, technical terms)
-    - Context (model parameters, file paths, etc.)
+    - Context (model parameters, file paths, etc.).
     """
 
     def __init__(self):
+        """Initialize the color formatter."""
         super().__init__()
 
         # Level-based color mapping
@@ -124,22 +133,49 @@ class IntelligentColorFormatter(logging.Formatter):
         """Pre-compile all regex patterns for better performance."""
         # Technical terms for simple string matching
         self.technical_terms = [
-            "llama", "aria", "mistral", "token", "embedding", "ctx",
-            "gpu", "cuda", "memory", "model", "inference", "attention",
-            "transformer", "neural", "ai", "redis", "database", "cache",
-            "session", "api", "endpoint"
+            "llama",
+            "aria",
+            "mistral",
+            "token",
+            "embedding",
+            "ctx",
+            "gpu",
+            "cuda",
+            "memory",
+            "model",
+            "inference",
+            "attention",
+            "transformer",
+            "neural",
+            "ai",
+            "redis",
+            "database",
+            "cache",
+            "session",
+            "api",
+            "endpoint",
         ]
 
         # Success terms for simple string matching
         self.success_terms = [
-            "success", "loaded", "initialized", "connected",
-            "ready", "ok", "completed"
+            "success",
+            "loaded",
+            "initialized",
+            "connected",
+            "ready",
+            "ok",
+            "completed",
         ]
 
         # Error terms for simple string matching
         self.error_terms = [
-            "error", "failed", "failure", "exception",
-            "warning", "timeout", "abort"
+            "error",
+            "failed",
+            "failure",
+            "exception",
+            "warning",
+            "timeout",
+            "abort",
         ]
 
         # Memory operation strings and their colors
@@ -162,150 +198,193 @@ class IntelligentColorFormatter(logging.Formatter):
 
     def colorize_content(self, message: str) -> str:
         """Apply intelligent content-based coloring to message text."""
-        # Split message into words for easier processing
         words = message.split()
-        colored_words = []
+        colored_words = [self._colorize_word(word) for word in words]
+        return " ".join(colored_words)
 
-        for word in words:
-            colored_word = word
+    def _colorize_word(self, word: str) -> str:
+        """Apply coloring to a single word based on its characteristics."""
+        # Simple path detection (starts with /)
+        if word.startswith("/") and len(word) > 1:
+            return f"{ColorCodes.CYAN}{word}{ColorCodes.RESET}"
 
-            # Simple path detection (starts with /)
-            if word.startswith('/') and len(word) > 1:
-                colored_word = f"{ColorCodes.CYAN}{word}{ColorCodes.RESET}"
+        # Simple URL detection (starts with http:// or https://)
+        if word.startswith(("http://", "https://")):
+            return f"{ColorCodes.BRIGHT_CYAN}{ColorCodes.UNDERLINE}{word}{ColorCodes.RESET}"
 
-            # Simple URL detection (starts with http:// or https://)
-            elif word.startswith(('http://', 'https://')):
-                colored_word = f"{ColorCodes.BRIGHT_CYAN}{ColorCodes.UNDERLINE}{word}{ColorCodes.RESET}"
+        # Simple number detection
+        if self._is_number(word):
+            return f"{ColorCodes.BRIGHT_GREEN}{word}{ColorCodes.RESET}"
 
-            # Simple number detection
-            elif self._is_number(word):
-                colored_word = f"{ColorCodes.BRIGHT_GREEN}{word}{ColorCodes.RESET}"
+        # Simple key=value detection
+        if self._is_key_value_pair(word):
+            return self._colorize_key_value_pair(word)
 
-            # Simple key=value detection
-            elif '=' in word and not word.startswith('=') and not word.endswith('='):
-                parts = word.split('=', 1)
-                if len(parts) == 2:
-                    key, value = parts
-                    colored_word = f"{ColorCodes.BRIGHT_MAGENTA}{key}{ColorCodes.RESET}={ColorCodes.WHITE}{value}{ColorCodes.RESET}"
+        # Check for special term types
+        return self._colorize_special_terms(word)
 
-            # Check for technical terms
-            else:
-                word_lower = word.lower()
-                for term in self.technical_terms:
-                    if term in word_lower:
-                        colored_word = f"{ColorCodes.YELLOW}{word}{ColorCodes.RESET}"
-                        break
+    def _is_key_value_pair(self, word: str) -> bool:
+        """Check if word is a key=value pair."""
+        return "=" in word and not word.startswith("=") and not word.endswith("=")
 
-                # Check for success terms
-                if colored_word == word:
-                    for term in self.success_terms:
-                        if term in word_lower:
-                            colored_word = f"{ColorCodes.GREEN}{word}{ColorCodes.RESET}"
-                            break
+    def _colorize_key_value_pair(self, word: str) -> str:
+        """Colorize a key=value pair."""
+        parts = word.split("=", 1)
+        if len(parts) == PARTS_LENGTH_TWO:
+            key, value = parts
+            return f"{ColorCodes.BRIGHT_MAGENTA}{key}{ColorCodes.RESET}={ColorCodes.WHITE}{value}{ColorCodes.RESET}"
+        return word
 
-                # Check for error terms
-                if colored_word == word:
-                    for term in self.error_terms:
-                        if term in word_lower:
-                            colored_word = f"{ColorCodes.RED}{word}{ColorCodes.RESET}"
-                            break
+    def _colorize_special_terms(self, word: str) -> str:
+        """Check and colorize special terms (technical, success, error)."""
+        word_lower = word.lower()
 
-            colored_words.append(colored_word)
+        # Check for technical terms
+        for term in self.technical_terms:
+            if term in word_lower:
+                return f"{ColorCodes.YELLOW}{word}{ColorCodes.RESET}"
 
-        return ' '.join(colored_words)
+        # Check for success terms
+        for term in self.success_terms:
+            if term in word_lower:
+                return f"{ColorCodes.GREEN}{word}{ColorCodes.RESET}"
+
+        # Check for error terms
+        for term in self.error_terms:
+            if term in word_lower:
+                return f"{ColorCodes.RED}{word}{ColorCodes.RESET}"
+
+        return word
 
     def _is_number(self, s: str) -> bool:
         """Check if a string is a number."""
         # Remove trailing punctuation
-        s = s.rstrip('.,;:!?')
+        s = s.rstrip(".,;:!?")
         try:
             float(s)
-            return True
         except ValueError:
             return False
+        else:
+            return True
 
     def colorize_memory_operations(self, message: str) -> str:
-        """Apply spectacular coloring to memory operations - like a brilliant painter! 🎨"""
-        # Apply memory string patterns
+        """Apply spectacular coloring to memory operations - like a brilliant painter! 🎨."""
+        message = self._apply_memory_string_patterns(message)
+        message = self._colorize_importance_scores(message)
+        message = self._add_operation_icons(message)
+        message = self._colorize_batch_progress(message)
+        return message
+
+    def _apply_memory_string_patterns(self, message: str) -> str:
+        """Apply memory string patterns to colorize message."""
         for item in self.memory_strings:
-            if len(item) == 2:
-                # Single string pattern
-                string_to_find, color = item
-                if string_to_find in message:
-                    # Find and color the portion after the match
-                    parts = message.split(string_to_find, 1)
-                    if len(parts) == 2:
-                        # Find the end of the relevant portion (usually until newline or certain chars)
-                        end_idx = len(parts[1])
-                        for end_char in ['\n', ',', '.', '|']:
-                            idx = parts[1].find(end_char)
-                            if idx != -1 and idx < end_idx:
-                                end_idx = idx
+            if len(item) == PARTS_LENGTH_TWO:
+                message = self._apply_single_string_pattern(message, item)
+            elif len(item) == PARTS_LENGTH_FOUR:
+                message = self._apply_multi_string_pattern(message, item)
+        return message
 
-                        colored_part = parts[1][:end_idx]
-                        rest = parts[1][end_idx:]
-                        message = parts[0] + f"{color}{string_to_find}{colored_part}{ColorCodes.RESET}" + rest
+    def _apply_single_string_pattern(self, message: str, item: tuple) -> str:
+        """Apply single string pattern coloring."""
+        string_to_find, color = item
+        if string_to_find in message:
+            parts = message.split(string_to_find, 1)
+            if len(parts) == PARTS_LENGTH_TWO:
+                end_idx = self._find_end_of_relevant_portion(parts[1])
+                colored_part = parts[1][:end_idx]
+                rest = parts[1][end_idx:]
+                message = (
+                    parts[0] + f"{color}{string_to_find}{colored_part}{ColorCodes.RESET}" + rest
+                )
+        return message
 
-            elif len(item) == 4:
-                # Multi-string pattern
-                str1, str2, str3, color = item
-                if str1 in message and str2 in message.lower() and str3 in message.lower():
-                    # Simple approach: color the whole line containing all three strings
-                    lines = message.split('\n')
-                    for i, line in enumerate(lines):
-                        if str1 in line and str2 in line.lower() and str3 in line.lower():
-                            lines[i] = f"{color}{line}{ColorCodes.RESET}"
-                    message = '\n'.join(lines)
+    def _find_end_of_relevant_portion(self, text: str) -> int:
+        """Find the end of the relevant portion in text."""
+        end_idx = len(text)
+        for end_char in ["\n", ",", ".", "|"]:
+            idx = text.find(end_char)
+            if idx != -1 and idx < end_idx:
+                end_idx = idx
+        return end_idx
 
-        # Handle importance scores with simple string search
-        if "(importance:" in message:
-            parts = message.split("(importance:")
-            new_parts = [parts[0]]
-            for i in range(1, len(parts)):
-                part = parts[i]
-                # Find the closing parenthesis
-                close_idx = part.find(')')
-                if close_idx != -1:
-                    score_str = part[:close_idx].strip()
-                    try:
-                        score = float(score_str)
-                        color = self._get_importance_color_simple(score)
-                        new_parts.append(f"{color}(importance: {score_str}){ColorCodes.RESET}" + part[close_idx + 1:])
-                    except ValueError:
-                        new_parts.append("(importance:" + part)
-                else:
+    def _apply_multi_string_pattern(self, message: str, item: tuple) -> str:
+        """Apply multi-string pattern coloring."""
+        str1, str2, str3, color = item
+        if str1 in message and str2 in message.lower() and str3 in message.lower():
+            lines = message.split("\n")
+            for i, line in enumerate(lines):
+                if str1 in line and str2 in line.lower() and str3 in line.lower():
+                    lines[i] = f"{color}{line}{ColorCodes.RESET}"
+            message = "\n".join(lines)
+        return message
+
+    def _colorize_importance_scores(self, message: str) -> str:
+        """Handle importance scores with simple string search."""
+        if "(importance:" not in message:
+            return message
+
+        parts = message.split("(importance:")
+        new_parts = [parts[0]]
+        for i in range(1, len(parts)):
+            part = parts[i]
+            close_idx = part.find(")")
+            if close_idx != -1:
+                score_str = part[:close_idx].strip()
+                try:
+                    score = float(score_str)
+                    color = self._get_importance_color_simple(score)
+                    new_parts.append(
+                        f"{color}(importance: {score_str}){ColorCodes.RESET}"
+                        + part[close_idx + 1 :]
+                    )
+                except ValueError:
                     new_parts.append("(importance:" + part)
-            message = ''.join(new_parts)
+            else:
+                new_parts.append("(importance:" + part)
+        return "".join(new_parts)
 
-        # Add beautiful icons for different operations
+    def _add_operation_icons(self, message: str) -> str:
+        """Add beautiful icons for different operations."""
         if "[MEMORY SAVE" in message:
             message = message.replace("[MEMORY SAVE", f"💾 {ColorCodes.MEMORY_SAVE}[MEMORY SAVE")
         if "[MEMORY RETRIEVAL" in message:
-            message = message.replace("[MEMORY RETRIEVAL", f"🔍 {ColorCodes.MEMORY_RETRIEVE}[MEMORY RETRIEVAL")
+            message = message.replace(
+                "[MEMORY RETRIEVAL", f"🔍 {ColorCodes.MEMORY_RETRIEVE}[MEMORY RETRIEVAL"
+            )
         if "[NEURAL" in message:
             message = message.replace("[NEURAL", f"🧠 {ColorCodes.MEMORY_NEURAL}[NEURAL")
-
-        # Handle batch progress bars with simple string operations
-        if "Batches:" in message and "%" in message and "|" in message:
-            lines = message.split('\n')
-            for i, line in enumerate(lines):
-                if "Batches:" in line and "%" in line and "|" in line:
-                    # Color the Batches: part
-                    line = line.replace("Batches:", f"{ColorCodes.BRIGHT_CYAN}Batches:{ColorCodes.RESET}")
-                    # Color percentage
-                    parts = line.split('%')
-                    if len(parts) >= 2:
-                        # Find the percentage number
-                        for j in range(len(parts[0]) - 1, -1, -1):
-                            if parts[0][j] == ' ':
-                                percentage = parts[0][j+1:] + '%'
-                                before_percent = parts[0][:j+1]
-                                line = before_percent + f"{ColorCodes.BRIGHT_GREEN}{percentage}{ColorCodes.RESET}" + ''.join(parts[1:])
-                                break
-                    lines[i] = line
-            message = '\n'.join(lines)
-
         return message
+
+    def _colorize_batch_progress(self, message: str) -> str:
+        """Handle batch progress bars with simple string operations."""
+        if not ("Batches:" in message and "%" in message and "|" in message):
+            return message
+
+        lines = message.split("\n")
+        for i, line in enumerate(lines):
+            if "Batches:" in line and "%" in line and "|" in line:
+                lines[i] = self._colorize_batch_line(line)
+        return "\n".join(lines)
+
+    def _colorize_batch_line(self, line: str) -> str:
+        """Colorize a single batch progress line."""
+        # Color the Batches: part
+        line = line.replace("Batches:", f"{ColorCodes.BRIGHT_CYAN}Batches:{ColorCodes.RESET}")
+
+        # Color percentage
+        parts = line.split("%")
+        if len(parts) >= PERCENTAGE_PARTS_MIN:
+            for j in range(len(parts[0]) - 1, -1, -1):
+                if parts[0][j] == " ":
+                    percentage = parts[0][j + 1 :] + "%"
+                    before_percent = parts[0][: j + 1]
+                    line = (
+                        before_percent
+                        + f"{ColorCodes.BRIGHT_GREEN}{percentage}{ColorCodes.RESET}"
+                        + "".join(parts[1:])
+                    )
+                    break
+        return line
 
     def _get_importance_color_simple(self, score: float) -> str:
         """Get gradient color based on importance score."""
@@ -347,10 +426,10 @@ class IntelligentColorFormatter(logging.Formatter):
                 break
 
         # Truncate long logger names
-        if len(logger_name) > 20:
-            logger_name = "..." + logger_name[-17:]
+        if len(logger_name) > LOGGER_NAME_MAX_LENGTH:
+            logger_name = "..." + logger_name[-LOGGER_NAME_TRUNCATE_LENGTH:]
 
-        return f"{component_color}{logger_name.ljust(20)}{ColorCodes.RESET}"
+        return f"{component_color}{logger_name.ljust(LOGGER_NAME_MAX_LENGTH)}{ColorCodes.RESET}"
 
     def format(self, record: logging.LogRecord) -> str:
         """Main formatting method that combines all elements."""
@@ -405,13 +484,14 @@ class StreamFormatter(IntelligentColorFormatter):
                 # Highlight streaming tokens with simple string operations
                 if ":" in message:
                     parts = message.split(":", 1)
-                    if len(parts) == 2 and "token" in parts[0].lower():
+                    if len(parts) == PARTS_LENGTH_TWO and "token" in parts[0].lower():
                         # Color the token part and value separately
                         token_part = f"{ColorCodes.BRIGHT_YELLOW}{parts[0]}:{ColorCodes.RESET}"
                         value_part = parts[1].strip()
                         # Check if value is quoted
-                        if (value_part.startswith('"') and value_part.endswith('"')) or \
-                           (value_part.startswith("'") and value_part.endswith("'")):
+                        if (value_part.startswith('"') and value_part.endswith('"')) or (
+                            value_part.startswith("'") and value_part.endswith("'")
+                        ):
                             value_part = f"{ColorCodes.GREEN}{value_part}{ColorCodes.RESET}"
                         message = f"{token_part} {value_part}"
 
@@ -444,10 +524,7 @@ def setup_colored_logging(level: int = logging.INFO, enable_stream_formatting: b
 
     # Choose formatter based on whether we're in a TTY
     if sys.stdout.isatty():
-        if enable_stream_formatting:
-            formatter = StreamFormatter()
-        else:
-            formatter = IntelligentColorFormatter()
+        formatter = StreamFormatter() if enable_stream_formatting else IntelligentColorFormatter()
     else:
         # Use plain formatter for non-TTY (like redirected output)
         formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")

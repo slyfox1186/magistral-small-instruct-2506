@@ -1,4 +1,5 @@
 """Optimized memory system for personal AI assistant.
+
 Uses SQLite for robust local storage and implements hierarchical memory.
 """
 
@@ -9,14 +10,18 @@ import logging
 import sqlite3
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# High importance threshold for verbose logging
+# Constants for memory system
 HIGH_IMPORTANCE_THRESHOLD = 0.7
+MEDIUM_IMPORTANCE_THRESHOLD = 0.5
+MIN_PHRASE_LENGTH = 2
+MIN_CONTENT_LENGTH = 10
+MAX_CONTENT_SNIPPET = 80
 
 
 @dataclass
@@ -55,6 +60,7 @@ class PersonalMemorySystem:
     """
 
     def __init__(self, db_path: str = "memories.db", embedding_model=None):
+        """Initialize the personal memory system."""
         self.db_path = db_path
         self.embedding_model = embedding_model
         self._init_database()
@@ -107,20 +113,119 @@ class PersonalMemorySystem:
             """
             )
 
-            # Core memories table for persistent facts about the user
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS core_memories (
-                    key TEXT PRIMARY KEY,
-                    value TEXT NOT NULL,
-                    created_at DATETIME NOT NULL,
-                    updated_at DATETIME NOT NULL,
-                    category TEXT DEFAULT 'general'
-                )
-            """
-            )
+            # Handle core memories table creation and migration
+            self._init_core_memories_table(conn)
 
             conn.commit()
+
+    def _init_core_memories_table(self, conn):
+        """Initialize or migrate core_memories table with proper schema."""
+        try:
+            # Check if table exists
+            cursor = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='core_memories'"
+            )
+            table_exists = cursor.fetchone() is not None
+            
+            if table_exists:
+                # Check current schema
+                cursor = conn.execute("PRAGMA table_info(core_memories)")
+                columns = [row[1] for row in cursor.fetchall()]
+                
+                # If conversation_id column doesn't exist, we need to migrate
+                if "conversation_id" not in columns:
+                    logger.info("🔄 Migrating core_memories table to add conversation_id column...")
+                    
+                    # Get existing data
+                    try:
+                        cursor = conn.execute("SELECT key, value, created_at, updated_at, category FROM core_memories")
+                        existing_data = cursor.fetchall()
+                        logger.info(f"Found {len(existing_data)} existing core memories to migrate")
+                    except Exception:
+                        # If we can't read existing data, assume table is corrupted
+                        existing_data = []
+                        logger.warning("Could not read existing core memories, proceeding with empty migration")
+                    
+                    # Drop the old table
+                    conn.execute("DROP TABLE core_memories")
+                    logger.info("Dropped old core_memories table")
+                    
+                    # Create new table with updated schema
+                    conn.execute(
+                        """
+                        CREATE TABLE core_memories (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            key TEXT NOT NULL,
+                            value TEXT NOT NULL,
+                            conversation_id TEXT NOT NULL,
+                            created_at DATETIME NOT NULL,
+                            updated_at DATETIME NOT NULL,
+                            category TEXT DEFAULT 'general',
+                            UNIQUE(key, conversation_id)
+                        )
+                        """
+                    )
+                    logger.info("Created new core_memories table with conversation_id support")
+                    
+                    # Migrate existing data to "global" conversation
+                    if existing_data:
+                        for row in existing_data:
+                            key, value, created_at, updated_at, category = row
+                            conn.execute(
+                                """
+                                INSERT INTO core_memories (key, value, conversation_id, created_at, updated_at, category)
+                                VALUES (?, ?, ?, ?, ?, ?)
+                                """,
+                                (key, value, "global", created_at, updated_at, category or "general")
+                            )
+                        logger.info(f"✅ Migrated {len(existing_data)} core memories to 'global' conversation")
+                else:
+                    logger.debug("✅ Core memories table already has correct schema")
+            else:
+                # Create new table
+                logger.info("Creating new core_memories table...")
+                conn.execute(
+                    """
+                    CREATE TABLE core_memories (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        key TEXT NOT NULL,
+                        value TEXT NOT NULL,
+                        conversation_id TEXT NOT NULL,
+                        created_at DATETIME NOT NULL,
+                        updated_at DATETIME NOT NULL,
+                        category TEXT DEFAULT 'general',
+                        UNIQUE(key, conversation_id)
+                    )
+                    """
+                )
+                logger.info("✅ Created core_memories table with conversation_id support")
+            
+            # Create index for core memories conversation queries
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_core_memories_conversation ON core_memories(conversation_id)")
+            logger.debug("Created index for core_memories conversation queries")
+                
+        except Exception as e:
+            logger.error(f"❌ Error during core_memories table initialization: {e}")
+            # If everything fails, create a basic table
+            try:
+                conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS core_memories (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        key TEXT NOT NULL,
+                        value TEXT NOT NULL,
+                        conversation_id TEXT NOT NULL DEFAULT 'global',
+                        created_at DATETIME NOT NULL,
+                        updated_at DATETIME NOT NULL,
+                        category TEXT DEFAULT 'general',
+                        UNIQUE(key, conversation_id)
+                    )
+                    """
+                )
+                logger.warning("Created fallback core_memories table")
+            except Exception as fallback_error:
+                logger.error(f"❌ Even fallback table creation failed: {fallback_error}")
+                raise
 
     @contextmanager
     def _get_connection(self):
@@ -153,7 +258,7 @@ class PersonalMemorySystem:
         metadata: dict[str, Any] | None = None,
     ) -> Memory:
         """Add a new memory to the system."""
-        timestamp = datetime.now()
+        timestamp = datetime.now(UTC)
         memory_id = self._generate_id(content, timestamp)
 
         # Log entry for all memories
@@ -205,18 +310,20 @@ class PersonalMemorySystem:
             )
 
         # Store in database
-        start_time = datetime.now()
+        start_time = datetime.now(UTC)
         with self._get_connection() as conn:
             data = memory.to_dict()
             placeholders = ", ".join(["?" for _ in data])
             columns = ", ".join(data.keys())
 
+            # Safe because data.keys() comes from a controlled dataclass, not user input
             conn.execute(
-                f"INSERT INTO memories ({columns}) VALUES ({placeholders})", list(data.values())
+                f"INSERT INTO memories ({columns}) VALUES ({placeholders})",  # noqa: S608
+                list(data.values()),
             )
             conn.commit()
 
-        db_time = (datetime.now() - start_time).total_seconds() * 1000
+        db_time = (datetime.now(UTC) - start_time).total_seconds() * 1000
         logger.debug(f"[MEMORY_STORED] Memory {memory_id[:8]}... stored in {db_time:.2f}ms")
 
         # Log memory statistics after addition
@@ -255,7 +362,7 @@ class PersonalMemorySystem:
 
         memories = []
         high_importance_memories = []
-        retrieval_start = datetime.now()
+        retrieval_start = datetime.now(UTC)
 
         with self._get_connection() as conn:
             # Build query based on available features
@@ -267,7 +374,7 @@ class PersonalMemorySystem:
 
             # Time window filter
             if time_window_hours:
-                cutoff = datetime.now() - timedelta(hours=time_window_hours)
+                cutoff = datetime.now(UTC) - timedelta(hours=time_window_hours)
                 base_query += " AND timestamp > ?"
                 params.append(cutoff.isoformat())
 
@@ -305,7 +412,7 @@ class PersonalMemorySystem:
 
             # Batch update access counts
             if memory_ids_to_update:
-                now = datetime.now().isoformat()
+                now = datetime.now(UTC).isoformat()
                 for memory_id in memory_ids_to_update:
                     conn.execute(
                         "UPDATE memories SET access_count = access_count + 1, last_accessed = ? WHERE id = ?",
@@ -313,7 +420,7 @@ class PersonalMemorySystem:
                     )
                 conn.commit()
 
-        retrieval_time = (datetime.now() - retrieval_start).total_seconds() * 1000
+        retrieval_time = (datetime.now(UTC) - retrieval_start).total_seconds() * 1000
 
         logger.debug(
             f"[MEMORY_RETRIEVAL_COMPLETE] Retrieved {len(memories)} memories in {retrieval_time:.2f}ms"
@@ -349,19 +456,18 @@ class PersonalMemorySystem:
                 (conversation_id, max_messages),
             )
 
-            memories = []
-            for row in cursor:
-                memories.append(self._row_to_memory(row))
+            memories = [self._row_to_memory(row) for row in cursor]
 
             # Return in chronological order
             return list(reversed(memories))
 
     async def consolidate_old_memories(self):
         """Consolidate old memories to save space and improve retrieval.
+
         - Summarize conversations older than short_term_hours
         - Remove detailed memories older than long_term_days (keeping summaries)
         """
-        now = datetime.now()
+        now = datetime.now(UTC)
 
         with self._get_connection() as conn:
             # Find conversations that need summarization
@@ -453,18 +559,19 @@ class PersonalMemorySystem:
                         metadata = json.loads(metadata_json)
                         if "analysis" in metadata and "key_phrases" in metadata["analysis"]:
                             for phrase in metadata["analysis"]["key_phrases"]:
-                                if phrase and len(phrase) > 2:
+                                if phrase and len(phrase) > MIN_PHRASE_LENGTH:
                                     topics.add(phrase[:50])  # Limit length
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug(f"Failed to parse metadata for phrase extraction: {e}")
 
                 # Add content-based topics for high importance messages
-                if importance >= 0.7:
+                if importance >= HIGH_IMPORTANCE_THRESHOLD:
                     # Extract first 50 chars as key point
                     clean_content = content.replace("User: ", "").replace("Assistant: ", "")
-                    if len(clean_content) > 10:
+                    if len(clean_content) > MIN_CONTENT_LENGTH:
                         key_points.append(
-                            clean_content[:80] + ("..." if len(clean_content) > 80 else "")
+                            clean_content[:MAX_CONTENT_SNIPPET]
+                            + ("..." if len(clean_content) > MAX_CONTENT_SNIPPET else "")
                         )
 
             # Build summary
@@ -513,6 +620,7 @@ class PersonalMemorySystem:
 
     async def _generate_embedding(self, text: str) -> list[float] | None:
         """Generate embedding for text using ResourceManager.
+
         Returns a list of floats on success, None on failure.
         """
         if not self.embedding_model:
@@ -537,8 +645,8 @@ class PersonalMemorySystem:
             # Robustly check the actual embedding object before converting
             if isinstance(embedding, np.ndarray):
                 return embedding.tolist()
-            elif isinstance(embedding, (list, tuple)) and all(
-                isinstance(x, (int, float)) for x in embedding
+            elif isinstance(embedding, list | tuple) and all(
+                isinstance(x, int | float) for x in embedding
             ):
                 return list(embedding)
             else:
@@ -552,37 +660,40 @@ class PersonalMemorySystem:
             logger.error(f"[MEMORY_EMBEDDING] Failed to generate embedding: {e}", exc_info=True)
             return None
 
-    async def set_core_memory(self, key: str, value: str, category: str = "general"):
-        """Set a core memory (persistent fact about the user)."""
-        now = datetime.now()
+    async def set_core_memory(self, key: str, value: str, conversation_id: str, category: str = "general"):
+        """Set a core memory (persistent fact about the user) for a specific conversation."""
+        now = datetime.now(UTC)
 
         with self._get_connection() as conn:
             conn.execute(
                 """
-                INSERT OR REPLACE INTO core_memories (key, value, created_at, updated_at, category)
-                VALUES (?, ?,
-                    COALESCE((SELECT created_at FROM core_memories WHERE key = ?), ?),
+                INSERT OR REPLACE INTO core_memories (key, value, conversation_id, created_at, updated_at, category)
+                VALUES (?, ?, ?,
+                    COALESCE((SELECT created_at FROM core_memories WHERE key = ? AND conversation_id = ?), ?),
                     ?, ?)
                 """,
-                (key, value, key, now.isoformat(), now.isoformat(), category),
+                (key, value, conversation_id, key, conversation_id, now.isoformat(), now.isoformat(), category),
             )
             conn.commit()
 
-        logger.info(f"Core memory set: {key} = {value[:50]}...")
+        logger.info(f"Core memory set for conversation {conversation_id}: {key} = {value[:50]}...")
 
-    async def get_core_memory(self, key: str) -> str | None:
-        """Get a specific core memory."""
+    async def get_core_memory(self, key: str, conversation_id: str) -> str | None:
+        """Get a specific core memory for a conversation."""
         with self._get_connection() as conn:
             result = conn.execute(
-                "SELECT value FROM core_memories WHERE key = ?", (key,)
+                "SELECT value FROM core_memories WHERE key = ? AND conversation_id = ?", (key, conversation_id)
             ).fetchone()
 
             return result[0] if result else None
 
-    async def get_all_core_memories(self) -> dict[str, str]:
-        """Get all core memories as a dictionary."""
+    async def get_all_core_memories(self, conversation_id: str) -> dict[str, str]:
+        """Get all core memories for a specific conversation as a dictionary."""
         with self._get_connection() as conn:
-            cursor = conn.execute("SELECT key, value FROM core_memories ORDER BY category, key")
+            cursor = conn.execute(
+                "SELECT key, value FROM core_memories WHERE conversation_id = ? ORDER BY category, key", 
+                (conversation_id,)
+            )
 
             return {row[0]: row[1] for row in cursor}
 
@@ -633,7 +744,7 @@ class PersonalMemorySystem:
             )
 
             # Get memory distribution by age
-            now = datetime.now()
+            now = datetime.now(UTC)
             day_ago = now - timedelta(days=1)
             week_ago = now - timedelta(days=7)
             month_ago = now - timedelta(days=30)
@@ -683,6 +794,38 @@ class PersonalMemorySystem:
 
             return stats
 
+    def clear_conversation_memories(self, conversation_id: str) -> int:
+        """Clear all memories for a specific conversation and return count of deleted items."""
+        deleted_count = 0
+
+        with self._get_connection() as conn:
+            # Count items before deletion
+            memories_count = conn.execute(
+                "SELECT COUNT(*) FROM memories WHERE conversation_id = ?",
+                (conversation_id,)
+            ).fetchone()[0]
+            summaries_count = conn.execute(
+                "SELECT COUNT(*) FROM conversation_summaries WHERE conversation_id = ?",
+                (conversation_id,)
+            ).fetchone()[0]
+            core_memories_count = conn.execute(
+                "SELECT COUNT(*) FROM core_memories WHERE conversation_id = ?",
+                (conversation_id,)
+            ).fetchone()[0]
+
+            # Clear conversation-specific data
+            conn.execute("DELETE FROM memories WHERE conversation_id = ?", (conversation_id,))
+            conn.execute("DELETE FROM conversation_summaries WHERE conversation_id = ?", (conversation_id,))
+            conn.execute("DELETE FROM core_memories WHERE conversation_id = ?", (conversation_id,))
+
+            deleted_count = memories_count + summaries_count + core_memories_count
+            
+            logger.info(f"🗑️ Cleared {deleted_count} memories for conversation {conversation_id}")
+            
+            conn.commit()
+
+        return deleted_count
+
     def clear_all_memories(self) -> int:
         """Clear all memories from the database and return count of deleted items."""
         deleted_count = 0
@@ -726,7 +869,7 @@ async def demo():
     memory_system = PersonalMemorySystem("my_ai_memories.db")
 
     # Add some memories
-    conv_id = "conv_" + datetime.now().strftime("%Y%m%d_%H%M%S")
+    conv_id = "conv_" + datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
 
     await memory_system.add_memory(
         "User asked about quantum computing", conv_id, importance=0.8, metadata={"topic": "physics"}

@@ -1,5 +1,4 @@
-"""LLM Call Optimizer
-==================
+"""LLM Call Optimizer.
 
 Optimizes LLM usage through caching, batching, and smart call reduction.
 Addresses the performance bottleneck from chained LLM calls.
@@ -14,6 +13,9 @@ from dataclasses import dataclass
 from typing import Any
 
 from cachetools import TTLCache
+
+# Constants
+SMALL_BATCH_SIZE = 3
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +34,7 @@ class LLMOptimizer:
     """Optimizes LLM calls through caching and smart batching."""
 
     def __init__(self, redis_client=None, cache_ttl: int = 3600):
+        """Initialize the LLM optimizer with caching configuration."""
         self.redis_client = redis_client
         self.cache_ttl = cache_ttl
 
@@ -54,7 +57,7 @@ class LLMOptimizer:
         # Include function type and key parameters in hash
         key_data = {"prompt": prompt, "function": function_type, **kwargs}
         key_str = json.dumps(key_data, sort_keys=True)
-        return hashlib.md5(key_str.encode()).hexdigest()
+        return hashlib.sha256(key_str.encode()).hexdigest()
 
     async def cached_llm_call(
         self,
@@ -99,8 +102,8 @@ class LLMOptimizer:
                     self.stats["cache_hits"] += 1
                     logger.debug(f"Redis cache HIT for {function_type}")
                     return entry
-            except Exception as e:
-                logger.error(f"Redis cache error: {e}")
+            except Exception:
+                logger.exception("Redis cache error")
 
         # Cache miss - make the actual LLM call
         self.stats["cache_misses"] += 1
@@ -140,19 +143,18 @@ class LLMOptimizer:
                 try:
                     redis_key = f"llm_cache:{cache_key}"
                     self.redis_client.setex(redis_key, self.cache_ttl, json.dumps(entry.__dict__))
-                except Exception as e:
-                    logger.error(f"Failed to cache in Redis: {e}")
+                except Exception:
+                    logger.exception("Failed to cache in Redis")
 
             logger.debug(
                 f"LLM call completed for {function_type}: "
                 f"{tokens_used} tokens, {execution_time:.1f}ms"
             )
-
-            return entry
-
-        except Exception as e:
-            logger.error(f"LLM call failed for {function_type}: {e}")
+        except Exception:
+            logger.exception(f"LLM call failed for {function_type}")
             raise
+        else:
+            return entry
 
     async def classify_query_cached(self, llm_instance, user_prompt: str) -> str:
         """Cached query classification."""
@@ -198,7 +200,7 @@ Importance (0.0-1.0):"""
             return []
 
         # For small batches, use individual cached calls
-        if len(contents) <= 3:
+        if len(contents) <= SMALL_BATCH_SIZE:
             tasks = [self.analyze_importance_cached(llm_instance, content) for content in contents]
             return await asyncio.gather(*tasks)
 
@@ -232,12 +234,11 @@ Importance scores (0.0-1.0):"""
             # Fill any missing scores
             while len(scores) < len(contents):
                 scores.append(0.5)
-
-            return scores
-
-        except Exception as e:
-            logger.error(f"Batch importance analysis failed: {e}")
+        except Exception:
+            logger.exception("Batch importance analysis failed")
             return [0.5] * len(contents)  # Default scores
+        else:
+            return scores
 
     def get_cache_stats(self) -> dict[str, Any]:
         """Get cache statistics."""
@@ -272,8 +273,8 @@ Importance scores (0.0-1.0):"""
                 if keys:
                     self.redis_client.delete(*keys)
                     logger.info(f"Cleared {len(keys)} entries from Redis cache")
-            except Exception as e:
-                logger.error(f"Failed to clear Redis cache: {e}")
+            except Exception:
+                logger.exception("Failed to clear Redis cache")
 
         logger.info("LLM cache cleared")
 
@@ -289,7 +290,7 @@ def get_llm_optimizer() -> LLMOptimizer | None:
 
 def initialize_llm_optimizer(redis_client=None, cache_ttl: int = 3600) -> LLMOptimizer:
     """Initialize the global LLM optimizer."""
-    global _llm_optimizer
+    global _llm_optimizer  # noqa: PLW0603
     _llm_optimizer = LLMOptimizer(redis_client=redis_client, cache_ttl=cache_ttl)
     logger.info("LLM Optimizer initialized")
     return _llm_optimizer

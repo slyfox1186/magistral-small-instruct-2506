@@ -1,9 +1,9 @@
-import React, { useState, useCallback, lazy, Suspense } from 'react';
+import React, { useState, useCallback } from 'react';
 import { AppMessage } from '../utils/messageUtils';
 import { COPY_FEEDBACK_TIMEOUT } from '../constants';
 
-// Lazy load the markdown renderer
-const MarkdownItRenderer = lazy(() => import('./MarkdownItRenderer'));
+// Import the markdown renderer directly to avoid lazy loading issues
+import MarkdownItRenderer from './MarkdownItRenderer';
 
 const CopyIcon = () => (
   <svg
@@ -83,14 +83,11 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
       : message.content;
 
     if (message.role === 'assistant') {
-      return (
-        <Suspense fallback={<div className="markdown-loading">Loading...</div>}>
-          <MarkdownItRenderer markdown={content} />
-        </Suspense>
-      );
+      return <MarkdownItRenderer markdown={content} />;
     }
 
-    return <div className="whitespace-pre-wrap">{content}</div>;
+    // For user messages, also use markdown rendering to maintain consistency
+    return <MarkdownItRenderer markdown={content} />;
   };
 
   return (

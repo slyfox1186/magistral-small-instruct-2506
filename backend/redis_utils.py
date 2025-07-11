@@ -4,7 +4,7 @@ import json
 import logging
 import os  # For os.cpu_count()
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from datetime import UTC, datetime
 
 import redis
 from redis.commands.search.field import (
@@ -17,6 +17,7 @@ from redis.commands.search.query import Query
 
 # Local imports
 from async_redis_client import initialize_async_redis_connection
+from constants import MIN_MODULE_LIST_LENGTH
 from resource_manager import get_resource_manager
 
 # Try to import optional dependencies
@@ -63,7 +64,7 @@ EMBEDDING_DIM = None  # Will be set when model is first loaded
 
 def _ensure_embedding_model():
     """Get embedding model via ResourceManager (backwards compatibility)."""
-    global EMBEDDING_DIM, embedding_model
+    global EMBEDDING_DIM, embedding_model  # noqa: PLW0603
 
     resource_manager = get_resource_manager()
     model, _ = resource_manager.get_model(EMBEDDING_MODEL_ID)
@@ -85,10 +86,11 @@ def is_embedding_model_available() -> bool:
         resource_manager = get_resource_manager()
         # Try to get the model - if it's available, this will succeed
         model, _ = resource_manager.get_model(EMBEDDING_MODEL_ID)
-        return model is not None
     except Exception as e:
         logger.debug(f"Embedding model not available: {e}")
         return False
+    else:
+        return model is not None
 
 
 # Backwards compatibility: create a simple embedding_model attribute
@@ -165,36 +167,28 @@ def _ensure_redis_persistence(client):
                     "Redis save command returned False. Data may not persist between restarts."
                 )
                 return False
-        except redis.exceptions.ResponseError as e:
-            logger.error(f"Redis error during save operation: {e}")
+        except redis.exceptions.ResponseError:
+            logger.exception("Redis error during save operation")
             logger.warning(
                 "Redis persistence may not be enabled. Data might not be saved between restarts."
             )
             return False
-    except redis.exceptions.ResponseError as e:
-        logger.error(f"Redis error configuring persistence: {e}")
+    except redis.exceptions.ResponseError:
+        logger.exception("Redis error configuring persistence")
         return False
-    except Exception as e:
-        logger.error(f"Unexpected error configuring Redis persistence: {e}")
+    except Exception:
+        logger.exception("Unexpected error configuring Redis persistence")
         return False
 
 
 # --- Helper Function for JSON Index Creation ---
 async def _create_json_vector_index(client):
     """Attempts to create the Redis vector search index ON JSON if it doesn't exist."""
-    if not client:
-        logger.error("Cannot create Redis index: Client is None")
+    # Validate prerequisites
+    validation_result = _validate_index_prerequisites(client)
+    if not validation_result:
         return False
-    if not NUMPY_AVAILABLE:
-        logger.error("Cannot create Redis index: NumPy is not available")
-        return False
-    # Ensure embedding model is loaded to get EMBEDDING_DIM
-    model = _ensure_embedding_model()
-    if not model or EMBEDDING_DIM is None:
-        logger.error(
-            "Cannot create Redis index: EMBEDDING_DIM is None (embedding model not loaded)"
-        )
-        return False
+
     try:
         # Define schema using JSONPath
         schema = (
@@ -222,20 +216,40 @@ async def _create_json_vector_index(client):
         # Use the programmatic approach
         await client.ft(VECTOR_INDEX_NAME).create_index(fields=schema, definition=definition)
         logger.info(f"Successfully created or verified JSON vector index '{VECTOR_INDEX_NAME}'.")
-        return True
     except redis.exceptions.ResponseError as idx_err:
         if "Index already exists" in str(idx_err):
             logger.info(f"JSON Vector index '{VECTOR_INDEX_NAME}' already exists.")
             return True
-        else:
-            logger.error(f"ERROR creating JSON vector index '{VECTOR_INDEX_NAME}': {idx_err}")
-            return False
-    except Exception as e:
-        logger.error(
-            f"Unexpected error during JSON index creation/verification for "
-            f"'{VECTOR_INDEX_NAME}': {e}"
+        logger.exception(f"ERROR creating JSON vector index '{VECTOR_INDEX_NAME}'")
+        return False
+    except Exception:
+        logger.exception(
+            f"Unexpected error during JSON index creation/verification for '{VECTOR_INDEX_NAME}'"
         )
         return False
+    else:
+        return True
+
+
+def _validate_index_prerequisites(client):
+    """Validate prerequisites for index creation."""
+    if not client:
+        logger.error("Cannot create Redis index: Client is None")
+        return False
+
+    if not NUMPY_AVAILABLE:
+        logger.error("Cannot create Redis index: NumPy is not available")
+        return False
+
+    # Ensure embedding model is loaded to get EMBEDDING_DIM
+    model = _ensure_embedding_model()
+    if not model or EMBEDDING_DIM is None:
+        logger.error(
+            "Cannot create Redis index: EMBEDDING_DIM is None (embedding model not loaded)"
+        )
+        return False
+
+    return True
 
 
 # --- Redis Connection Pool Configuration ---
@@ -255,9 +269,8 @@ def initialize_redis_connection():
                 sentinel_manager = asyncio.get_event_loop().run_until_complete(
                     initialize_sentinel()
                 )
-                client = sentinel_manager.get_master_client()
                 logger.info("✅ Redis Sentinel connection established with automatic failover")
-                return client
+                return sentinel_manager.get_master_client()
             except RuntimeError:
                 # Create new event loop if none exists
                 loop = asyncio.new_event_loop()
@@ -268,10 +281,12 @@ def initialize_redis_connection():
                 return client
 
         except ImportError:
-            logger.error("redis_sentinel module not available, falling back to direct connection")
-        except Exception as e:
-            logger.error(
-                f"Failed to initialize Redis Sentinel: {e}, falling back to direct connection"
+            logger.exception(
+                "redis_sentinel module not available, falling back to direct connection"
+            )
+        except Exception:
+            logger.exception(
+                "Failed to initialize Redis Sentinel, falling back to direct connection"
             )
 
     # Direct Redis connection with connection pooling
@@ -295,8 +310,8 @@ def initialize_redis_connection():
     # Verify connection
     try:
         base_redis_client.ping()
-    except Exception as e:
-        logger.error(f"Failed to ping Redis: {e}")
+    except Exception:
+        logger.exception("Failed to ping Redis")
         raise
 
     # Create resilient client with fallback if available
@@ -323,6 +338,7 @@ def initialize_redis_connection():
 
 async def initialize_redis_connection_async():
     """Initialize async Redis connection with resilience features.
+
     This is the preferred method for new code.
     """
     logger.info("🚀 Initializing async Redis connection...")
@@ -343,11 +359,12 @@ async def initialize_redis_connection_async():
         await configure_redis_persistence_async(client)
 
         logger.info("✅ Async Redis client initialized with built-in resilience")
-        return client
 
-    except Exception as e:
-        logger.error(f"❌ Failed to initialize async Redis connection: {e}")
+    except Exception:
+        logger.exception("❌ Failed to initialize async Redis connection")
         raise
+    else:
+        return client
 
 
 class RedisModuleError(Exception):
@@ -367,6 +384,13 @@ async def validate_redis_modules(redis_client, required_modules: dict):
     Raises:
         RedisModuleError: If any required module is missing
     """
+    def _raise_missing_modules_error(missing_modules: list) -> None:
+        """Raise RedisModuleError for missing modules."""
+        raise RedisModuleError(
+            f"Missing required Redis modules: {', '.join(missing_modules)}. "
+            f"Install with: redis-server --loadmodule RedisJSON.so --loadmodule redisearch.so"
+        )
+
     if not redis_client:
         raise RedisModuleError("Redis client is not connected.")
 
@@ -380,8 +404,7 @@ async def validate_redis_modules(redis_client, required_modules: dict):
             if isinstance(module, dict):
                 # Format: {'name': 'search', 'ver': 20807, ...}
                 name = module.get("name", "")
-            elif isinstance(module, list) and len(module) >= 2:
-                # Format: [b'name', b'search', b'ver', 20807, ...]
+            elif isinstance(module, list) and len(module) >= MIN_MODULE_LIST_LENGTH:
                 name = module[1].decode("utf-8") if isinstance(module[1], bytes) else str(module[1])
             else:
                 continue
@@ -407,16 +430,13 @@ async def validate_redis_modules(redis_client, required_modules: dict):
                 missing_modules.append(module_name)
 
         if missing_modules:
-            raise RedisModuleError(
-                f"Missing required Redis modules: {', '.join(missing_modules)}. "
-                f"Install with: redis-server --loadmodule RedisJSON.so --loadmodule redisearch.so"
-            )
+            _raise_missing_modules_error(missing_modules)
 
     except RedisModuleError:
         raise  # Re-raise our custom exception
     except Exception as e:
         # Handle potential command errors if 'MODULE LIST' isn't supported
-        raise RedisModuleError(f"Failed to validate Redis modules: {e}")
+        raise RedisModuleError(f"Failed to validate Redis modules: {e}") from e
 
 
 async def configure_redis_persistence_async(client):
@@ -435,8 +455,8 @@ async def configure_redis_persistence_async(client):
 
     except redis.exceptions.ResponseError as e:
         logger.warning(f"Could not configure Redis persistence: {e}")
-    except Exception as e:
-        logger.error(f"Error checking Redis persistence: {e}")
+    except Exception:
+        logger.exception("Error checking Redis persistence")
 
 
 def configure_redis_persistence(config_client):
@@ -483,8 +503,8 @@ def configure_redis_persistence(config_client):
         else:
             logger.warning(f"Could not trigger background save: {e}")
             logger.warning("This may indicate Redis is not configured for persistence.")
-    except Exception as e:
-        logger.error(f"Error triggering background save: {e}")
+    except Exception:
+        logger.exception("Error triggering background save")
         logger.warning("This may indicate Redis is not configured for persistence.")
 
     # Try to detect if Redis Stack is available (but don't create index yet)
@@ -532,8 +552,8 @@ async def _perform_history_save_async(
         model_embedding = await loop.run_in_executor(
             _THREAD_POOL_EXECUTOR, generate_embedding, model_response
         )
-        # Get current timestamp in local time zone for consistency, as in original function
-        timestamp_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        # Get current timestamp in UTC for consistency
+        timestamp_str = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
         history_entry = {
             "user": user_prompt,
             "model": model_response,
@@ -563,8 +583,9 @@ def add_to_conversation_history(
     history_key_prefix: str,
     history_limit: int,
 ):
-    """Non-blockingly adds a new turn (text and embedding) to the conversation history for the given user_id
-    by scheduling an asynchronous task. Uses ResourceManager for embedding generation.
+    """Non-blockingly adds a new turn (text and embedding) to the conversation history for the given user_id.
+
+    By scheduling an asynchronous task. Uses ResourceManager for embedding generation.
 
     Args:
         user_id: The ID of the user.
@@ -586,7 +607,7 @@ def add_to_conversation_history(
         try:
             asyncio.get_running_loop()
             # We have a running loop, can create task
-            asyncio.create_task(
+            task = asyncio.create_task(
                 _perform_history_save_async(
                     user_id,
                     user_prompt,
@@ -596,6 +617,9 @@ def add_to_conversation_history(
                     history_limit,
                 )
             )
+            # Store task reference to prevent garbage collection
+            # Task will be cleaned up automatically when complete
+            task.add_done_callback(lambda t: None)
             logger.info(f"Scheduled background task for saving history for user_id: {user_id}")
         except RuntimeError:
             # No running loop - this should not happen in normal operation
@@ -626,8 +650,8 @@ def generate_embedding(text: str, model_instance=None) -> list[float] | None:
 
         return resource_manager.run_inference(EMBEDDING_MODEL_ID, embedding_task)
 
-    except Exception as e:
-        logger.error(f"Error generating embedding: {e}")
+    except Exception:
+        logger.exception("Error generating embedding")
         return None
 
 
@@ -654,10 +678,11 @@ async def get_conversation_history(
                     history.append(data)
             except json.JSONDecodeError:
                 logger.warning(f"Skipping corrupted history item: {item[:50]}...")
-        return history
-    except redis.exceptions.RedisError as e:
-        logger.error(f"Redis error in get_conversation_history: {e}")
+    except redis.exceptions.RedisError:
+        logger.exception("Redis error in get_conversation_history")
         return []
+    else:
+        return history
 
 
 # --- Similarity Search (Now on JSON Index) ---
@@ -665,106 +690,150 @@ async def find_similar_vital_memories(
     query_text: str, top_n: int = 5, min_similarity: float = 0.5, redis_client_instance=None
 ) -> list[tuple[str, float, float | None]]:
     """Finds vital memories (Type B - JSON) semantically similar to the query text.
+
     Uses efficient Redis Stack JSON vector search (FT.SEARCH KNN) if available.
-    Returns a list of tuples: (memory_text, similarity_score, importance_score)
+    Returns a list of tuples: (memory_text, similarity_score, importance_score).
     """
-    # Use the provided redis_client_instance parameter
+    # Initialize and validate client
+    client = _get_redis_client_for_search(redis_client_instance)
+    if not client:
+        return []
+
+    # Get embedding model and generate query vector
+    query_vector_bytes = await _prepare_query_vector(query_text)
+    if query_vector_bytes is None:
+        return []
+
+    # Ensure index exists
+    index_ready = await _ensure_vector_index_exists(client)
+    if not index_ready:
+        return []
+
+    # Execute search and process results
+    return await _execute_vector_search(client, query_vector_bytes, top_n, min_similarity)
+
+
+def _get_redis_client_for_search(redis_client_instance):
+    """Get and validate Redis client for similarity search."""
     client = redis_client_instance if redis_client_instance is not None else redis_client
+
     # Log which client we're using
     if client is redis_client:
         logger.debug("Using global redis_client for similarity search")
     else:
         logger.debug("Using provided redis_client_instance for similarity search")
-    # Check each component separately for better error messages
+
     if not client:
         logger.warning("Redis client is missing for similarity search.")
-        return []
+        return None
 
+    return client
+
+
+async def _prepare_query_vector(query_text: str):
+    """Prepare query vector for similarity search."""
     # Get embedding model via ResourceManager
     try:
         resource_manager = get_resource_manager()
         model, _ = resource_manager.get_model(EMBEDDING_MODEL_ID)
     except Exception as e:
         logger.warning(f"Failed to get embedding model for similarity search: {e}")
-        return []
+        return None
+
     if not NUMPY_AVAILABLE:
         logger.warning("NumPy is missing for similarity search.")
-        return []
+        return None
+
     # Generate the embedding for the input query text
     query_embedding = generate_embedding(query_text, model)
     if query_embedding is None:
-        return []  # Added return if embedding fails
-    query_vector_bytes = np.array(query_embedding, dtype=np.float32).tobytes()
-    # Check if JSON index exists
+        return None
+
+    return np.array(query_embedding, dtype=np.float32).tobytes()
+
+
+async def _ensure_vector_index_exists(client):
+    """Ensure vector index exists, create if necessary."""
     try:
-        client.ft(VECTOR_INDEX_NAME).info()  # Use client for info
+        client.ft(VECTOR_INDEX_NAME).info()
         logger.info(f"Redis Stack JSON vector search index '{VECTOR_INDEX_NAME}' found.")
     except redis.exceptions.ResponseError as e:
         if "Unknown index name" in str(e):
             logger.warning(f"Index '{VECTOR_INDEX_NAME}' not found. Attempting to create it now...")
             index_created = await _create_json_vector_index(client)
             if not index_created:
-                logger.error(
+                logger.exception(
                     f"Failed to create index '{VECTOR_INDEX_NAME}' on the fly. Cannot perform vector search."
                 )
-                return []
+                return False
             else:
                 logger.info(
                     f"Successfully created index '{VECTOR_INDEX_NAME}' on the fly. Proceeding with search."
                 )
-                # Index created, proceed with the search logic below
+                return True
         else:
-            # Different ResponseError occurred
-            logger.error(
-                f"Redis ResponseError checking index '{VECTOR_INDEX_NAME}': {e}. "
+            logger.exception(
+                f"Redis ResponseError checking index '{VECTOR_INDEX_NAME}'. "
                 f"Cannot perform vector search."
             )
-            return []
-    except Exception as e:
-        logger.error(
-            f"Error checking JSON index '{VECTOR_INDEX_NAME}': {e}. Cannot perform vector search."
+            return False
+    except Exception:
+        logger.exception(
+            f"Error checking JSON index '{VECTOR_INDEX_NAME}'. Cannot perform vector search."
         )
-        return []
-    # --- Execute FT.SEARCH ON JSON ---
+        return False
+    else:
+        return True
+
+
+async def _execute_vector_search(client, query_vector_bytes, top_n: int, min_similarity: float):
+    """Execute vector search and process results."""
     try:
         knn_query = (
             Query(f"(*)=>[KNN {top_n} @{VECTOR_FIELD_NAME} $query_vector AS vector_score]")
             .sort_by("vector_score")
             .return_fields(
                 "id", "vector_score", f"$.{MEMORY_TEXT_FIELD}", f"$.{IMPORTANCE_FIELD}"
-            )  # Return ID, score, text, importance
+            )
             .dialect(2)
         )
         query_params = {"query_vector": query_vector_bytes}
         logger.debug(f"Executing Redis FT.SEARCH JSON KNN query: {knn_query.query_string()}")
-        # Use the passed client for search command
+
         results = client.ft(VECTOR_INDEX_NAME).search(knn_query, query_params)
         logger.debug(f"FT.SEARCH JSON returned {results.total} potential matches.")
-        similarities = []
-        for doc in results.docs:
-            memory_key = doc.id  # Define key early in the loop
-            distance = float(doc.vector_score)
-            similarity = 1.0 - distance
-            if similarity >= min_similarity:
-                # Access other fields
-                memory_text = getattr(doc, f"$.{MEMORY_TEXT_FIELD}", None)
-                importance = getattr(doc, f"$.{IMPORTANCE_FIELD}", None)
-                if memory_text and memory_key:  # Check key existence here
-                    # Return key, text, similarity, and importance (or None)
-                    importance_float = float(importance) if importance is not None else None
-                    similarities.append((memory_key, memory_text, similarity, importance_float))
-                    logger.debug(
-                        f"  - Match: Key: {memory_key}, Text: '{memory_text[:50]}...' "
-                        f"(Similarity: {similarity:.4f}, Importance: {importance_float})"
-                    )
-                else:
-                    logger.warning(
-                        f"Could not retrieve key or memory text for matched document ID {doc.id}"
-                    )
-        return similarities
-    except Exception as e:
-        logger.error(f"Error during FT.SEARCH JSON execution: {e}")
+
+        return _process_search_results(results, min_similarity)
+    except Exception:
+        logger.exception("Error during FT.SEARCH JSON execution")
         return []
+
+
+def _process_search_results(results, min_similarity: float):
+    """Process search results and filter by similarity threshold."""
+    similarities = []
+    for doc in results.docs:
+        memory_key = doc.id
+        distance = float(doc.vector_score)
+        similarity = 1.0 - distance
+
+        if similarity >= min_similarity:
+            memory_text = getattr(doc, f"$.{MEMORY_TEXT_FIELD}", None)
+            importance = getattr(doc, f"$.{IMPORTANCE_FIELD}", None)
+
+            if memory_text and memory_key:
+                importance_float = float(importance) if importance is not None else None
+                similarities.append((memory_key, memory_text, similarity, importance_float))
+                logger.debug(
+                    f"  - Match: Key: {memory_key}, Text: '{memory_text[:50]}...' "
+                    f"(Similarity: {similarity:.4f}, Importance: {importance_float})"
+                )
+            else:
+                logger.warning(
+                    f"Could not retrieve key or memory text for matched document ID {doc.id}"
+                )
+
+    return similarities
 
 
 # --- Vital Memory B Functions (Now using JSON) ---
@@ -803,8 +872,8 @@ async def add_vital_memory_b(memory_text: str, importance: float, redis_client_i
         # Extract category and create a concise key
         category, value = cleaned_memory.split(":", 1)
         category = category.strip().lower().replace(" ", "_")
-        # Add hash for uniqueness (8 chars)
-        value_hash = hashlib.md5(value.strip().encode()).hexdigest()[:8]
+        # Add hash for uniqueness (8 chars) - using SHA-256 for security
+        value_hash = hashlib.sha256(value.strip().encode()).hexdigest()[:8]
         memory_key = f"{MEMORY_B_PREFIX}{category}_{value_hash}"
     else:
         # Fall back to old method for non-categorized memories
@@ -820,10 +889,10 @@ async def add_vital_memory_b(memory_text: str, importance: float, redis_client_i
         logger.info(
             f"Successfully added/updated vital memory B JSON (Key: {memory_key}): '{cleaned_memory[:50]}...'"
         )
-    except redis.exceptions.RedisError as e:
-        logger.error(f"Redis error in add_vital_memory_b (JSON): {e}")
-    except TypeError as e:
-        logger.error(f"Type error (likely JSON serialization) in add_vital_memory_b (JSON): {e}")
+    except redis.exceptions.RedisError:
+        logger.exception("Redis error in add_vital_memory_b (JSON)")
+    except TypeError:
+        logger.exception("Type error (likely JSON serialization) in add_vital_memory_b (JSON)")
 
 
 async def get_vital_memories_b(threshold: float, redis_client_instance=None) -> list[str]:
@@ -843,7 +912,6 @@ async def get_vital_memories_b(threshold: float, redis_client_instance=None) -> 
             for doc in results.docs
             if hasattr(doc, MEMORY_TEXT_FIELD)
         ]
-        return members
     except redis.exceptions.ResponseError as e:
         # Handle case where index might not exist yet
         if "Unknown Index name" in str(e):
@@ -851,11 +919,13 @@ async def get_vital_memories_b(threshold: float, redis_client_instance=None) -> 
                 f"Index {VECTOR_INDEX_NAME} not found in get_vital_memories_b. Returning empty list."
             )
             return []
-        logger.error(f"Redis error in get_vital_memories_b (JSON Query): {e}")
+        logger.exception("Redis error in get_vital_memories_b (JSON Query)")
         return []
-    except Exception as e:
-        logger.error(f"Unexpected error in get_vital_memories_b (JSON Query): {e}")
+    except Exception:
+        logger.exception("Unexpected error in get_vital_memories_b (JSON Query)")
         return []
+    else:
+        return members
 
 
 # --- Simplified Deletion Function (Uses DEL command by Key) ---
@@ -878,14 +948,15 @@ async def delete_vital_memory_b(memory_key: str, redis_client_instance=None):
         deleted_count = await redis_client_instance.delete(memory_key)
         if deleted_count > 0:
             logger.info(f"Successfully deleted memory with key '{memory_key}'.")
+            return deleted_count
         else:
             logger.warning(f"Key '{memory_key}' not found or already deleted.")
-        return deleted_count
-    except redis.exceptions.RedisError as e:
-        logger.error(f"Redis error during DEL operation for key '{memory_key}': {e}")
+            return deleted_count
+    except redis.exceptions.RedisError:
+        logger.exception(f"Redis error during DEL operation for key '{memory_key}'")
         return 0  # Indicate deletion failed
-    except Exception as e:
-        logger.error(f"Unexpected error in delete_vital_memory_b (using DEL): {e}")
+    except Exception:
+        logger.exception("Unexpected error in delete_vital_memory_b (using DEL)")
         return 0  # Indicate deletion failed
 
 
@@ -930,16 +1001,17 @@ async def find_memories_by_term(term: str, redis_client_instance=None) -> list[t
             text = getattr(doc, f"$.{MEMORY_TEXT_FIELD}", None)
             if key and text:
                 memories.append((key, text))
-    except redis.exceptions.ResponseError as e:
-        logger.error(f"Redis error during broad term search for '{term}': {e}")
+    except redis.exceptions.ResponseError:
+        logger.exception(f"Redis error during broad term search for '{term}'")
         # Optionally fallback to SCAN here if FT.SEARCH fails unexpectedly
-    except Exception as e:
-        logger.error(f"Unexpected error during broad term search for '{term}': {e}")
+    except Exception:
+        logger.exception(f"Unexpected error during broad term search for '{term}'")
     return memories
 
 
 async def clear_all_redis_memory_data(redis_client_instance=None) -> int:
     """Clear ALL memory-related data from Redis.
+
     Returns the total number of keys deleted.
     """
     if not redis_client_instance:
@@ -962,111 +1034,132 @@ async def clear_all_redis_memory_data(redis_client_instance=None) -> int:
                     break
             return deleted_count
 
-        # 1. Clear all memory_b keys
-        deleted = await clear_by_pattern("memory_b", f"{MEMORY_B_PREFIX}*")
-        total_deleted += deleted
+        # Clear primary memory keys
+        total_deleted += await _clear_primary_memory_keys(clear_by_pattern)
 
-        # 2. Clear all conversation history keys
-        deleted = await clear_by_pattern(
-            "conversation history", f"{CONVERSATION_HISTORY_KEY_PREFIX}*"
-        )
-        total_deleted += deleted
+        # Clear legacy vital memories key if it exists
+        total_deleted += await _clear_legacy_vital_memories(redis_client_instance)
 
-        # 3. Clear legacy vital memories key if it exists
-        if await redis_client_instance.exists(VITAL_MEMORY_KEY):
-            await redis_client_instance.delete(VITAL_MEMORY_KEY)
-            total_deleted += 1
-            logger.debug("Deleted legacy vital_memories key")
+        # Clear pattern-based keys
+        total_deleted += await _clear_pattern_based_keys(clear_by_pattern)
 
-        # 4. Clear message-related keys (msgs:*, conv:*, msg:*, user_convs:*)
-        message_patterns = ["msgs:*", "conv:*", "msg:*", "user_convs:*"]
-        for pattern in message_patterns:
-            deleted = await clear_by_pattern(f"message ({pattern})", pattern)
-            total_deleted += deleted
+        # Nuclear option: clear comprehensive patterns
+        total_deleted += await _clear_comprehensive_patterns(clear_by_pattern)
 
-        # 5. Clear neural memory keys
-        deleted = await clear_by_pattern("neural memory", "memory_b:neural_mem_*")
-        total_deleted += deleted
-
-        # 6. Clear any other memory-related keys (be thorough)
-        other_patterns = ["memory:*", "user_memory:*", "session_memory:*", "essential_memory:*"]
-        for pattern in other_patterns:
-            deleted = await clear_by_pattern(f"other memory ({pattern})", pattern)
-            total_deleted += deleted
-
-        # 7. Clear Redis indexes and any index-related keys
-        index_patterns = ["idx:*", "index:*", "*_idx", "*_index"]
-        for pattern in index_patterns:
-            deleted = await clear_by_pattern(f"index ({pattern})", pattern)
-            total_deleted += deleted
-
-        # 8. Clear any embedding or vector keys
-        vector_patterns = ["embedding:*", "vector:*", "emb:*", "*_emb", "*_vector", "*_embedding"]
-        for pattern in vector_patterns:
-            deleted = await clear_by_pattern(f"vector ({pattern})", pattern)
-            total_deleted += deleted
-
-        # 9. NUCLEAR OPTION: Clear ALL keys that could possibly be memory-related
-        # This catches any patterns we might have missed
-        all_possible_patterns = [
-            "*conversation*",
-            "*memory*",
-            "*msg*",
-            "*conv*",
-            "*session*",
-            "*user*",
-            "*vital*",
-            "*essential*",
-            "*neural*",
-            "*brain*",
-            "*history*",
-        ]
-        for pattern in all_possible_patterns:
-            deleted = await clear_by_pattern(f"comprehensive ({pattern})", pattern)
-            total_deleted += deleted
-
-        # 10. FINAL CHECK: Get all remaining keys and check for any memory-related ones
-        try:
-            all_keys = []
-            cursor = 0
-            while True:
-                cursor, keys = await redis_client_instance.scan(cursor, count=1000)
-                all_keys.extend(keys)
-                if cursor == 0:
-                    break
-
-            # Filter for any remaining memory-related keys
-            memory_keywords = [
-                "memory",
-                "neural",
-                "conversation",
-                "history",
-                "session",
-                "user",
-                "vital",
-                "msg",
-                "conv",
-            ]
-            remaining_memory_keys = []
-            for key in all_keys:
-                key_lower = key.lower()
-                if any(keyword in key_lower for keyword in memory_keywords):
-                    remaining_memory_keys.append(key)
-
-            if remaining_memory_keys:
-                logger.warning(
-                    f"Found {len(remaining_memory_keys)} additional memory-related keys to delete"
-                )
-                if remaining_memory_keys:
-                    deleted = await redis_client_instance.delete(*remaining_memory_keys)
-                    total_deleted += deleted
-                    logger.info(f"Deleted {deleted} additional memory keys")
-        except Exception as e:
-            logger.warning(f"Error in final memory key cleanup: {e}")
+        # Final check for remaining memory keys
+        total_deleted += await _clear_remaining_memory_keys(redis_client_instance)
 
         logger.info(f"🧹 Total Redis memory keys deleted: {total_deleted}")
-        return total_deleted
+    except Exception:
+        logger.exception("Error clearing all Redis memory data")
 
+    return total_deleted
+
+
+async def _clear_primary_memory_keys(clear_by_pattern):
+    """Clear primary memory keys."""
+    deleted = 0
+    # Clear all memory_b keys
+    deleted += await clear_by_pattern("memory_b", f"{MEMORY_B_PREFIX}*")
+
+    # Clear all conversation history keys
+    deleted += await clear_by_pattern(
+        "conversation history", f"{CONVERSATION_HISTORY_KEY_PREFIX}*"
+    )
+
+    # Clear neural memory keys
+    deleted += await clear_by_pattern("neural memory", "memory_b:neural_mem_*")
+
+    return deleted
+
+
+async def _clear_legacy_vital_memories(redis_client_instance):
+    """Clear legacy vital memories key."""
+    if await redis_client_instance.exists(VITAL_MEMORY_KEY):
+        await redis_client_instance.delete(VITAL_MEMORY_KEY)
+        logger.debug("Deleted legacy vital_memories key")
+        return 1
+    return 0
+
+
+async def _clear_pattern_based_keys(clear_by_pattern):
+    """Clear all pattern-based keys."""
+    deleted = 0
+
+    # Define all patterns to clear
+    pattern_groups = {
+        "message": ["msgs:*", "conv:*", "msg:*", "user_convs:*"],
+        "other memory": ["memory:*", "user_memory:*", "session_memory:*", "essential_memory:*"],
+        "index": ["idx:*", "index:*", "*_idx", "*_index"],
+        "vector": ["embedding:*", "vector:*", "emb:*", "*_emb", "*_vector", "*_embedding"]
+    }
+
+    # Clear each pattern group
+    for group_name, patterns in pattern_groups.items():
+        for pattern in patterns:
+            deleted += await clear_by_pattern(f"{group_name} ({pattern})", pattern)
+
+    return deleted
+
+
+async def _clear_comprehensive_patterns(clear_by_pattern):
+    """Clear comprehensive patterns as nuclear option."""
+    deleted = 0
+    all_possible_patterns = [
+        "*conversation*",
+        "*memory*",
+        "*msg*",
+        "*conv*",
+        "*session*",
+        "*user*",
+        "*vital*",
+        "*essential*",
+        "*neural*",
+        "*brain*",
+        "*history*",
+    ]
+    for pattern in all_possible_patterns:
+        deleted += await clear_by_pattern(f"comprehensive ({pattern})", pattern)
+    return deleted
+
+
+async def _clear_remaining_memory_keys(redis_client_instance):
+    """Final check to clear any remaining memory-related keys."""
+    deleted = 0
+    try:
+        all_keys = []
+        cursor = 0
+        while True:
+            cursor, keys = await redis_client_instance.scan(cursor, count=1000)
+            all_keys.extend(keys)
+            if cursor == 0:
+                break
+
+        # Filter for any remaining memory-related keys
+        memory_keywords = [
+            "memory",
+            "neural",
+            "conversation",
+            "history",
+            "session",
+            "user",
+            "vital",
+            "msg",
+            "conv",
+        ]
+        remaining_memory_keys = []
+        for key in all_keys:
+            key_lower = key.lower()
+            if any(keyword in key_lower for keyword in memory_keywords):
+                remaining_memory_keys.append(key)
+
+        if remaining_memory_keys:
+            logger.warning(
+                f"Found {len(remaining_memory_keys)} additional memory-related keys to delete"
+            )
+            deleted = await redis_client_instance.delete(*remaining_memory_keys)
+            logger.info(f"Deleted {deleted} additional memory keys")
     except Exception as e:
-        logger.error(f"Error clearing all Redis memory data: {e}")
-        return total_deleted
+        logger.warning(f"Error in final memory key cleanup: {e}")
+
+    return deleted

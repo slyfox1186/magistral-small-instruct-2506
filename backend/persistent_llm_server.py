@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """State-of-the-art persistent LLM server optimized for serial processing.
+
 Implements aggressive caching and minimal GPU lock time.
 """
 
@@ -20,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class LLMRequest:
-    """Request object for LLM processing"""
+    """Request object for LLM processing."""
 
     prompt: str
     max_tokens: int = 512
@@ -32,6 +33,7 @@ class LLMRequest:
     request_id: str = ""  # For tracing
 
     def __post_init__(self):
+        """Initialize the future if not provided."""
         if self.future is None:
             self.future = asyncio.Future()
         if not self.request_id:
@@ -51,6 +53,7 @@ class PersistentLLMServer:
     """
 
     def __init__(self, model_path: str, redis_url: str = "redis://localhost:6379"):
+        """Initialize the LLM server."""
         self.model_path = model_path
         self.model = None
         self.request_queue = asyncio.PriorityQueue()
@@ -71,7 +74,7 @@ class PersistentLLMServer:
         }
 
     async def start(self):
-        """Initialize the persistent model server"""
+        """Initialize the persistent model server."""
         if self.is_running:
             logger.warning("Server already running")
             return
@@ -89,8 +92,10 @@ class PersistentLLMServer:
             # Model loading happens ONCE at startup, no need for lock
             try:
                 from llama_cpp import Llama
-            except ImportError:
-                raise ImportError("llama-cpp-python is not installed. The LLM server cannot start without it.")
+            except ImportError as e:
+                raise ImportError(
+                    "llama-cpp-python is not installed. The LLM server cannot start without it."
+                ) from e
 
             self.model = Llama(
                 model_path=self.model_path,
@@ -105,16 +110,16 @@ class PersistentLLMServer:
 
             # Start the worker task
             self.is_running = True
-            asyncio.create_task(self._worker_loop())
+            self._worker_task = asyncio.create_task(self._worker_loop())
 
             logger.info("🎯 Persistent LLM Server ready for requests")
 
-        except Exception as e:
-            logger.error(f"❌ Failed to start LLM server: {e}")
+        except Exception:
+            logger.exception("❌ Failed to start LLM server")
             raise
 
     async def stop(self):
-        """Gracefully stop the server"""
+        """Gracefully stop the server."""
         logger.info("🛑 Stopping Persistent LLM Server...")
         self.is_running = False
 
@@ -188,12 +193,11 @@ class PersistentLLMServer:
 
             # Cache the response
             await self._cache_response(cache_key, response)
-
-            return response
-
-        except Exception as e:
-            logger.error(f"❌ Generation failed: {e}")
+        except Exception:
+            logger.exception("❌ Generation failed")
             raise
+        else:
+            return response
 
     async def generate_stream(
         self,
@@ -220,7 +224,7 @@ class PersistentLLMServer:
                 loop = asyncio.get_event_loop()
 
                 def stream_worker():
-                    """Worker function to run in thread executor"""
+                    """Worker function to run in thread executor."""
                     try:
                         # Stream tokens directly from the model
                         stream = self.model(
@@ -259,16 +263,20 @@ class PersistentLLMServer:
                         break
                     elif isinstance(token, Exception):
                         # Error occurred
-                        raise token
+                        self._raise_streaming_error(token)
                     else:
                         yield token
 
-            except Exception as e:
-                logger.error(f"❌ Streaming generation failed: {e}")
+            except Exception:
+                logger.exception("❌ Streaming generation failed")
                 raise
 
+    def _raise_streaming_error(self, error: Exception) -> None:
+        """Helper method to raise streaming errors."""
+        raise error
+
     async def _worker_loop(self):
-        """Main worker loop that processes requests serially"""
+        """Main worker loop that processes requests serially."""
         logger.info("🔄 Worker loop started")
 
         while self.is_running:
@@ -296,7 +304,7 @@ class PersistentLLMServer:
                         request.future.set_result(response)
                         logger.info(f"[🆔 {request.request_id}] Future set successfully")
                 except Exception as e:
-                    logger.error(f"❌ Request processing failed: {e}")
+                    logger.exception("❌ Request processing failed")
                     if not request.future.done():
                         request.future.set_exception(e)
                 finally:
@@ -305,14 +313,14 @@ class PersistentLLMServer:
             except asyncio.CancelledError:
                 logger.info("Worker loop cancelled")
                 break
-            except Exception as e:
-                logger.error(f"❌ Worker loop error: {e}")
+            except Exception:
+                logger.exception("❌ Worker loop error")
                 await asyncio.sleep(0.1)  # Brief pause on error
 
         logger.info("🛑 Worker loop stopped")
 
     async def _process_request(self, request: LLMRequest) -> str:
-        """Process a single request with minimal GPU lock time"""
+        """Process a single request with minimal GPU lock time."""
         logger.info(f"[🆔 {request.request_id}] Entering _process_request")
 
         # PHASE 1: Preprocessing (outside GPU lock)
@@ -352,8 +360,8 @@ class PersistentLLMServer:
 
                 logger.info(f"🎯 GPU processing: {gpu_time:.3f}s | Tokens: ~{len(text.split())}")
 
-            except Exception as e:
-                logger.error(f"❌ GPU generation failed: {e}")
+            except Exception:
+                logger.exception("❌ GPU generation failed")
                 raise
 
         # PHASE 3: Postprocessing (outside GPU lock)
@@ -368,29 +376,32 @@ class PersistentLLMServer:
 
         return text
 
-    def _generate_cache_key(self, prompt: str, max_tokens: int, temperature: float, top_p: float) -> str:
-        """Generate cache key for request parameters"""
+    def _generate_cache_key(
+        self, prompt: str, max_tokens: int, temperature: float, top_p: float
+    ) -> str:
+        """Generate cache key for request parameters."""
         key_data = f"{prompt}|{max_tokens}|{temperature}|{top_p}"
-        return f"llm_cache:{hashlib.md5(key_data.encode()).hexdigest()}"
+        return f"llm_cache:{hashlib.sha256(key_data.encode()).hexdigest()}"
 
     async def _get_cached_response(self, cache_key: str) -> str | None:
-        """Get cached response if exists"""
+        """Get cached response if exists."""
         try:
             cached = self.redis_client.get(cache_key)
-            return cached if cached else None
         except Exception as e:
             logger.warning(f"Cache read error: {e}")
             return None
+        else:
+            return cached if cached else None
 
     async def _cache_response(self, cache_key: str, response: str):
-        """Cache response with TTL"""
+        """Cache response with TTL."""
         try:
             self.redis_client.setex(cache_key, self.cache_ttl, response)
         except Exception as e:
             logger.warning(f"Cache write error: {e}")
 
     def get_stats(self) -> dict[str, Any]:
-        """Get performance statistics"""
+        """Get performance statistics."""
         stats = self.stats.copy()
 
         if stats["requests_processed"] > 0:
@@ -412,8 +423,8 @@ _llm_server_lock = asyncio.Lock()  # Lock for initialization
 
 
 async def get_llm_server() -> PersistentLLMServer:
-    """Get or create the global LLM server instance with proper locking"""
-    global llm_server
+    """Get or create the global LLM server instance with proper locking."""
+    global llm_server  # noqa: PLW0603
 
     # Fast path: if already initialized, return immediately
     if llm_server is not None and llm_server.is_running:

@@ -23,9 +23,17 @@ from typing import Any
 
 from pycoingecko import CoinGeckoAPI
 
-UTC = UTC
-
 # Import configuration
+
+# Constants for large number formatting
+LARGE_NUMBER_TRILLION = 1_000_000_000_000
+LARGE_NUMBER_BILLION = 1_000_000_000
+LARGE_NUMBER_MILLION = 1_000_000
+LARGE_NUMBER_THOUSAND = 1_000
+
+# Constants for sentiment analysis
+SENTIMENT_BULLISH_THRESHOLD = 0.1
+SENTIMENT_BEARISH_THRESHOLD = -0.1
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -99,7 +107,7 @@ class TrendingCoin:
 
 class CryptoTrading:
     """Comprehensive cryptocurrency market data retrieval class using CoinGecko API.
-    
+
     This class provides methods to fetch cryptocurrency prices, market data,
     global statistics, and trending cryptocurrencies from CoinGecko.
     """
@@ -107,7 +115,7 @@ class CryptoTrading:
     def __init__(self):
         """Initialize the CryptoTrading class with CoinGecko API."""
         # Initialize CoinGecko API client
-        api_key = os.getenv('COINGECKO_API_KEY')
+        api_key = os.getenv("COINGECKO_API_KEY")
         if api_key:
             self.cg = CoinGeckoAPI(api_key=api_key)
             logger.info("CryptoTrading initialized with CoinGecko API (authenticated)")
@@ -137,18 +145,21 @@ class CryptoTrading:
         try:
             data = fetch_func(*args, **kwargs)
             self.cache[cache_key] = (data, now)
-            return data
-        except Exception as e:
-            logger.error(f"Error fetching data for {cache_key}: {e!s}")
+        except Exception:
+            logger.exception(f"Error fetching data for {cache_key}")
             raise
+        else:
+            return data
 
-    def get_crypto_quote(self, coin_id: str, include_market_data: bool = True) -> CryptoQuote | None:
+    def get_crypto_quote(
+        self, coin_id: str, include_market_data: bool = True
+    ) -> CryptoQuote | None:
         """Get detailed cryptocurrency quote information.
-        
+
         Args:
             coin_id (str): CoinGecko coin ID (e.g., 'bitcoin', 'ethereum')
             include_market_data (bool): Include additional market data
-        
+
         Returns:
             Optional[CryptoQuote]: Cryptocurrency quote data
         """
@@ -163,54 +174,56 @@ class CryptoTrading:
                     market_data=include_market_data,
                     community_data=False,
                     developer_data=False,
-                    sparkline=False
+                    sparkline=False,
                 )
                 return data
 
             coin_data = self._get_cached_or_fetch(cache_key, fetch)
 
-            if not coin_data or 'market_data' not in coin_data:
+            if not coin_data or "market_data" not in coin_data:
                 logger.warning(f"No market data available for {coin_id}")
                 return None
 
-            market_data = coin_data['market_data']
+            market_data = coin_data["market_data"]
 
             quote = CryptoQuote(
-                id=coin_data.get('id', coin_id),
-                symbol=coin_data.get('symbol', '').upper(),
-                name=coin_data.get('name', ''),
-                current_price=market_data.get('current_price', {}).get('usd', 0.0),
-                market_cap=market_data.get('market_cap', {}).get('usd', 0.0),
-                market_cap_rank=market_data.get('market_cap_rank', 0),
-                price_change_24h=market_data.get('price_change_24h', 0.0),
-                price_change_percentage_24h=market_data.get('price_change_percentage_24h', 0.0),
-                volume_24h=market_data.get('total_volume', {}).get('usd', 0.0),
-                circulating_supply=market_data.get('circulating_supply'),
-                total_supply=market_data.get('total_supply'),
-                max_supply=market_data.get('max_supply'),
-                ath=market_data.get('ath', {}).get('usd'),
-                ath_change_percentage=market_data.get('ath_change_percentage', {}).get('usd'),
-                ath_date=market_data.get('ath_date', {}).get('usd'),
-                atl=market_data.get('atl', {}).get('usd'),
-                atl_change_percentage=market_data.get('atl_change_percentage', {}).get('usd'),
-                atl_date=market_data.get('atl_date', {}).get('usd'),
+                id=coin_data.get("id", coin_id),
+                symbol=coin_data.get("symbol", "").upper(),
+                name=coin_data.get("name", ""),
+                current_price=market_data.get("current_price", {}).get("usd", 0.0),
+                market_cap=market_data.get("market_cap", {}).get("usd", 0.0),
+                market_cap_rank=market_data.get("market_cap_rank", 0),
+                price_change_24h=market_data.get("price_change_24h", 0.0),
+                price_change_percentage_24h=market_data.get("price_change_percentage_24h", 0.0),
+                volume_24h=market_data.get("total_volume", {}).get("usd", 0.0),
+                circulating_supply=market_data.get("circulating_supply"),
+                total_supply=market_data.get("total_supply"),
+                max_supply=market_data.get("max_supply"),
+                ath=market_data.get("ath", {}).get("usd"),
+                ath_change_percentage=market_data.get("ath_change_percentage", {}).get("usd"),
+                ath_date=market_data.get("ath_date", {}).get("usd"),
+                atl=market_data.get("atl", {}).get("usd"),
+                atl_change_percentage=market_data.get("atl_change_percentage", {}).get("usd"),
+                atl_date=market_data.get("atl_date", {}).get("usd"),
             )
 
             logger.info(f"Retrieved quote for {coin_id}: ${quote.current_price:,.2f}")
+        except Exception:
+            logger.exception(f"Error retrieving crypto quote for {coin_id}")
+            return None
+        else:
             return quote
 
-        except Exception as e:
-            logger.error(f"Error retrieving crypto quote for {coin_id}: {e!s}")
-            return None
-
-    def get_multiple_crypto_quotes(self, coin_ids: list[str], force_refresh: bool = False, use_scraping: bool = True) -> list[CryptoQuote]:
+    def get_multiple_crypto_quotes(
+        self, coin_ids: list[str], force_refresh: bool = False, use_scraping: bool = True
+    ) -> list[CryptoQuote]:
         """Get multiple cryptocurrency quotes efficiently.
-        
+
         Args:
             coin_ids (list[str]): List of CoinGecko coin IDs
             force_refresh (bool): Force refresh cached data
             use_scraping (bool): Unused parameter for compatibility
-        
+
         Returns:
             list[CryptoQuote]: List of cryptocurrency quotes
         """
@@ -218,7 +231,7 @@ class CryptoTrading:
             if force_refresh:
                 # Clear cache for specific coins
                 for coin_id in coin_ids:
-                    cache_keys_to_remove = [k for k in self.cache.keys() if coin_id in k]
+                    cache_keys_to_remove = [k for k in self.cache if coin_id in k]
                     for key in cache_keys_to_remove:
                         del self.cache[key]
 
@@ -227,13 +240,13 @@ class CryptoTrading:
             def fetch():
                 # Use CoinGecko's coins/markets endpoint for efficient bulk fetching
                 data = self.cg.get_coins_markets(
-                    vs_currency='usd',
-                    ids=','.join(coin_ids),
-                    order='market_cap_desc',
+                    vs_currency="usd",
+                    ids=",".join(coin_ids),
+                    order="market_cap_desc",
                     per_page=len(coin_ids),
                     page=1,
                     sparkline=False,
-                    price_change_percentage='24h'
+                    price_change_percentage="24h",
                 )
                 return data
 
@@ -242,37 +255,37 @@ class CryptoTrading:
             quotes = []
             for coin in market_data:
                 quote = CryptoQuote(
-                    id=coin.get('id', ''),
-                    symbol=coin.get('symbol', '').upper(),
-                    name=coin.get('name', ''),
-                    current_price=coin.get('current_price', 0.0),
-                    market_cap=coin.get('market_cap', 0.0),
-                    market_cap_rank=coin.get('market_cap_rank', 0),
-                    price_change_24h=coin.get('price_change_24h', 0.0),
-                    price_change_percentage_24h=coin.get('price_change_percentage_24h', 0.0),
-                    volume_24h=coin.get('total_volume', 0.0),
-                    circulating_supply=coin.get('circulating_supply'),
-                    total_supply=coin.get('total_supply'),
-                    max_supply=coin.get('max_supply'),
-                    ath=coin.get('ath'),
-                    ath_change_percentage=coin.get('ath_change_percentage'),
-                    ath_date=coin.get('ath_date'),
-                    atl=coin.get('atl'),
-                    atl_change_percentage=coin.get('atl_change_percentage'),
-                    atl_date=coin.get('atl_date'),
+                    id=coin.get("id", ""),
+                    symbol=coin.get("symbol", "").upper(),
+                    name=coin.get("name", ""),
+                    current_price=coin.get("current_price", 0.0),
+                    market_cap=coin.get("market_cap", 0.0),
+                    market_cap_rank=coin.get("market_cap_rank", 0),
+                    price_change_24h=coin.get("price_change_24h", 0.0),
+                    price_change_percentage_24h=coin.get("price_change_percentage_24h", 0.0),
+                    volume_24h=coin.get("total_volume", 0.0),
+                    circulating_supply=coin.get("circulating_supply"),
+                    total_supply=coin.get("total_supply"),
+                    max_supply=coin.get("max_supply"),
+                    ath=coin.get("ath"),
+                    ath_change_percentage=coin.get("ath_change_percentage"),
+                    ath_date=coin.get("ath_date"),
+                    atl=coin.get("atl"),
+                    atl_change_percentage=coin.get("atl_change_percentage"),
+                    atl_date=coin.get("atl_date"),
                 )
                 quotes.append(quote)
 
             logger.info(f"Retrieved {len(quotes)} cryptocurrency quotes")
-            return quotes
-
-        except Exception as e:
-            logger.error(f"Error retrieving multiple crypto quotes: {e!s}")
+        except Exception:
+            logger.exception("Error retrieving multiple crypto quotes")
             return []
+        else:
+            return quotes
 
     def get_global_market_data(self) -> MarketStats | None:
         """Get global cryptocurrency market statistics.
-        
+
         Returns:
             Optional[MarketStats]: Global market statistics
         """
@@ -284,32 +297,34 @@ class CryptoTrading:
 
             global_data = self._get_cached_or_fetch(cache_key, fetch)
 
-            if not global_data or 'data' not in global_data:
+            if not global_data or "data" not in global_data:
                 logger.warning("No global market data available")
                 return None
 
-            data = global_data['data']
+            data = global_data["data"]
 
             stats = MarketStats(
-                total_market_cap=data.get('total_market_cap', {}).get('usd', 0.0),
-                total_volume_24h=data.get('total_volume', {}).get('usd', 0.0),
-                market_cap_change_24h=data.get('market_cap_change_percentage_24h_usd', 0.0),
-                active_cryptocurrencies=data.get('active_cryptocurrencies', 0),
-                markets=data.get('markets', 0),
-                market_cap_percentage=data.get('market_cap_percentage', {}),
+                total_market_cap=data.get("total_market_cap", {}).get("usd", 0.0),
+                total_volume_24h=data.get("total_volume", {}).get("usd", 0.0),
+                market_cap_change_24h=data.get("market_cap_change_percentage_24h_usd", 0.0),
+                active_cryptocurrencies=data.get("active_cryptocurrencies", 0),
+                markets=data.get("markets", 0),
+                market_cap_percentage=data.get("market_cap_percentage", {}),
                 updated_at=datetime.now(UTC).isoformat(),
             )
 
-            logger.info(f"Retrieved global market data: ${stats.total_market_cap:,.0f} total market cap")
-            return stats
-
-        except Exception as e:
-            logger.error(f"Error retrieving global market data: {e!s}")
+            logger.info(
+                f"Retrieved global market data: ${stats.total_market_cap:,.0f} total market cap"
+            )
+        except Exception:
+            logger.exception("Error retrieving global market data")
             return None
+        else:
+            return stats
 
     def get_trending_coins(self) -> list[TrendingCoin]:
         """Get trending cryptocurrencies from CoinGecko.
-        
+
         Returns:
             list[TrendingCoin]: List of trending cryptocurrencies
         """
@@ -322,34 +337,36 @@ class CryptoTrading:
             trending_data = self._get_cached_or_fetch(cache_key, fetch)
 
             trending_coins = []
-            if trending_data and 'coins' in trending_data:
-                for item in trending_data['coins']:
-                    coin = item.get('item', {})
+            if trending_data and "coins" in trending_data:
+                for item in trending_data["coins"]:
+                    coin = item.get("item", {})
                     trending_coin = TrendingCoin(
-                        id=coin.get('id', ''),
-                        symbol=coin.get('symbol', ''),
-                        name=coin.get('name', ''),
-                        market_cap_rank=coin.get('market_cap_rank', 0),
-                        price_btc=coin.get('price_btc', 0.0),
-                        score=coin.get('score', 0),
-                        thumb=coin.get('thumb', ''),
-                        large=coin.get('large', ''),
+                        id=coin.get("id", ""),
+                        symbol=coin.get("symbol", ""),
+                        name=coin.get("name", ""),
+                        market_cap_rank=coin.get("market_cap_rank", 0),
+                        price_btc=coin.get("price_btc", 0.0),
+                        score=coin.get("score", 0),
+                        thumb=coin.get("thumb", ""),
+                        large=coin.get("large", ""),
                     )
                     trending_coins.append(trending_coin)
 
             logger.info(f"Retrieved {len(trending_coins)} trending cryptocurrencies")
+        except Exception:
+            logger.exception("Error retrieving trending coins")
+            return []
+        else:
             return trending_coins
 
-        except Exception as e:
-            logger.error(f"Error retrieving trending coins: {e!s}")
-            return []
-
-    def format_crypto_data_with_sources(self, coin_ids: list[str]) -> tuple[str, list[dict[str, str]]]:
+    def format_crypto_data_with_sources(
+        self, coin_ids: list[str]
+    ) -> tuple[str, list[dict[str, str]]]:
         """Format cryptocurrency data with proper markdown table formatting.
-        
+
         Args:
             coin_ids (list[str]): List of coin IDs to get data for
-        
+
         Returns:
             tuple[str, list[dict[str, str]]]: Formatted markdown table and sources
         """
@@ -377,13 +394,15 @@ class CryptoTrading:
             table += f"| **{quote.name}** ({quote.symbol}) | `${quote.current_price:,.4f}` | {price_change_emoji} **{change_sign}{quote.price_change_percentage_24h:.2f}%** | #{quote.market_cap_rank} | ${market_cap_formatted} | ${volume_formatted} |\n"
 
             # Create source entry
-            sources.append({
-                "title": f"{quote.name} ({quote.symbol}) Market Data",
-                "url": f"https://www.coingecko.com/en/coins/{quote.id}",
-                "date": datetime.now(UTC).isoformat(),
-                "source": "CoinGecko API",
-                "category": "Cryptocurrency Market Data",
-            })
+            sources.append(
+                {
+                    "title": f"{quote.name} ({quote.symbol}) Market Data",
+                    "url": f"https://www.coingecko.com/en/coins/{quote.id}",
+                    "date": datetime.now(UTC).isoformat(),
+                    "source": "CoinGecko API",
+                    "category": "Cryptocurrency Market Data",
+                }
+            )
 
         # Add data timestamp
         table += f"\n*Data retrieved: {datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S UTC')}*\n"
@@ -392,21 +411,23 @@ class CryptoTrading:
 
     def _format_large_number(self, number: float) -> str:
         """Format large numbers with appropriate abbreviations (K, M, B, T)."""
-        if number >= 1_000_000_000_000:  # Trillion
-            return f"{number/1_000_000_000_000:.2f}T"
-        elif number >= 1_000_000_000:  # Billion
-            return f"{number/1_000_000_000:.2f}B"
-        elif number >= 1_000_000:  # Million
-            return f"{number/1_000_000:.2f}M"
-        elif number >= 1_000:  # Thousand
-            return f"{number/1_000:.2f}K"
+        if number >= LARGE_NUMBER_TRILLION:  # Trillion
+            return f"{number / LARGE_NUMBER_TRILLION:.2f}T"
+        elif number >= LARGE_NUMBER_BILLION:  # Billion
+            return f"{number / LARGE_NUMBER_BILLION:.2f}B"
+        elif number >= LARGE_NUMBER_MILLION:  # Million
+            return f"{number / LARGE_NUMBER_MILLION:.2f}M"
+        elif number >= LARGE_NUMBER_THOUSAND:  # Thousand
+            return f"{number / LARGE_NUMBER_THOUSAND:.2f}K"
         else:
             return f"{number:,.2f}"
 
     # Compatibility methods for news functionality
     def get_crypto_news(self, limit: int = 20, category: str | None = None) -> list[CryptoNews]:
         """Placeholder for news functionality - not available with CoinGecko."""
-        logger.warning("News functionality not available with CoinGecko API. Use price data instead.")
+        logger.warning(
+            "News functionality not available with CoinGecko API. Use price data instead."
+        )
         return []
 
     def search_crypto_news(self, query: str, limit: int = 10) -> list[CryptoNews]:
@@ -419,12 +440,12 @@ class CryptoTrading:
         try:
             # Get top 50 cryptocurrencies by market cap
             market_data = self.cg.get_coins_markets(
-                vs_currency='usd',
-                order='market_cap_desc',
+                vs_currency="usd",
+                order="market_cap_desc",
                 per_page=50,
                 page=1,
                 sparkline=False,
-                price_change_percentage='24h'
+                price_change_percentage="24h",
             )
 
             if not market_data:
@@ -435,7 +456,7 @@ class CryptoTrading:
             neutral_count = 0
 
             for coin in market_data:
-                change_24h = coin.get('price_change_percentage_24h', 0)
+                change_24h = coin.get("price_change_percentage_24h", 0)
                 if change_24h > 1:
                     positive_count += 1
                 elif change_24h < -1:
@@ -453,15 +474,17 @@ class CryptoTrading:
                 "neutral_sentiment": neutral_count,
                 "sentiment_score": sentiment_score,
                 "overall_sentiment": (
-                    "Bullish" if sentiment_score > 0.1
-                    else "Bearish" if sentiment_score < -0.1
+                    "Bullish"
+                    if sentiment_score > SENTIMENT_BULLISH_THRESHOLD
+                    else "Bearish"
+                    if sentiment_score < SENTIMENT_BEARISH_THRESHOLD
                     else "Neutral"
                 ),
                 "updated_at": datetime.now(UTC).isoformat(),
             }
 
-        except Exception as e:
-            logger.error(f"Error analyzing market sentiment: {e!s}")
+        except Exception:
+            logger.exception("Error analyzing market sentiment")
             return {}
 
 
@@ -510,7 +533,9 @@ if __name__ == "__main__":
     print("\n=== Top Cryptocurrencies ===")
     top_coins = crypto_trader.get_multiple_crypto_quotes(["bitcoin", "ethereum", "cardano"])
     for coin in top_coins:
-        print(f"{coin.name} ({coin.symbol}): ${coin.current_price:,.2f} ({coin.price_change_percentage_24h:+.2f}%)")
+        print(
+            f"{coin.name} ({coin.symbol}): ${coin.current_price:,.2f} ({coin.price_change_percentage_24h:+.2f}%)"
+        )
 
     # Get global market data
     print("\n=== Global Market Data ===")

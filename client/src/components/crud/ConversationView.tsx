@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Conversation, MessageData, MessageCreate } from '@/utils/types';
+import { Conversation, MessageData } from '@/utils/types';
 import { crudApi } from '@/api/crud';
 import { useAlerts } from '@/hooks/useAlerts';
 import { ChatMessage } from '@/components/ChatMessage';
@@ -16,8 +16,6 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
   const [messages, setMessages] = useState<MessageData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [newMessage, setNewMessage] = useState('');
-  const [sending, setSending] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
   const [editTitle, setEditTitle] = useState(conversation.title);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -49,48 +47,6 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const handleSendMessage = async () => {
-    if (!newMessage.trim() || sending) return;
-
-    try {
-      setSending(true);
-      
-      // Create user message
-      const userMessage: MessageCreate = {
-        conversation_id: conversation.id,
-        role: 'user',
-        content: newMessage.trim(),
-        metadata: { timestamp: new Date().toISOString() },
-      };
-
-      const createdMessage = await crudApi.createMessage(userMessage);
-      setMessages(prev => [...prev, createdMessage]);
-      setNewMessage('');
-
-      // TODO: Integrate with existing chat streaming API
-      // For now, we'll just add a placeholder assistant response
-      const assistantMessage: MessageCreate = {
-        conversation_id: conversation.id,
-        role: 'assistant',
-        content: 'This is a placeholder response. The actual AI response will be implemented when integrating with the existing chat system.',
-        metadata: { timestamp: new Date().toISOString() },
-      };
-
-      setTimeout(async () => {
-        try {
-          const assistantResponse = await crudApi.createMessage(assistantMessage);
-          setMessages(prev => [...prev, assistantResponse]);
-        } catch {
-          showAlert('Failed to get AI response', 'error');
-        }
-      }, 1000);
-
-    } catch {
-      showAlert('Failed to send message', 'error');
-    } finally {
-      setSending(false);
-    }
-  };
 
   const handleUpdateTitle = async () => {
     if (editTitle.trim() === conversation.title) {
@@ -183,7 +139,10 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
           </div>
         ) : (
           messages.map((message) => (
-            <div key={message.id} className="message-wrapper">
+            <div key={message.id} className={`message-wrapper ${message.role}-message`}>
+              <div className={`message-role-indicator ${message.role}`}>
+                {message.role.charAt(0).toUpperCase() + message.role.slice(1)}
+              </div>
               <ChatMessage
                 message={{
                   id: message.id,
@@ -193,6 +152,9 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
                 isStreaming={false}
               />
               <div className="message-actions">
+                <span className="message-timestamp">
+                  {formatDate(message.created_at)}
+                </span>
                 <button
                   className="btn btn-sm btn-danger"
                   onClick={() => handleDeleteMessage(message.id)}
@@ -200,44 +162,11 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
                 >
                   Delete
                 </button>
-                <span className="message-timestamp">
-                  {formatDate(message.created_at)}
-                </span>
               </div>
             </div>
           ))
         )}
         <div ref={messagesEndRef} />
-      </div>
-
-      <div className="message-input">
-        <div className="input-group">
-          <textarea
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            onKeyPress={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSendMessage();
-              }
-            }}
-            placeholder="Type your message... (Enter to send, Shift+Enter for new line)"
-            disabled={sending || conversation.archived}
-            rows={3}
-          />
-          <button
-            onClick={handleSendMessage}
-            disabled={!newMessage.trim() || sending || conversation.archived}
-            className="btn btn-primary"
-          >
-            {sending ? 'Sending...' : 'Send'}
-          </button>
-        </div>
-        {conversation.archived && (
-          <div className="archived-warning">
-            This conversation is archived. Unarchive it to send new messages.
-          </div>
-        )}
       </div>
     </div>
   );

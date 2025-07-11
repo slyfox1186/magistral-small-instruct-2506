@@ -16,7 +16,7 @@ from fastapi.responses import JSONResponse
 
 logger = logging.getLogger(__name__)
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class ErrorCategory(Enum):
@@ -41,8 +41,9 @@ class ApplicationError(Exception):
         message: str,
         category: ErrorCategory = ErrorCategory.UNKNOWN,
         status_code: int = status.HTTP_500_INTERNAL_SERVER_ERROR,
-        details: dict[str, Any] | None = None
+        details: dict[str, Any] | None = None,
     ):
+        """Initialize ApplicationError with message, category, status code and details."""
         super().__init__(message)
         self.category = category
         self.status_code = status_code
@@ -53,11 +54,9 @@ class NetworkError(ApplicationError):
     """Network-related errors."""
 
     def __init__(self, message: str, details: dict[str, Any] | None = None):
+        """Initialize NetworkError with message and details."""
         super().__init__(
-            message,
-            ErrorCategory.NETWORK,
-            status.HTTP_503_SERVICE_UNAVAILABLE,
-            details
+            message, ErrorCategory.NETWORK, status.HTTP_503_SERVICE_UNAVAILABLE, details
         )
 
 
@@ -65,11 +64,9 @@ class DatabaseError(ApplicationError):
     """Database-related errors."""
 
     def __init__(self, message: str, details: dict[str, Any] | None = None):
+        """Initialize NetworkError with message and details."""
         super().__init__(
-            message,
-            ErrorCategory.DATABASE,
-            status.HTTP_503_SERVICE_UNAVAILABLE,
-            details
+            message, ErrorCategory.DATABASE, status.HTTP_503_SERVICE_UNAVAILABLE, details
         )
 
 
@@ -77,36 +74,26 @@ class ModelError(ApplicationError):
     """Model/LLM-related errors."""
 
     def __init__(self, message: str, details: dict[str, Any] | None = None):
-        super().__init__(
-            message,
-            ErrorCategory.MODEL,
-            status.HTTP_503_SERVICE_UNAVAILABLE,
-            details
-        )
+        """Initialize NetworkError with message and details."""
+        super().__init__(message, ErrorCategory.MODEL, status.HTTP_503_SERVICE_UNAVAILABLE, details)
 
 
 class ValidationError(ApplicationError):
     """Input validation errors."""
 
     def __init__(self, message: str, details: dict[str, Any] | None = None):
-        super().__init__(
-            message,
-            ErrorCategory.VALIDATION,
-            status.HTTP_400_BAD_REQUEST,
-            details
-        )
+        """Initialize NetworkError with message and details."""
+        super().__init__(message, ErrorCategory.VALIDATION, status.HTTP_400_BAD_REQUEST, details)
 
 
 class RateLimitError(ApplicationError):
     """Rate limiting errors."""
 
     def __init__(self, message: str, retry_after: int | None = None):
+        """Initialize RateLimitError with message and retry_after time."""
         details = {"retry_after": retry_after} if retry_after else {}
         super().__init__(
-            message,
-            ErrorCategory.RATE_LIMIT,
-            status.HTTP_429_TOO_MANY_REQUESTS,
-            details
+            message, ErrorCategory.RATE_LIMIT, status.HTTP_429_TOO_MANY_REQUESTS, details
         )
 
 
@@ -115,10 +102,10 @@ def handle_error_with_retry(
     max_retries: int = 3,
     retry_delay: float = 1.0,
     backoff_factor: float = 2.0,
-    exceptions: tuple[type[Exception], ...] = (Exception,)
+    exceptions: tuple[type[Exception], ...] = (Exception,),
 ) -> Callable[..., T]:
     """Decorator for handling errors with retry logic.
-    
+
     Args:
         func: Function to wrap
         max_retries: Maximum number of retry attempts
@@ -149,9 +136,7 @@ def handle_error_with_retry(
                     await asyncio.sleep(delay)
                     delay *= backoff_factor
                 else:
-                    logger.error(
-                        f"All {max_retries + 1} attempts failed for {func.__name__}: {e}"
-                    )
+                    logger.exception(f"All {max_retries + 1} attempts failed for {func.__name__}")
 
         if last_exception:
             raise last_exception
@@ -175,9 +160,7 @@ def handle_error_with_retry(
                     time.sleep(delay)
                     delay *= backoff_factor
                 else:
-                    logger.error(
-                        f"All {max_retries + 1} attempts failed for {func.__name__}: {e}"
-                    )
+                    logger.exception(f"All {max_retries + 1} attempts failed for {func.__name__}")
 
         if last_exception:
             raise last_exception
@@ -193,16 +176,54 @@ class ErrorHandler:
     """Centralized error handler for the application."""
 
     @staticmethod
-    def handle_exception(
-        e: Exception,
-        context: str | None = None
+    def _create_error_response(
+        error_msg: str,
+        error_type: str,
+        category: ErrorCategory,
+        error_id: str,
+        **kwargs
     ) -> dict[str, Any]:
+        """Create a standardized error response."""
+        response = {
+            "error": error_msg,
+            "error_type": error_type,
+            "category": category.value,
+            "error_id": error_id,
+        }
+        response.update(kwargs)
+        return response
+
+    @staticmethod
+    def _get_error_mapping(e: Exception) -> tuple[str, str, ErrorCategory, dict[str, Any]]:
+        """Get error message, type, category and details for specific exception types."""
+        if isinstance(e, ApplicationError):
+            return str(e), type(e).__name__, e.category, e.details
+
+        if isinstance(e, HTTPException):
+            return e.detail, "HTTPException", ErrorCategory.UNKNOWN, {"status_code": e.status_code}
+
+        if isinstance(e, ValueError | KeyError):
+            message = f"Missing required key: {e}" if isinstance(e, KeyError) else str(e)
+            return message, type(e).__name__, ErrorCategory.VALIDATION, {}
+
+        if isinstance(e, MemoryError):
+            return "System out of memory", "MemoryError", ErrorCategory.MEMORY, {"critical": True}
+
+        if isinstance(e, TimeoutError | ConnectionError):
+            message = "Operation timed out" if isinstance(e, TimeoutError) else "Connection failed"
+            return message, type(e).__name__, ErrorCategory.NETWORK, {}
+
+        # Generic fallback
+        return "An unexpected error occurred", type(e).__name__, ErrorCategory.UNKNOWN, {"message": str(e)} if str(e) else {}
+
+    @staticmethod
+    def handle_exception(e: Exception, context: str | None = None) -> dict[str, Any]:
         """Convert exception to structured error response.
-        
+
         Args:
             e: The exception to handle
             context: Optional context about where the error occurred
-            
+
         Returns:
             Dictionary with error details
         """
@@ -211,113 +232,50 @@ class ErrorHandler:
         # Log the error with full traceback
         logger.error(
             f"Error {error_id} in {context or 'unknown context'}: {type(e).__name__}: {e}",
-            exc_info=True
+            exc_info=True,
         )
 
-        # Handle specific error types
-        if isinstance(e, ApplicationError):
-            return {
-                "error": str(e),
-                "error_type": type(e).__name__,
-                "category": e.category.value,
-                "details": e.details,
-                "error_id": error_id
-            }
+        # Get error details from mapping
+        message, error_type, category, details = ErrorHandler._get_error_mapping(e)
 
-        elif isinstance(e, HTTPException):
-            return {
-                "error": e.detail,
-                "error_type": "HTTPException",
-                "category": ErrorCategory.UNKNOWN.value,
-                "status_code": e.status_code,
-                "error_id": error_id
-            }
+        # Handle special case for HTTPException status code
+        status_code = details.pop("status_code", None)
+        if status_code:
+            return ErrorHandler._create_error_response(
+                message, error_type, category, error_id, status_code=status_code
+            )
 
-        elif isinstance(e, ValueError):
-            return {
-                "error": str(e),
-                "error_type": "ValueError",
-                "category": ErrorCategory.VALIDATION.value,
-                "error_id": error_id
-            }
-
-        elif isinstance(e, KeyError):
-            return {
-                "error": f"Missing required key: {e}",
-                "error_type": "KeyError",
-                "category": ErrorCategory.VALIDATION.value,
-                "error_id": error_id
-            }
-
-        elif isinstance(e, MemoryError):
-            return {
-                "error": "System out of memory",
-                "error_type": "MemoryError",
-                "category": ErrorCategory.MEMORY.value,
-                "error_id": error_id,
-                "details": {"critical": True}
-            }
-
-        elif isinstance(e, TimeoutError):
-            return {
-                "error": "Operation timed out",
-                "error_type": "TimeoutError",
-                "category": ErrorCategory.NETWORK.value,
-                "error_id": error_id
-            }
-
-        elif isinstance(e, ConnectionError):
-            return {
-                "error": "Connection failed",
-                "error_type": "ConnectionError",
-                "category": ErrorCategory.NETWORK.value,
-                "error_id": error_id
-            }
-
-        else:
-            # Generic error handling
-            return {
-                "error": "An unexpected error occurred",
-                "error_type": type(e).__name__,
-                "category": ErrorCategory.UNKNOWN.value,
-                "error_id": error_id,
-                "details": {"message": str(e)} if str(e) else {}
-            }
+        return ErrorHandler._create_error_response(
+            message, error_type, category, error_id, details=details
+        )
 
     @staticmethod
-    async def handle_request_error(
-        request: Request,
-        exc: Exception
-    ) -> JSONResponse:
+    async def handle_request_error(request: Request, exc: Exception) -> JSONResponse:
         """FastAPI exception handler for requests.
-        
+
         Args:
             request: The FastAPI request
             exc: The exception that occurred
-            
+
         Returns:
             JSON response with error details
         """
         error_response = ErrorHandler.handle_exception(
-            exc,
-            context=f"{request.method} {request.url.path}"
+            exc, context=f"{request.method} {request.url.path}"
         )
 
         # Determine status code
-        if isinstance(exc, ApplicationError) or isinstance(exc, HTTPException):
+        if isinstance(exc, ApplicationError | HTTPException):
             status_code = exc.status_code
         else:
             status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
 
-        return JSONResponse(
-            status_code=status_code,
-            content=error_response
-        )
+        return JSONResponse(status_code=status_code, content=error_response)
 
 
 def setup_exception_handlers(app):
     """Setup global exception handlers for FastAPI app.
-    
+
     Args:
         app: FastAPI application instance
     """
@@ -337,7 +295,7 @@ def setup_exception_handlers(app):
 
 def log_unhandled_exception(exc_type, exc_value, exc_traceback):
     """Handler for unhandled exceptions.
-    
+
     This ensures all crashes are properly logged.
     """
     if issubclass(exc_type, KeyboardInterrupt):
@@ -345,10 +303,7 @@ def log_unhandled_exception(exc_type, exc_value, exc_traceback):
         sys.__excepthook__(exc_type, exc_value, exc_traceback)
         return
 
-    logger.critical(
-        "Unhandled exception",
-        exc_info=(exc_type, exc_value, exc_traceback)
-    )
+    logger.critical("Unhandled exception", exc_info=(exc_type, exc_value, exc_traceback))
 
 
 # Install the unhandled exception handler
@@ -359,14 +314,12 @@ sys.excepthook = log_unhandled_exception
 if __name__ == "__main__":
     # Demo the error handling
 
-    @handle_error_with_retry(
-        max_retries=3,
-        exceptions=(ConnectionError, TimeoutError)
-    )
+    @handle_error_with_retry(max_retries=3, exceptions=(ConnectionError, TimeoutError))
     async def flaky_network_call():
         """Simulated network call that might fail."""
-        import random
-        if random.random() < 0.7:
+        import secrets
+
+        if secrets.randbits(1):  # 50% failure rate
             raise ConnectionError("Network unreachable")
         return "Success!"
 

@@ -1,4 +1,4 @@
-"""Advanced Memory Processing System for AI Assistant
+"""Advanced Memory Processing System for AI Assistant.
 
 This package provides a world-class, production-ready memory processing system
 that transforms conversations into structured, meaningful memories.
@@ -20,7 +20,7 @@ Features:
 Usage:
     from memory_processing import AdvancedMemoryProcessor
     from memory_processing.config import get_config
-    
+
     config = get_config('production')
     processor = AdvancedMemoryProcessor(memory_system, config)
     result = await processor.process_conversation(user_prompt, response, session_id)
@@ -43,5 +43,5 @@ __all__ = [
     "calculate_text_similarity",
     "extract_entities",
     "format_memory_content",
-    "get_config"
+    "get_config",
 ]

@@ -40,9 +40,10 @@ logger = logging.getLogger(__name__)
 # Get OpenWeatherMap API credentials from environment variables
 OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
 
+
 def normalize_city_query(city: str) -> str:
     """Normalize city query to work better with geocoding API.
-    
+
     Note: State name conversion is now handled in the chat pipeline before
     this function is called, so this just returns the input as-is.
     """
@@ -51,7 +52,8 @@ def normalize_city_query(city: str) -> str:
 
 @dataclass
 class WeatherData:
-    """Weather data structure"""
+    """Weather data structure."""
+
     location: str
     country: str
     temperature: float
@@ -67,7 +69,8 @@ class WeatherData:
 
 @dataclass
 class LocationData:
-    """Location data structure"""
+    """Location data structure."""
+
     name: str
     country: str
     state: str | None
@@ -76,9 +79,10 @@ class LocationData:
 
 
 class WeatherService:
-    """Weather service client with circuit breaker and caching"""
+    """Weather service client with circuit breaker and caching."""
 
     def __init__(self):
+        """Initialize the weather service."""
         self.api_key = OPENWEATHER_API_KEY
         self.base_url = "https://api.openweathermap.org"
         self.geo_base_url = "http://api.openweathermap.org/geo/1.0"
@@ -86,18 +90,19 @@ class WeatherService:
         self.circuit_breaker = get_api_breaker("weather")
 
     async def __aenter__(self):
-        """Async context manager entry"""
+        """Async context manager entry."""
         self.session = aiohttp.ClientSession()
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Async context manager exit"""
+        """Async context manager exit."""
         if self.session:
             await self.session.close()
 
     async def _make_request(self, url: str, params: dict[str, Any]) -> dict[str, Any]:
-        """Make API request with circuit breaker protection"""
+        """Make API request with circuit breaker protection."""
         try:
+
             async def make_request():
                 async with self.session.get(url, params=params) as response:
                     response.raise_for_status()
@@ -105,14 +110,14 @@ class WeatherService:
 
             return await self.circuit_breaker.call(make_request)
         except CircuitBreakerError:
-            logger.error("Weather API circuit breaker is open")
+            logger.exception("Weather API circuit breaker is open")
             raise
-        except Exception as e:
-            logger.error(f"Weather API request failed: {e}")
+        except Exception:
+            logger.exception("Weather API request failed")
             raise
 
     async def get_coordinates_by_city(self, city: str, limit: int = 5) -> list[LocationData]:
-        """Get coordinates for a city using direct geocoding"""
+        """Get coordinates for a city using direct geocoding."""
         if not self.api_key:
             raise ValueError("OpenWeatherMap API key not configured")
 
@@ -121,11 +126,7 @@ class WeatherService:
         logger.info(f"Geocoding: '{city}' → '{normalized_city}'")
 
         url = f"{self.geo_base_url}/direct"
-        params = {
-            "q": normalized_city,
-            "limit": limit,
-            "appid": self.api_key
-        }
+        params = {"q": normalized_city, "limit": limit, "appid": self.api_key}
 
         try:
             data = await self._make_request(url, params)
@@ -144,25 +145,24 @@ class WeatherService:
                     country=item.get("country", ""),
                     state=item.get("state"),
                     lat=item.get("lat", 0.0),
-                    lon=item.get("lon", 0.0)
+                    lon=item.get("lon", 0.0),
                 )
                 locations.append(location)
 
             return locations[:limit]
-        except Exception as e:
-            logger.error(f"Failed to get coordinates for city {city}: {e}")
+        except Exception:
+            logger.exception(f"Failed to get coordinates for city {city}")
             return []
 
-    async def get_coordinates_by_zip(self, zip_code: str, country_code: str = "US") -> LocationData | None:
-        """Get coordinates for a zip code"""
+    async def get_coordinates_by_zip(
+        self, zip_code: str, country_code: str = "US"
+    ) -> LocationData | None:
+        """Get coordinates for a zip code."""
         if not self.api_key:
             raise ValueError("OpenWeatherMap API key not configured")
 
         url = f"{self.geo_base_url}/zip"
-        params = {
-            "zip": f"{zip_code},{country_code}",
-            "appid": self.api_key
-        }
+        params = {"zip": f"{zip_code},{country_code}", "appid": self.api_key}
 
         try:
             data = await self._make_request(url, params)
@@ -171,14 +171,16 @@ class WeatherService:
                 country=data.get("country", ""),
                 state=None,
                 lat=data.get("lat", 0.0),
-                lon=data.get("lon", 0.0)
+                lon=data.get("lon", 0.0),
             )
-        except Exception as e:
-            logger.error(f"Failed to get coordinates for zip {zip_code}: {e}")
+        except Exception:
+            logger.exception(f"Failed to get coordinates for zip {zip_code}")
             return None
 
-    async def get_current_weather(self, lat: float, lon: float, units: str = "metric") -> WeatherData | None:
-        """Get current weather for coordinates"""
+    async def get_current_weather(
+        self, lat: float, lon: float, units: str = "metric"
+    ) -> WeatherData | None:
+        """Get current weather for coordinates."""
         if not self.api_key:
             raise ValueError("OpenWeatherMap API key not configured")
 
@@ -188,7 +190,7 @@ class WeatherService:
             "lon": lon,
             "appid": self.api_key,
             "units": units,
-            "exclude": "minutely,hourly,daily,alerts"
+            "exclude": "minutely,hourly,daily,alerts",
         }
 
         try:
@@ -210,22 +212,17 @@ class WeatherService:
                 pressure=current.get("pressure", 0),
                 visibility=current.get("visibility"),
                 uv_index=current.get("uvi"),
-                timestamp=current.get("dt")
+                timestamp=current.get("dt"),
             )
-        except Exception as e:
-            logger.error(f"Failed to get current weather for {lat}, {lon}: {e}")
+        except Exception:
+            logger.exception(f"Failed to get current weather for {lat}, {lon}")
             return None
 
     async def _get_location_name(self, lat: float, lon: float) -> str:
-        """Get location name from coordinates"""
+        """Get location name from coordinates."""
         try:
             url = f"{self.geo_base_url}/reverse"
-            params = {
-                "lat": lat,
-                "lon": lon,
-                "limit": 1,
-                "appid": self.api_key
-            }
+            params = {"lat": lat, "lon": lon, "limit": 1, "appid": self.api_key}
 
             data = await self._make_request(url, params)
             if data:
@@ -238,8 +235,9 @@ class WeatherService:
                     return f"{name}, {state}, {country}"
                 else:
                     return f"{name}, {country}"
-            return "Unknown Location"
         except Exception:
+            return "Unknown Location"
+        else:
             return "Unknown Location"
 
 
@@ -247,15 +245,20 @@ class WeatherService:
 weather_service = None
 
 
+def _get_weather_service():
+    """Get or create the global weather service instance."""
+    global weather_service  # noqa: PLW0603
+    if not weather_service:
+        weather_service = WeatherService()
+    return weather_service
+
+
 async def get_weather_for_city(city: str, units: str = "metric") -> dict[str, Any] | None:
-    """Get weather for a specific city (main function for LLM)"""
-    global weather_service
-
+    """Get weather for a specific city (main function for LLM)."""
     try:
-        if not weather_service:
-            weather_service = WeatherService()
+        service_instance = _get_weather_service()
 
-        async with weather_service as service:
+        async with service_instance as service:
             # Get coordinates for city
             locations = await service.get_coordinates_by_city(city, limit=1)
             if not locations:
@@ -276,19 +279,18 @@ async def get_weather_for_city(city: str, units: str = "metric") -> dict[str, An
             return result
 
     except Exception as e:
-        logger.error(f"Error getting weather for {city}: {e}")
+        logger.exception(f"Error getting weather for {city}")
         return {"error": str(e)}
 
 
-async def get_weather_for_coordinates(lat: float, lon: float, units: str = "metric") -> dict[str, Any] | None:
-    """Get weather for specific coordinates (function for LLM)"""
-    global weather_service
-
+async def get_weather_for_coordinates(
+    lat: float, lon: float, units: str = "metric"
+) -> dict[str, Any] | None:
+    """Get weather for specific coordinates (function for LLM)."""
     try:
-        if not weather_service:
-            weather_service = WeatherService()
+        service_instance = _get_weather_service()
 
-        async with weather_service as service:
+        async with service_instance as service:
             weather = await service.get_current_weather(lat, lon, units)
             if not weather:
                 return {"error": f"Could not get weather data for coordinates {lat}, {lon}"}
@@ -299,39 +301,36 @@ async def get_weather_for_coordinates(lat: float, lon: float, units: str = "metr
             return result
 
     except Exception as e:
-        logger.error(f"Error getting weather for coordinates {lat}, {lon}: {e}")
+        logger.exception(f"Error getting weather for coordinates {lat}, {lon}")
         return {"error": str(e)}
 
 
 async def search_locations(query: str, limit: int = 5) -> list[dict[str, Any]]:
-    """Search for locations by name (function for LLM)"""
-    global weather_service
-
+    """Search for locations by name (function for LLM)."""
     try:
-        if not weather_service:
-            weather_service = WeatherService()
+        service_instance = _get_weather_service()
 
-        async with weather_service as service:
+        async with service_instance as service:
             locations = await service.get_coordinates_by_city(query, limit)
             return [asdict(loc) for loc in locations]
 
-    except Exception as e:
-        logger.error(f"Error searching locations for {query}: {e}")
+    except Exception:
+        logger.exception(f"Error searching locations for {query}")
         return []
 
 
 def celsius_to_fahrenheit(celsius: float) -> float:
-    """Convert Celsius to Fahrenheit"""
-    return (celsius * 9/5) + 32
+    """Convert Celsius to Fahrenheit."""
+    return (celsius * 9 / 5) + 32
 
 
 def ms_to_mph(ms: float) -> float:
-    """Convert meters per second to miles per hour"""
+    """Convert meters per second to miles per hour."""
     return ms * 2.237
 
 
 def format_weather_response(weather_data: dict[str, Any]) -> str:
-    """Format weather data for LLM consumption with both Fahrenheit and Celsius"""
+    """Format weather data for LLM consumption with both Fahrenheit and Celsius."""
     if "error" in weather_data:
         return f"Weather Error: {weather_data['error']}"
 
@@ -363,14 +362,18 @@ Pressure: {pressure} hPa"""
 
 # CLI interface for testing
 async def main():
-    """Main CLI function for testing weather service"""
+    """Main CLI function for testing weather service."""
     parser = argparse.ArgumentParser(description="Weather Service CLI")
     parser.add_argument("--city", help="City name to get weather for")
     parser.add_argument("--lat", type=float, help="Latitude coordinate")
     parser.add_argument("--lon", type=float, help="Longitude coordinate")
     parser.add_argument("--search", help="Search for locations")
-    parser.add_argument("--units", default="metric", choices=["metric", "imperial", "standard"],
-                       help="Units for temperature")
+    parser.add_argument(
+        "--units",
+        default="metric",
+        choices=["metric", "imperial", "standard"],
+        help="Units for temperature",
+    )
 
     args = parser.parse_args()
 

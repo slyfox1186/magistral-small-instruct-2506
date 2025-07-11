@@ -1,11 +1,12 @@
-"""Memory Schema Definitions
+"""Memory Schema Definitions.
+
 ========================
 
 Pydantic models for the memory system data structures.
 """
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 
@@ -13,7 +14,7 @@ from pydantic import BaseModel, Field, model_validator
 
 
 class MemorySource(str, Enum):
-    """Source of memory creation"""
+    """Source of memory creation."""
 
     USER = "user"
     ASSISTANT = "assistant"
@@ -21,7 +22,7 @@ class MemorySource(str, Enum):
 
 
 class MemoryCircle(BaseModel):
-    """Memory circle/category definition"""
+    """Memory circle/category definition."""
 
     name: str
     description: str
@@ -32,11 +33,11 @@ class MemoryCircle(BaseModel):
 
 
 class MemoryBase(BaseModel):
-    """Base memory structure shared by STM and LTM"""
+    """Base memory structure shared by STM and LTM."""
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     content: str
-    timestamp: float = Field(default_factory=lambda: datetime.now().timestamp())
+    timestamp: float = Field(default_factory=lambda: datetime.now(UTC).timestamp())
     source: MemorySource
     embedding: list[float] | None = None
     tags: list[str] = []
@@ -45,7 +46,7 @@ class MemoryBase(BaseModel):
 
     @model_validator(mode="after")
     def extract_hashtags(self):
-        """Extract hashtags from content if not provided"""
+        """Extract hashtags from content if not provided."""
         if not self.tags and self.content:
             # Simple hashtag extraction without regex
             hashtags = []
@@ -66,13 +67,13 @@ class MemoryBase(BaseModel):
 
 
 class ShortTermMemory(MemoryBase):
-    """Short-term memory structure with TTL"""
+    """Short-term memory structure with TTL."""
 
     ttl_hours: int = 48
     importance_score: float = Field(default=0.5, ge=0.0, le=1.0)
 
     def to_redis_dict(self) -> dict[str, Any]:
-        """Convert to Redis-compatible dictionary"""
+        """Convert to Redis-compatible dictionary."""
         data = self.dict()
         # Convert embedding to JSON string for Redis
         if data.get("embedding"):
@@ -83,7 +84,7 @@ class ShortTermMemory(MemoryBase):
 
     @classmethod
     def from_redis_dict(cls, data: dict[str, Any]) -> "ShortTermMemory":
-        """Create from Redis dictionary"""
+        """Create from Redis dictionary."""
         # Parse embedding from JSON string
         if data.get("embedding") and isinstance(data["embedding"], str):
             import json
@@ -93,24 +94,24 @@ class ShortTermMemory(MemoryBase):
 
 
 class LongTermMemory(MemoryBase):
-    """Long-term consolidated memory"""
+    """Long-term consolidated memory."""
 
     original_memories: list[str] = []  # STM IDs that were consolidated
     retrieval_score: float = Field(default=1.0, ge=0.0, le=1.0)
-    last_accessed: float = Field(default_factory=lambda: datetime.now().timestamp())
+    last_accessed: float = Field(default_factory=lambda: datetime.now(UTC).timestamp())
     access_count: int = 0
     links: list[str] = []  # Related LTM IDs
     user_approved: bool = True
     consolidation_summary: str | None = None
 
     def update_access(self):
-        """Update access tracking"""
-        self.last_accessed = datetime.now().timestamp()
+        """Update access tracking."""
+        self.last_accessed = datetime.now(UTC).timestamp()
         self.access_count += 1
 
     def calculate_decay(self, decay_rate: float) -> float:
-        """Calculate retrieval score decay based on time"""
-        time_since_access = datetime.now().timestamp() - self.last_accessed
+        """Calculate retrieval score decay based on time."""
+        time_since_access = datetime.now(UTC).timestamp() - self.last_accessed
         days_elapsed = time_since_access / 86400  # Convert to days
 
         # Exponential decay
@@ -120,7 +121,7 @@ class LongTermMemory(MemoryBase):
         return max(0.1, decayed_score)  # Minimum score of 0.1
 
     def to_redis_dict(self) -> dict[str, Any]:
-        """Convert to Redis-compatible dictionary"""
+        """Convert to Redis-compatible dictionary."""
         data = self.dict()
         # Convert lists to JSON strings
         import json
@@ -135,7 +136,7 @@ class LongTermMemory(MemoryBase):
 
     @classmethod
     def from_redis_dict(cls, data: dict[str, Any]) -> "LongTermMemory":
-        """Create from Redis dictionary"""
+        """Create from Redis dictionary."""
         import json
 
         # Parse JSON strings back to lists
@@ -149,7 +150,7 @@ class LongTermMemory(MemoryBase):
 
 
 class MemorySearchResult(BaseModel):
-    """Search result with relevance scoring"""
+    """Search result with relevance scoring."""
 
     memory: ShortTermMemory | LongTermMemory
     score: float = Field(ge=0.0, le=1.0)
@@ -161,17 +162,17 @@ class MemorySearchResult(BaseModel):
 
 
 class ConsolidationCandidate(BaseModel):
-    """Candidate memories for consolidation"""
+    """Candidate memories for consolidation."""
 
     memory_ids: list[str]
     suggested_summary: str
     common_tags: list[str]
     circle: str
     confidence: float = Field(ge=0.0, le=1.0)
-    created_at: float = Field(default_factory=lambda: datetime.now().timestamp())
+    created_at: float = Field(default_factory=lambda: datetime.now(UTC).timestamp())
 
     def to_prompt(self) -> str:
-        """Generate user prompt for approval"""
+        """Generate user prompt for approval."""
         return f"""
 Memory Consolidation Suggestion:
 

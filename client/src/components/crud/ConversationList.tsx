@@ -183,8 +183,14 @@ export const ConversationList: React.FC<ConversationListProps> = ({
               <div className="conversation-info">
                 <div className="conversation-title">{conversation.title}</div>
                 <div className="conversation-meta">
-                  <span className="message-count">{conversation.message_count} messages</span>
-                  <span className="updated-date">{formatDate(conversation.updated_at)}</span>
+                  <div className="conversation-meta-row">
+                    <span className="meta-label">Messages:</span>
+                    <span>{conversation.message_count}</span>
+                  </div>
+                  <div className="conversation-meta-row">
+                    <span className="meta-label">Updated:</span>
+                    <span>{formatDate(conversation.updated_at)}</span>
+                  </div>
                 </div>
                 {conversation.tags.length > 0 && (
                   <div className="conversation-tags">
@@ -195,22 +201,22 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                     ))}
                   </div>
                 )}
-              </div>
-              <div className="conversation-actions">
-                <button
-                  className="btn btn-sm"
-                  onClick={(e) => handleArchiveConversation(conversation, e)}
-                  title={conversation.archived ? 'Unarchive' : 'Archive'}
-                >
-                  {conversation.archived ? '📂' : '📁'}
-                </button>
-                <button
-                  className="btn btn-sm btn-danger"
-                  onClick={(e) => handleDeleteConversation(conversation, e)}
-                  title="Delete"
-                >
-                  🗑️
-                </button>
+                <div className="conversation-actions">
+                  <button
+                    className="conversation-action-btn"
+                    onClick={(e) => handleArchiveConversation(conversation, e)}
+                    title={conversation.archived ? 'Unarchive' : 'Archive'}
+                  >
+                    {conversation.archived ? 'Unarchive' : 'Archive'}
+                  </button>
+                  <button
+                    className="conversation-action-btn danger"
+                    onClick={(e) => handleDeleteConversation(conversation, e)}
+                    title="Delete"
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
             </div>
           ))

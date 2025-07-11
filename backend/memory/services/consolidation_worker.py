@@ -1,4 +1,5 @@
-"""Consolidation Worker
+"""Consolidation Worker.
+
 ====================
 
 Handles memory consolidation from STM to LTM.
@@ -9,7 +10,7 @@ import asyncio
 import logging
 import time
 from collections import defaultdict
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import numpy as np
@@ -24,9 +25,13 @@ from ..utils import get_metrics
 
 logger = logging.getLogger(__name__)
 
+# Constants
+MIN_CLUSTER_SIZE_FOR_COHERENCE = 2
+MAX_SUMMARY_MEMORIES = 5
+
 
 class ConsolidationWorker:
-    """Worker for consolidating short-term memories into long-term"""
+    """Worker for consolidating short-term memories into long-term."""
 
     def __init__(
         self,
@@ -36,7 +41,7 @@ class ConsolidationWorker:
         retrieval_engine: RetrievalEngine,
         llm_client: Any | None = None,
     ):
-        """Initialize consolidation worker
+        """Initialize consolidation worker.
 
         Args:
             redis_client: Async Redis client
@@ -64,22 +69,29 @@ class ConsolidationWorker:
         self.is_running = False
 
     async def start(self):
-        """Start the consolidation worker"""
+        """Start the consolidation worker."""
         self.is_running = True
 
         # Start background tasks
-        asyncio.create_task(self._activity_monitor())
-        asyncio.create_task(self._periodic_consolidation())
+        self._activity_task = asyncio.create_task(self._activity_monitor())
+        self._consolidation_task = asyncio.create_task(self._periodic_consolidation())
 
         logger.info("Consolidation worker started")
 
     async def stop(self):
-        """Stop the consolidation worker"""
+        """Stop the consolidation worker."""
         self.is_running = False
+
+        # Cancel background tasks
+        if hasattr(self, "_activity_task"):
+            self._activity_task.cancel()
+        if hasattr(self, "_consolidation_task"):
+            self._consolidation_task.cancel()
+
         logger.info("Consolidation worker stopped")
 
     async def _activity_monitor(self):
-        """Monitor for inactivity and trigger consolidation"""
+        """Monitor for inactivity and trigger consolidation."""
         while self.is_running:
             try:
                 current_time = time.time()
@@ -92,12 +104,12 @@ class ConsolidationWorker:
 
                 await asyncio.sleep(60)  # Check every minute
 
-            except Exception as e:
-                logger.error(f"Error in activity monitor: {e}")
+            except Exception:
+                logger.exception("Error in activity monitor")
                 await asyncio.sleep(300)  # Back off on error
 
     async def _periodic_consolidation(self):
-        """Run consolidation periodically"""
+        """Run consolidation periodically."""
         while self.is_running:
             try:
                 current_time = time.time()
@@ -111,16 +123,16 @@ class ConsolidationWorker:
                 # Sleep until next check
                 await asyncio.sleep(3600)  # Check every hour
 
-            except Exception as e:
-                logger.error(f"Error in periodic consolidation: {e}")
+            except Exception:
+                logger.exception("Error in periodic consolidation")
                 await asyncio.sleep(3600)
 
     def update_activity(self):
-        """Update last activity time (called by memory creation)"""
+        """Update last activity time (called by memory creation)."""
         self.last_activity_time = time.time()
 
     async def consolidate_memories(self, trigger: str = "manual") -> int:
-        """Main consolidation process
+        """Main consolidation process.
 
         Args:
             trigger: What triggered consolidation (manual/inactivity/periodic)
@@ -153,7 +165,7 @@ class ConsolidationWorker:
             return total_candidates
 
     async def _get_all_stms(self) -> list[ShortTermMemory]:
-        """Retrieve all short-term memories"""
+        """Retrieve all short-term memories."""
         memories = []
 
         async for key in self.redis.scan_iter(match="stm:*"):
@@ -166,7 +178,7 @@ class ConsolidationWorker:
         return memories
 
     def _group_by_circle(self, memories: list[ShortTermMemory]) -> dict[str, list[ShortTermMemory]]:
-        """Group memories by circle"""
+        """Group memories by circle."""
         groups = defaultdict(list)
         for memory in memories:
             groups[memory.circle].append(memory)
@@ -175,7 +187,7 @@ class ConsolidationWorker:
     async def _process_circle_memories(
         self, circle: str, memories: list[ShortTermMemory]
     ) -> list[ConsolidationCandidate]:
-        """Process memories from a single circle"""
+        """Process memories from a single circle."""
         # Ensure all memories have embeddings
         memories_with_embeddings = []
         for memory in memories:
@@ -199,7 +211,7 @@ class ConsolidationWorker:
         return candidates
 
     def _cluster_memories(self, memories: list[ShortTermMemory]) -> list[list[int]]:
-        """Cluster memories based on embedding similarity"""
+        """Cluster memories based on embedding similarity."""
         if not memories:
             return []
 
@@ -229,7 +241,7 @@ class ConsolidationWorker:
     async def _create_consolidation_candidate(
         self, circle: str, memories: list[ShortTermMemory]
     ) -> ConsolidationCandidate | None:
-        """Create a consolidation candidate from clustered memories"""
+        """Create a consolidation candidate from clustered memories."""
         if not memories:
             return None
 
@@ -264,8 +276,8 @@ class ConsolidationWorker:
         )
 
     def _calculate_cluster_coherence(self, memories: list[ShortTermMemory]) -> float:
-        """Calculate average pairwise similarity within cluster"""
-        if len(memories) < 2:
+        """Calculate average pairwise similarity within cluster."""
+        if len(memories) < MIN_CLUSTER_SIZE_FOR_COHERENCE:
             return 1.0
 
         embeddings = np.array([m.embedding for m in memories])
@@ -282,23 +294,14 @@ class ConsolidationWorker:
         return float(np.mean(similarities))
 
     async def _generate_llm_summary(self, memories: list[ShortTermMemory]) -> str:
-        """Generate summary using LLM"""
+        """Generate summary using LLM."""
         # Format memories for LLM
         memory_texts = []
         for i, memory in enumerate(memories):
-            timestamp = datetime.fromtimestamp(memory.timestamp).strftime("%Y-%m-%d %H:%M")
+            timestamp = datetime.fromtimestamp(memory.timestamp, tz=UTC).strftime("%Y-%m-%d %H:%M")
             memory_texts.append(f"{i + 1}. [{timestamp}] {memory.content}")
 
         # TODO: Implement LLM summary generation
-        # Would use prompt like:
-        # f"""Consolidate these related memories into a concise summary:
-        # {chr(10).join(memory_texts)}
-        # Create a summary that:
-        # 1. Captures the key information from all memories
-        # 2. Identifies patterns or themes
-        # 3. Preserves important details
-        # 4. Is written in first person where appropriate
-        # Summary:"""
 
         # For now, fall back to simple summary
         return self._generate_simple_summary(memories, [])
@@ -306,7 +309,7 @@ class ConsolidationWorker:
     def _generate_simple_summary(
         self, memories: list[ShortTermMemory], common_tags: list[str]
     ) -> str:
-        """Generate simple summary without LLM"""
+        """Generate simple summary without LLM."""
         # Sort by timestamp
         sorted_memories = sorted(memories, key=lambda m: m.timestamp)
 
@@ -319,21 +322,21 @@ class ConsolidationWorker:
             parts.append(f"Memories about {', '.join(topics)}:")
 
         # Add key points from each memory (first sentence)
-        for memory in sorted_memories[:5]:  # Limit to 5 most recent
+        for memory in sorted_memories[:MAX_SUMMARY_MEMORIES]:
             first_sentence = memory.content.split(".")[0].strip()
             if first_sentence:
                 parts.append(f"- {first_sentence}")
 
         # Add count if more memories
-        if len(memories) > 5:
-            parts.append(f"(and {len(memories) - 5} more related memories)")
+        if len(memories) > MAX_SUMMARY_MEMORIES:
+            parts.append(f"(and {len(memories) - MAX_SUMMARY_MEMORIES} more related memories)")
 
         return "\n".join(parts)
 
     async def apply_user_decision(
         self, candidate_timestamp: float, approved: bool, edited_summary: str | None = None
     ) -> LongTermMemory | None:
-        """Apply user's decision on a consolidation candidate
+        """Apply user's decision on a consolidation candidate.
 
         Args:
             candidate_timestamp: Timestamp identifying the candidate
@@ -383,7 +386,7 @@ class ConsolidationWorker:
         return ltm
 
     async def get_consolidation_stats(self) -> dict[str, Any]:
-        """Get consolidation statistics"""
+        """Get consolidation statistics."""
         # Count pending candidates
         pending_count = 0
         async for _ in self.redis.scan_iter(match="consolidation:*"):
@@ -396,7 +399,9 @@ class ConsolidationWorker:
             "pending_candidates": pending_count,
             "stm_count": memory_stats["stm_count"],
             "ltm_count": memory_stats["ltm_count"],
-            "last_consolidation": datetime.fromtimestamp(self.last_consolidation_time).isoformat(),
+            "last_consolidation": datetime.fromtimestamp(
+                self.last_consolidation_time, tz=UTC
+            ).isoformat(),
             "consolidation_params": {
                 "min_cluster_size": self.min_cluster_size,
                 "similarity_threshold": self.similarity_threshold,
@@ -410,7 +415,7 @@ class ConsolidationWorker:
 async def create_consolidation_worker(
     redis_url: str = "redis://localhost:6379", llm_client: Any | None = None
 ) -> ConsolidationWorker:
-    """Create consolidation worker with dependencies"""
+    """Create consolidation worker with dependencies."""
     redis_client = await redis.from_url(redis_url)
 
     # Create dependencies

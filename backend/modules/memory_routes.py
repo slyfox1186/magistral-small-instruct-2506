@@ -4,7 +4,7 @@
 import logging
 import time
 from dataclasses import asdict
-from datetime import datetime
+from datetime import UTC, datetime
 
 from fastapi import FastAPI, HTTPException
 
@@ -20,11 +20,19 @@ logger = logging.getLogger(__name__)
 
 def setup_memory_routes(app: FastAPI):
     """Setup memory management and distributed component routes."""
-    # ===================== API Endpoints for Distributed Components =====================
+    _setup_ingestion_routes(app)
+    _setup_metrics_routes(app)
+    _setup_memory_management_routes(app)
+    _setup_optimization_routes(app)
+
+
+def _setup_ingestion_routes(app: FastAPI):
+    """Setup memory ingestion routes."""
 
     @app.post("/api/v1/memory/ingest/scraped")
     async def ingest_scraped_content(item: ScrapedContent):
         """Ingest scraped content from web scraper service.
+
         This centralizes database writes to avoid SQLite concurrency issues.
         """
         if not app_state.personal_memory:
@@ -34,21 +42,21 @@ def setup_memory_routes(app: FastAPI):
             # Add scraped content to memory
             await app_state.personal_memory.add_memory(
                 content=f"Content from {item.url}: {item.content}",
-                conversation_id=f"web_scrape_{datetime.now().strftime('%Y%m%d')}",
+                conversation_id=f"web_scrape_{datetime.now(UTC).strftime('%Y%m%d')}",
                 importance=0.6,
                 metadata={"source": "web_scraper", "url": item.url, **(item.metadata or {})},
             )
-
+        except Exception as e:
+            logger.exception("Failed to ingest scraped content")
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        else:
             logger.info(f" Ingested scraped content from {item.url}")
             return {"status": "success", "url": item.url}
-
-        except Exception as e:
-            logger.error(f"Failed to ingest scraped content: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
 
     @app.post("/api/v1/memory/ingest")
     async def ingest_memory(item: MemoryIngestion):
         """General memory ingestion endpoint for distributed components.
+
         Allows other services to add memories without direct database access.
         """
         if not app_state.personal_memory:
@@ -61,18 +69,20 @@ def setup_memory_routes(app: FastAPI):
                 importance=item.importance,
                 metadata=item.metadata,
             )
-
-            logger.info(f" Ingested memory for conversation {item.conversation_id}")
-            return {
-                "status": "success",
-                "memory_id": memory.id,
-                "conversation_id": item.conversation_id,
-            }
-
         except Exception as e:
-            logger.error(f"Failed to ingest memory: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
+            logger.exception("Failed to ingest memory")
+            raise HTTPException(status_code=500, detail=str(e)) from e
 
+        logger.info(f" Ingested memory for conversation {item.conversation_id}")
+        return {
+            "status": "success",
+            "memory_id": memory.id,
+            "conversation_id": item.conversation_id,
+        }
+
+
+def _setup_metrics_routes(app: FastAPI):
+    """Setup metrics and monitoring routes."""
     @app.get("/metrics/json")
     async def get_metrics_json():
         """Get system performance metrics in JSON format."""
@@ -89,10 +99,10 @@ def setup_memory_routes(app: FastAPI):
             return {
                 "summary": summary,
                 "current": asdict(current) if current else None,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             }
         except Exception as e:
-            logger.error(f"Error getting metrics: {e}")
+            logger.exception("Error getting metrics")
             return {"error": str(e)}
 
     @app.get("/metrics/prometheus")
@@ -108,7 +118,7 @@ def setup_memory_routes(app: FastAPI):
             else:
                 return "# ERROR: No metrics available\n"
         except Exception as e:
-            logger.error(f"Error generating Prometheus metrics: {e}")
+            logger.exception("Error generating Prometheus metrics")
             return f"# ERROR: {e!s}\n"
 
     @app.get("/memory/stats")
@@ -119,20 +129,23 @@ def setup_memory_routes(app: FastAPI):
 
         try:
             stats = app_state.personal_memory.get_stats()
-            return stats
         except Exception as e:
-            logger.error(f"Error getting memory stats: {e}")
+            logger.exception("Error getting memory stats")
             return {"error": str(e)}
+
+        return stats
 
     @app.get("/memory/stats/{user_id}")
     async def get_user_memory_stats(user_id: str):
         """Get memory statistics for a specific user (conversation)."""
-        if not personal_memory:
+        if not app_state.personal_memory:
             return {"error": "Personal memory system not available"}
 
         try:
             # Get conversation memories
-            memories = await app_state.personal_memory.get_conversation_context(user_id, max_messages=100)
+            memories = await app_state.personal_memory.get_conversation_context(
+                user_id, max_messages=100
+            )
             stats = {
                 "conversation_id": user_id,
                 "total_memories": len(memories),
@@ -145,11 +158,11 @@ def setup_memory_routes(app: FastAPI):
                     for m in memories[-10:]  # Last 10 memories
                 ],
             }
-
-            return stats
         except Exception as e:
-            logger.error(f"Error getting memory stats for user {user_id}: {e}")
+            logger.exception(f"Error getting memory stats for user {user_id}")
             return {"error": str(e)}
+
+        return stats
 
     @app.get("/monitoring/circuit-breakers")
     async def get_circuit_breaker_stats():
@@ -162,11 +175,13 @@ def setup_memory_routes(app: FastAPI):
                 "summary": {
                     "total_breakers": len(stats),
                     "open_breakers": len([s for s in stats.values() if s["state"] == "open"]),
-                    "half_open_breakers": len([s for s in stats.values() if s["state"] == "half_open"]),
+                    "half_open_breakers": len(
+                        [s for s in stats.values() if s["state"] == "half_open"]
+                    ),
                 },
             }
         except Exception as e:
-            logger.error(f"Error getting circuit breaker stats: {e}")
+            logger.exception("Error getting circuit breaker stats")
             return {"error": str(e)}
 
     @app.post("/monitoring/circuit-breakers/reset")
@@ -175,13 +190,25 @@ def setup_memory_routes(app: FastAPI):
         try:
             circuit_breaker_manager.reset_all()
             logger.info(" All circuit breakers reset to closed state")
-            return {"message": "All circuit breakers reset successfully"}
         except Exception as e:
-            logger.error(f"Error resetting circuit breakers: {e}")
+            logger.exception("Error resetting circuit breakers")
             return {"error": str(e)}
 
-    # Memory compression endpoint removed - personal AI handles this automatically
+        return {"message": "All circuit breakers reset successfully"}
 
+
+def _setup_memory_management_routes(app: FastAPI):
+    """Setup memory management routes."""
+    _setup_memory_optimize_route(app)
+    _setup_memory_correct_route(app)
+    _setup_memory_delete_route(app)
+    _setup_memory_bulk_correct_route(app)
+    _setup_memory_consolidate_route(app)
+    _setup_memory_search_route(app)
+
+
+def _setup_memory_optimize_route(app: FastAPI):
+    """Setup memory optimization route."""
     @app.post("/memory/optimize/{user_id}")
     async def optimize_user_memories(user_id: str, target_tokens: int = 1000):
         """Trigger comprehensive memory optimization for a user."""
@@ -194,11 +221,15 @@ def setup_memory_routes(app: FastAPI):
             await app_state.personal_memory.consolidate_old_memories()
             result = {"success": True, "message": "Consolidation triggered"}
             result["target_tokens"] = target_tokens
-            return result
         except Exception as e:
-            logger.error(f"Error optimizing memories for user {user_id}: {e}")
+            logger.exception(f"Error optimizing memories for user {user_id}")
             return {"success": False, "error": str(e)}
 
+        return result
+
+
+def _setup_memory_correct_route(app: FastAPI):
+    """Setup memory correction route."""
     @app.put("/memory/correct/{user_id}/{memory_id}")
     async def correct_memory(user_id: str, memory_id: str, correction: dict[str, str]):
         """Correct a specific memory.
@@ -215,42 +246,28 @@ def setup_memory_routes(app: FastAPI):
         if not new_content:
             raise HTTPException(status_code=400, detail="new_content is required")
 
-        try:
-            # Memory correction not implemented in personal system
-            result = {
-                "success": False,
-                "error": "Memory correction not supported in personal memory system",
-            }
+        # Memory correction not implemented in personal system
+        raise HTTPException(
+            status_code=400, detail="Memory correction not supported in personal memory system"
+        )
 
-            if not result["success"]:
-                raise HTTPException(status_code=400, detail=result.get("error", "Correction failed"))
 
-            return result
-        except Exception as e:
-            logger.error(f"Error correcting memory: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
-
+def _setup_memory_delete_route(app: FastAPI):
+    """Setup memory deletion route."""
     @app.delete("/memory/{user_id}/{memory_id}")
     async def delete_memory(user_id: str, memory_id: str, reason: str = "User requested deletion"):
         """Delete a specific memory."""
         if not app_state.personal_memory:
             raise HTTPException(status_code=503, detail="Memory pipeline not available")
 
-        try:
-            # Memory deletion not implemented in personal system
-            result = {
-                "success": False,
-                "error": "Direct memory deletion not supported in personal memory system",
-            }
+        # Memory deletion not implemented in personal system
+        raise HTTPException(
+            status_code=404, detail="Direct memory deletion not supported in personal memory system"
+        )
 
-            if not result["success"]:
-                raise HTTPException(status_code=404, detail=result.get("error", "Memory not found"))
 
-            return result
-        except Exception as e:
-            logger.error(f"Error deleting memory: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
-
+def _setup_memory_bulk_correct_route(app: FastAPI):
+    """Setup bulk memory correction route."""
     @app.post("/memory/bulk-correct/{user_id}")
     async def bulk_correct_memories(user_id: str, bulk_correction: dict[str, str]):
         """Search and correct multiple memories matching a pattern.
@@ -269,16 +286,17 @@ def setup_memory_routes(app: FastAPI):
 
         try:
             # Search and correct not implemented in personal system
-            result = {
+            return {
                 "success": False,
                 "error": "Bulk memory correction not supported in personal memory system",
             }
-
-            return result
         except Exception as e:
-            logger.error(f"Error in bulk memory correction: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
+            logger.exception("Error in bulk memory correction")
+            raise HTTPException(status_code=500, detail=str(e)) from e
 
+
+def _setup_memory_consolidate_route(app: FastAPI):
+    """Setup memory consolidation route."""
     @app.post("/memory/consolidate/{user_id}/schedule")
     async def schedule_consolidation(user_id: str):
         """Schedule memory consolidation for a user.
@@ -295,16 +313,9 @@ def setup_memory_routes(app: FastAPI):
                 from memory.consolidation_worker import enqueue_consolidation
 
                 job_id = await enqueue_consolidation(user_id)
-                return {
-                    "status": "scheduled",
-                    "job_id": job_id,
-                    "user_id": user_id,
-                    "message": "Consolidation job enqueued for background processing",
-                }
             except ImportError:
                 # ARQ not available, run inline (not recommended)
                 logger.warning("ARQ not available, running consolidation inline")
-                # Consolidation happens automatically in personal memory
                 await app_state.personal_memory.consolidate_old_memories()
                 result = {"success": True, "message": "Consolidation triggered"}
                 return {
@@ -313,10 +324,20 @@ def setup_memory_routes(app: FastAPI):
                     "result": result,
                     "message": "Consolidation completed inline (consider setting up ARQ)",
                 }
+            else:
+                return {
+                    "status": "scheduled",
+                    "job_id": job_id,
+                    "user_id": user_id,
+                    "message": "Consolidation job enqueued for background processing",
+                }
         except Exception as e:
-            logger.error(f"Error scheduling consolidation: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
+            logger.exception("Error scheduling consolidation")
+            raise HTTPException(status_code=500, detail=str(e)) from e
 
+
+def _setup_memory_search_route(app: FastAPI):
+    """Setup memory search route."""
     @app.get("/memory/search/{user_id}")
     async def search_memories(user_id: str, query: str, limit: int = 10):
         """Search memories for a user.
@@ -331,7 +352,9 @@ def setup_memory_routes(app: FastAPI):
 
         try:
             # Use personal memory retrieval
-            memories = await app_state.personal_memory.get_relevant_memories(query=query, limit=limit)
+            memories = await app_state.personal_memory.get_relevant_memories(
+                query=query, limit=limit
+            )
             results = memories
 
             # Convert to simpler format for API response
@@ -349,10 +372,89 @@ def setup_memory_routes(app: FastAPI):
                     }
                 )
 
-            return {"user_id": user_id, "query": query, "count": len(memories), "memories": memories}
+            return {
+                "user_id": user_id,
+                "query": query,
+                "count": len(memories),
+                "memories": memories,
+            }
         except Exception as e:
-            logger.error(f"Error searching memories: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
+            logger.exception("Error searching memories")
+            raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+def _setup_optimization_routes(app: FastAPI):
+    """Setup optimization and maintenance routes."""
+    @app.delete("/api/clear-conversation-memories/{conversation_id}")
+    async def clear_conversation_memories(conversation_id: str):
+        """Clear memories for a specific conversation."""
+        try:
+            logger.info(f"🧹 Clearing memories for conversation {conversation_id}...")
+
+            deleted_count = 0
+
+            # Clear from personal memory system (SQLite)
+            if app_state.personal_memory:
+                try:
+                    # Use the new conversation-specific clear method
+                    deleted_count = app_state.personal_memory.clear_conversation_memories(conversation_id)
+                    logger.info(f"🗑️ Cleared {deleted_count} memories for conversation {conversation_id}")
+
+                except Exception:
+                    logger.exception(f"Failed to clear memories for conversation {conversation_id}")
+
+            # Also clear from Redis if available (for compatibility)
+            if app_state.redis_client:
+                try:
+                    # Clear conversation-specific Redis keys
+                    patterns = [
+                        f"memory:{conversation_id}:*",
+                        f"vital_memory:{conversation_id}:*",
+                        f"user_memory:{conversation_id}:*",
+                        f"neural_memory:{conversation_id}:*",
+                        f"redis_memory:{conversation_id}:*",
+                        f"conversation:{conversation_id}:*",
+                        f"session:{conversation_id}:*",
+                        f"msg:{conversation_id}:*",
+                    ]
+
+                    total_redis_deleted = 0
+                    for pattern in patterns:
+                        try:
+                            keys = await app_state.redis_client.keys(pattern)
+                            if keys:
+                                for key in keys:
+                                    await app_state.redis_client.delete(key)
+                                total_redis_deleted += len(keys)
+                                logger.info(
+                                    f"Deleted {len(keys)} Redis keys matching pattern '{pattern}'"
+                                )
+                        except Exception as e:
+                            logger.warning(f"Failed to clear Redis pattern '{pattern}': {e}")
+
+                    logger.info(f"🗑️ Cleared {total_redis_deleted} Redis keys for conversation {conversation_id}")
+                    deleted_count += total_redis_deleted
+
+                except Exception:
+                    logger.exception(f"Failed to clear Redis keys for conversation {conversation_id}")
+
+            from .models import ClearMemoriesResponse
+            
+            return ClearMemoriesResponse(
+                success=True,
+                message=f"Successfully cleared {deleted_count} memories for conversation {conversation_id}",
+                deleted_count=deleted_count,
+            )
+
+        except Exception as e:
+            logger.error(f"Error clearing memories for conversation {conversation_id}: {e}", exc_info=True)
+            from .models import ClearMemoriesResponse
+            
+            return ClearMemoriesResponse(
+                success=False,
+                message=f"Failed to clear memories for conversation {conversation_id}: {e!s}",
+                deleted_count=0,
+            )
 
     @app.delete("/api/clear-vital-memories")
     @app.delete("/clear-vital-memories")  # Support both paths for compatibility
@@ -370,8 +472,8 @@ def setup_memory_routes(app: FastAPI):
                     deleted_count = app_state.personal_memory.clear_all_memories()
                     logger.info(f"🗑️ Cleared {deleted_count} memories from SQLite database")
 
-                except Exception as e:
-                    logger.error(f"Failed to clear personal memory system: {e}")
+                except Exception:
+                    logger.exception("Failed to clear personal memory system")
 
             # Also clear from Redis if available (for compatibility)
             if app_state.redis_client:
@@ -395,7 +497,9 @@ def setup_memory_routes(app: FastAPI):
                             for key in keys:
                                 await app_state.redis_client.delete(key)
                             deleted_count += len(keys)
-                            logger.info(f"Deleted {len(keys)} Redis keys matching pattern '{pattern}'")
+                            logger.info(
+                                f"Deleted {len(keys)} Redis keys matching pattern '{pattern}'"
+                            )
                     except Exception as e:
                         logger.warning(f"Failed to clear Redis pattern '{pattern}': {e}")
 
@@ -403,6 +507,7 @@ def setup_memory_routes(app: FastAPI):
 
             # Import VitalMemoryResponse for proper return type
             from .models import VitalMemoryResponse
+
             return VitalMemoryResponse(
                 success=True,
                 message=f"Successfully cleared {deleted_count} memories",
@@ -412,6 +517,7 @@ def setup_memory_routes(app: FastAPI):
         except Exception as e:
             logger.error(f"Error clearing memories: {e}", exc_info=True)
             from .models import VitalMemoryResponse
+
             return VitalMemoryResponse(
                 success=False,
                 message=f"Failed to clear memories: {e!s}",

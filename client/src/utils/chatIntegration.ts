@@ -148,6 +148,13 @@ class ChatIntegrationService {
   }
 
   /**
+   * Set current conversation (for switching between conversations)
+   */
+  setCurrentConversation(conversationId: string): void {
+    this.currentConversationId = conversationId;
+  }
+
+  /**
    * Generate a meaningful title from the first message
    */
   private generateTitleFromMessage(message: string): string {

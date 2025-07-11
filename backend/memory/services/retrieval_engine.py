@@ -1,4 +1,5 @@
-"""Retrieval Engine
+"""Retrieval Engine.
+
 ================
 
 Hybrid search implementation combining vector similarity and metadata filtering.
@@ -23,9 +24,12 @@ from ..utils import get_metrics
 
 logger = logging.getLogger(__name__)
 
+# Constants for magic values
+HYBRID_THRESHOLD = 0.5  # Threshold for hybrid match type classification
+
 
 class RetrievalEngine:
-    """Advanced memory retrieval with hybrid search"""
+    """Advanced memory retrieval with hybrid search."""
 
     def __init__(
         self,
@@ -34,7 +38,7 @@ class RetrievalEngine:
         embedding_service: EmbeddingService,
         config_path: str = "config/redis.yaml",
     ):
-        """Initialize retrieval engine
+        """Initialize retrieval engine.
 
         Args:
             redis_client: Async Redis client
@@ -57,13 +61,15 @@ class RetrievalEngine:
         self.recency_decay = 0.1
 
     def _load_config(self, config_path: str) -> dict:
-        """Load configuration"""
-        with open(Path(__file__).parent.parent / config_path) as f:
+        """Load configuration."""
+        config_file = Path(__file__).parent.parent / config_path
+        with config_file.open() as f:
             return yaml.safe_load(f)
 
     def _load_circles(self) -> dict[str, MemoryCircle]:
-        """Load memory circle definitions"""
-        with open(Path(__file__).parent.parent / "config/circles.yaml") as f:
+        """Load memory circle definitions."""
+        circles_file = Path(__file__).parent.parent / "config/circles.yaml"
+        with circles_file.open() as f:
             circles_config = yaml.safe_load(f)
 
         circles = {}
@@ -79,7 +85,7 @@ class RetrievalEngine:
         filters: dict[str, Any] | None = None,
         include_embeddings: bool = False,
     ) -> list[MemorySearchResult]:
-        """Perform hybrid search across memory types
+        """Perform hybrid search across memory types.
 
         Args:
             query: Search query
@@ -126,7 +132,7 @@ class RetrievalEngine:
     async def _search_stm(
         self, query_embedding: list[float], limit: int, filters: dict | None = None
     ) -> list[MemorySearchResult]:
-        """Search short-term memories"""
+        """Search short-term memories."""
         # Vector search
         vector_results = await self.embedding_service.vector_search(
             query_embedding, self.embedding_service.stm_index, limit=limit, filters=filters
@@ -151,7 +157,7 @@ class RetrievalEngine:
     async def _search_ltm(
         self, query_embedding: list[float], limit: int, filters: dict | None = None
     ) -> list[MemorySearchResult]:
-        """Search long-term memories"""
+        """Search long-term memories."""
         # Add retrieval score filter for LTM
         if filters is None:
             filters = {}
@@ -189,7 +195,7 @@ class RetrievalEngine:
         query_embedding: list[float],
         limit: int,
     ) -> list[MemorySearchResult]:
-        """Re-rank results using multiple signals"""
+        """Re-rank results using multiple signals."""
         if not results:
             return []
 
@@ -220,7 +226,7 @@ class RetrievalEngine:
             )
 
             # Update match type
-            if tag_score > 0.5 and vector_score > 0.5:
+            if tag_score > HYBRID_THRESHOLD and vector_score > HYBRID_THRESHOLD:
                 result.match_type = "hybrid"
             elif tag_score > vector_score:
                 result.match_type = "tag"
@@ -234,7 +240,7 @@ class RetrievalEngine:
         return results[:limit]
 
     def _calculate_tag_score(self, query: str, tags: list[str]) -> float:
-        """Calculate tag relevance score"""
+        """Calculate tag relevance score."""
         if not tags:
             return 0.0
 
@@ -251,7 +257,7 @@ class RetrievalEngine:
         return matching_tags / len(tags) if tags else 0.0
 
     def _extract_highlights(self, query: str, content: str, context_words: int = 10) -> list[str]:
-        """Extract relevant snippets from content"""
+        """Extract relevant snippets from content."""
         highlights = []
         query_words = set(query.lower().split())
         content_words = content.split()
@@ -275,7 +281,7 @@ class RetrievalEngine:
     async def find_related_memories(
         self, memory_id: str, memory_type: str = "ltm", limit: int = 5
     ) -> list[MemorySearchResult]:
-        """Find memories related to a given memory"""
+        """Find memories related to a given memory."""
         # Get the source memory
         if memory_type == "stm":
             memory = await self.memory_api.get_stm(memory_id)
@@ -322,7 +328,7 @@ class RetrievalEngine:
         memory_types: list[str] | None = None,
         limit: int = 50,
     ) -> list[MemorySearchResult]:
-        """Search memories within a time range"""
+        """Search memories within a time range."""
         if memory_types is None:
             memory_types = ["stm", "ltm"]
         results = []
@@ -369,7 +375,7 @@ class RetrievalEngine:
     async def get_memory_context(
         self, query: str, max_tokens: int = 2000, include_metadata: bool = True
     ) -> str:
-        """Get formatted memory context for LLM consumption
+        """Get formatted memory context for LLM consumption.
 
         Args:
             query: Context query
@@ -393,10 +399,7 @@ class RetrievalEngine:
             memory = result.memory
 
             # Format memory entry
-            if isinstance(memory, ShortTermMemory):
-                memory_type = "Recent"
-            else:
-                memory_type = "Established"
+            memory_type = "Recent" if isinstance(memory, ShortTermMemory) else "Established"
 
             entry = f"\n### {memory_type} Memory {i + 1} (Relevance: {result.score:.2f})\n"
             entry += f"{memory.content}\n"
@@ -418,7 +421,7 @@ class RetrievalEngine:
 
 # Factory function
 async def create_retrieval_engine(redis_url: str = "redis://localhost:6379") -> RetrievalEngine:
-    """Create retrieval engine with dependencies"""
+    """Create retrieval engine with dependencies."""
     redis_client = await redis.from_url(redis_url)
 
     # Create dependencies

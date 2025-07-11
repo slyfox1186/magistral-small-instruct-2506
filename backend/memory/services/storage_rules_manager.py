@@ -8,7 +8,7 @@ Designed to integrate with the existing sophisticated Redis-based memory system.
 """
 
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -31,10 +31,10 @@ class StorageRulesManager:
     def _load_rules(self) -> dict[str, Any]:
         """Load storage rules from YAML configuration."""
         try:
-            with open(self.config_path) as f:
+            with self.config_path.open() as f:
                 return yaml.safe_load(f)["storage_rules"]
-        except Exception as e:
-            logger.error(f"Failed to load storage rules: {e}")
+        except Exception:
+            logger.exception("Failed to load storage rules")
             return self._get_default_rules()
 
     def _get_default_rules(self) -> dict[str, Any]:
@@ -107,12 +107,12 @@ class StorageRulesManager:
             if memory.get("timestamp"):
                 # Handle both datetime objects and timestamps
                 timestamp = memory["timestamp"]
-                if isinstance(timestamp, (int, float)):
-                    memory_datetime = datetime.fromtimestamp(timestamp)
+                if isinstance(timestamp, int | float):
+                    memory_datetime = datetime.fromtimestamp(timestamp, tz=UTC)
                 else:
                     memory_datetime = timestamp
 
-                memory_age = datetime.now() - memory_datetime
+                memory_age = datetime.now(UTC) - memory_datetime
                 if memory_age.days < min_retention_days:
                     return False
 
@@ -139,12 +139,12 @@ class StorageRulesManager:
         if memory.get("timestamp"):
             # Handle both datetime objects and timestamps
             timestamp = memory["timestamp"]
-            if isinstance(timestamp, (int, float)):
-                memory_datetime = datetime.fromtimestamp(timestamp)
+            if isinstance(timestamp, int | float):
+                memory_datetime = datetime.fromtimestamp(timestamp, tz=UTC)
             else:
                 memory_datetime = timestamp
 
-            age_hours = (datetime.now() - memory_datetime).total_seconds() / 3600
+            age_hours = (datetime.now(UTC) - memory_datetime).total_seconds() / 3600
             recency_score = max(0.1, 1.0 - (age_hours / (24 * 30)))  # Decay over 30 days
 
         # Frequency factor

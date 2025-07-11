@@ -1,4 +1,4 @@
-"""Memory system utilities"""
+"""Memory system utilities."""
 
 from .metrics import (
     AsyncMetricsContext,

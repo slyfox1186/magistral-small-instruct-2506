@@ -1,4 +1,4 @@
-"""🚀 ASYNC-NATIVE RESILIENT REDIS CLIENT
+"""🚀 ASYNC-NATIVE RESILIENT REDIS CLIENT.
 
 This module provides an async-native Redis client with built-in resilience features.
 It inherits from redis.asyncio.Redis to ensure full API compatibility while adding
@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 
 class CircuitState(Enum):
-    """Circuit breaker states"""
+    """Circuit breaker states."""
 
     CLOSED = "closed"  # Normal operation
     OPEN = "open"  # Failing, skip Redis calls
@@ -32,9 +32,10 @@ class CircuitState(Enum):
 
 
 class AsyncCircuitBreaker:
-    """Async-safe circuit breaker implementation"""
+    """Async-safe circuit breaker implementation."""
 
     def __init__(self, failure_threshold: int = 5, recovery_timeout: float = 60.0):
+        """Initialize the circuit breaker."""
         self.failure_threshold = failure_threshold
         self.recovery_timeout = recovery_timeout
         self.state = CircuitState.CLOSED
@@ -43,7 +44,7 @@ class AsyncCircuitBreaker:
         self._lock = asyncio.Lock()
 
     async def record_success(self):
-        """Record successful call"""
+        """Record successful call."""
         async with self._lock:
             self.failure_count = 0
             if self.state == CircuitState.HALF_OPEN:
@@ -51,7 +52,7 @@ class AsyncCircuitBreaker:
                 self.state = CircuitState.CLOSED
 
     async def record_failure(self):
-        """Record failed call"""
+        """Record failed call."""
         async with self._lock:
             self.failure_count += 1
             self.last_failure_time = time.time()
@@ -68,7 +69,7 @@ class AsyncCircuitBreaker:
                 self.state = CircuitState.OPEN
 
     async def should_attempt_call(self) -> bool:
-        """Check if we should attempt Redis call"""
+        """Check if we should attempt Redis call."""
         async with self._lock:
             if self.state == CircuitState.CLOSED:
                 return True
@@ -86,6 +87,7 @@ class AsyncCircuitBreaker:
 
 class AsyncResilientRedisClient(aioredis.Redis):
     """Async-native Redis client with resilience features.
+
     Inherits full Redis API and adds retry logic.
     """
 
@@ -97,6 +99,7 @@ class AsyncResilientRedisClient(aioredis.Redis):
         circuit_breaker: AsyncCircuitBreaker | None = None,
         **kwargs,
     ):
+        """Initialize the resilient Redis client."""
         self.max_retries = max_retries
         self.backoff_factor = backoff_factor
         self.circuit_breaker = circuit_breaker or AsyncCircuitBreaker()
@@ -106,6 +109,7 @@ class AsyncResilientRedisClient(aioredis.Redis):
 
     async def execute_command(self, *args, **kwargs):
         """Override core command execution to add resilience.
+
         This is called by ALL Redis commands (GET, SET, HSET, etc.)
         """
         # Check circuit breaker first
@@ -119,8 +123,6 @@ class AsyncResilientRedisClient(aioredis.Redis):
                 # Call parent's execute_command
                 result = await super().execute_command(*args, **kwargs)
                 await self.circuit_breaker.record_success()
-                return result
-
             except (ConnectionError, TimeoutError) as e:
                 last_exception = e
                 await self.circuit_breaker.record_failure()
@@ -133,7 +135,9 @@ class AsyncResilientRedisClient(aioredis.Redis):
                     )
                     await asyncio.sleep(sleep_time)
                 else:
-                    logger.error(f"Redis command failed after {self.max_retries} attempts: {e}")
+                    logger.exception(f"Redis command failed after {self.max_retries} attempts")
+            else:
+                return result
 
         raise last_exception
 
@@ -174,8 +178,8 @@ async def initialize_async_redis_connection(
     try:
         await client.ping()
         logger.info(f"✅ Async Redis connected successfully to {host}:{port}")
-    except Exception as e:
-        logger.error(f"❌ Failed to connect to Redis: {e}")
+    except Exception:
+        logger.exception("❌ Failed to connect to Redis")
         raise
 
     return client

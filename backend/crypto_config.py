@@ -83,15 +83,48 @@ COMMON_STOCKS = {
 # Sentiment analysis word lists
 SENTIMENT_WORDS = {
     "positive": [
-        "surge", "bull", "rally", "gain", "up", "rise", "soar", "pump",
-        "green", "bullish", "moon", "rocket", "breakout", "boom", "growth",
-        "optimistic", "positive", "strong", "recovery", "rebound"
+        "surge",
+        "bull",
+        "rally",
+        "gain",
+        "up",
+        "rise",
+        "soar",
+        "pump",
+        "green",
+        "bullish",
+        "moon",
+        "rocket",
+        "breakout",
+        "boom",
+        "growth",
+        "optimistic",
+        "positive",
+        "strong",
+        "recovery",
+        "rebound",
     ],
     "negative": [
-        "crash", "bear", "fall", "down", "drop", "dump", "red", "bearish",
-        "decline", "plunge", "collapse", "slump", "correction", "weak",
-        "pessimistic", "negative", "downturn", "selloff", "bloodbath"
-    ]
+        "crash",
+        "bear",
+        "fall",
+        "down",
+        "drop",
+        "dump",
+        "red",
+        "bearish",
+        "decline",
+        "plunge",
+        "collapse",
+        "slump",
+        "correction",
+        "weak",
+        "pessimistic",
+        "negative",
+        "downturn",
+        "selloff",
+        "bloodbath",
+    ],
 }
 
 # API Configuration
@@ -116,7 +149,7 @@ NEWS_CATEGORIES = [
     "analysis",
     "technology",
     "business",
-    "markets"
+    "markets",
 ]
 
 # Exchange mappings
@@ -130,5 +163,5 @@ EXCHANGE_MAPPINGS = {
     "okex": "OKEx",
     "gemini": "Gemini",
     "bitstamp": "Bitstamp",
-    "bitfinex": "Bitfinex"
+    "bitfinex": "Bitfinex",
 }

@@ -1,4 +1,4 @@
-"""Memory system schemas"""
+"""Memory system schemas."""
 
 from .memory_schema import (
     ConsolidationCandidate,

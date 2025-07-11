@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Utility functions for consistent prompt formatting and other shared functionality.
+
 This module provides a single source of truth for how prompts should be formatted
 for the Mistral-Small-3.2-24B-Instruct-2506 LLM model. By centralizing the prompt format here, we ensure consistency
 across all parts of the application and make it easier to update the prompt format
@@ -9,6 +10,7 @@ The prompt format follows the official Mistral instruction format:
 """
 
 import logging
+from datetime import UTC
 
 from gpu_lock import Priority
 
@@ -18,6 +20,7 @@ logger = logging.getLogger(__name__)
 
 def format_prompt(system_prompt: str, user_prompt: str) -> str:
     """Format system prompt and user prompt in the standardized format for Mistral-Small-3.2-24B-Instruct-2506 LLM.
+
     This is the single source of truth for how prompts should be formatted
     for the Mistral model. Any changes to the prompt format should be made here
     and will be reflected throughout the application.
@@ -35,6 +38,7 @@ def format_prompt_with_history(
     system_prompt: str, user_prompt: str, conversation_history: str = ""
 ) -> str:
     """Format system prompt, conversation history, and user prompt in the standardized format for Mistral-Small-3.2-24B-Instruct-2506 LLM.
+
     This variant includes conversation history in the prompt format. It ensures
     consistent formatting across the application when conversation history needs
     to be included.
@@ -53,6 +57,7 @@ class AIQueryRouter:
     """100% AI-driven query routing and analysis."""
 
     def __init__(self):
+        """Initialize the AI query router."""
         pass  # No hardcoded patterns!
 
     def analyze_query_with_ai(self, query: str, llm=None, model_lock=None) -> dict:
@@ -132,7 +137,7 @@ Examples:
                     end_idx = result_text.rfind("}")
                     if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
                         try:
-                            analysis = json.loads(result_text[start_idx:end_idx+1])
+                            analysis = json.loads(result_text[start_idx : end_idx + 1])
 
                             # Validate the response structure
                             if "query_type" in analysis:
@@ -176,7 +181,7 @@ You are not allowed to use [REF]URL[/REF] tags for any reason and must only use 
 
 CRITICAL INSTRUCTIONS:
 1. Return ONLY a JSON array of CoinGecko coin IDs (lowercase, dash-separated format)
-2. Use exact CoinGecko coin IDs: bitcoin, ethereum, binancecoin, ripple, cardano, solana, 
+2. Use exact CoinGecko coin IDs: bitcoin, ethereum, binancecoin, ripple, cardano, solana,
    dogecoin, matic-network, avalanche-2, chainlink, etc.
 3. If no specific coins are mentioned, return popular/trending coins
 4. Maximum 10 coins
@@ -221,7 +226,7 @@ Examples:
                     end_idx = result_text.rfind("]")
                     if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
                         try:
-                            symbols = json.loads(result_text[start_idx:end_idx+1])
+                            symbols = json.loads(result_text[start_idx : end_idx + 1])
                             if isinstance(symbols, list):
                                 return symbols[:10]  # Limit to 10
                         except json.JSONDecodeError:
@@ -239,8 +244,8 @@ Examples:
             else:
                 return asyncio.run(get_ai_symbols())
 
-        except Exception as e:
-            logger.error(f"AI crypto symbol extraction failed: {e}")
+        except Exception:
+            logger.exception("AI crypto symbol extraction failed")
             # Return empty list on error
             return []
 
@@ -249,7 +254,7 @@ Examples:
         if not llm or not model_lock:
             return []
 
-        system_prompt = """You are Jane, a stock market expert. Your task is to analyze user queries and 
+        system_prompt = """You are Jane, a stock market expert. Your task is to analyze user queries and
 extract relevant stock ticker symbols that should be fetched for price data.
 
 You are not allowed to use [REF]URL[/REF] tags for any reason and must only use markdown links every time: [Text Here](URL)
@@ -300,7 +305,7 @@ Examples:
                     end_idx = result_text.rfind("]")
                     if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
                         try:
-                            symbols = json.loads(result_text[start_idx:end_idx+1])
+                            symbols = json.loads(result_text[start_idx : end_idx + 1])
                             if isinstance(symbols, list):
                                 return symbols[:10]  # Limit to 10
                         except json.JSONDecodeError:
@@ -318,8 +323,8 @@ Examples:
             else:
                 return asyncio.run(get_ai_symbols())
 
-        except Exception as e:
-            logger.error(f"AI stock symbol extraction failed: {e}")
+        except Exception:
+            logger.exception("AI stock symbol extraction failed")
             # Return empty list on error
             return []
 
@@ -332,13 +337,14 @@ def get_timestamp() -> str:
     """
     from datetime import datetime
 
-    return datetime.utcnow().isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 class AIDataProcessor:
     """100% AI-driven data processing and formatting."""
 
     def __init__(self):
+        """Initialize the AI data processor."""
         pass
 
     def process_data_with_ai(
@@ -359,7 +365,7 @@ class AIDataProcessor:
         if not llm or not model_lock:
             return f"Data processing service unavailable. Raw data: {raw_data[:500]}..."
 
-        system_prompt = f"""You are Jane, a financial data analyst and expert communicator. Your task is to 
+        system_prompt = f"""You are Jane, a financial data analyst and expert communicator. Your task is to
 process {data_type} data and present it in the most helpful way for the user's specific question.
 
 You are not allowed to use [REF]URL[/REF] tags for any reason and must only use markdown links every time: [Text Here](URL)
@@ -377,7 +383,7 @@ CRITICAL INSTRUCTIONS:
 User wants to know about: {data_type} data
 Raw data provided: This contains current market information
 
-Remember: The user asked a specific question. Answer THAT question using the data, don't just 
+Remember: The user asked a specific question. Answer THAT question using the data, don't just
 dump the data."""
 
         user_prompt = f"""User Question: {user_query}

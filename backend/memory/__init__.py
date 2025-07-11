@@ -1,4 +1,5 @@
-"""AI Memory System
+"""AI Memory System.
+
 ================
 
 A sophisticated memory system for AI assistants using Redis Stack and GPU-accelerated embeddings.

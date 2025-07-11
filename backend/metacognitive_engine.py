@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Metacognitive Engine v1
+"""Metacognitive Engine v1.
+
 Implements true "neural consciousness" through self-assessment and iterative improvement.
 Based on Gemini's strategic analysis for hybrid heuristics + LLM criticism.
 """
@@ -13,6 +14,23 @@ import utils
 from gpu_lock import GPULock, Priority
 
 logger = logging.getLogger(__name__)
+
+# Response evaluation constants
+MIN_HELPFUL_RESPONSE_LENGTH = 30
+LONG_RESPONSE_THRESHOLD = 100
+MIN_CONFIDENT_RESPONSE_LENGTH = 20
+MEDIUM_CONFIDENT_RESPONSE_LENGTH = 100
+
+# Query classification constants
+SHORT_QUERY_THRESHOLD = 20
+LONG_QUERY_THRESHOLD = 200
+
+# Quality thresholds
+IMPROVEMENT_THRESHOLD = 0.7
+WEAK_AREA_THRESHOLD = 0.6
+MINIMUM_RESPONSE_LENGTH = 10
+SHORT_RESPONSE_LENGTH = 50
+EXCESSIVE_RESPONSE_LENGTH = 2000
 
 
 class QualityTier(Enum):
@@ -57,9 +75,9 @@ class ResponseAssessment:
     @property
     def needs_improvement(self) -> bool:
         """Check if response needs improvement based on threshold."""
-        return self.overall_score < 0.7
+        return self.overall_score < IMPROVEMENT_THRESHOLD
 
-    def get_weak_areas(self, threshold: float = 0.6) -> list[str]:
+    def get_weak_areas(self, threshold: float = WEAK_AREA_THRESHOLD) -> list[str]:
         """Get list of areas that need improvement."""
         weak_areas = []
         for field_name, value in asdict(self).items():
@@ -80,10 +98,12 @@ class ImprovementSuggestion:
 
 class HeuristicEvaluator:
     """Fast, rule-based response evaluation.
+
     Implements the "System 1" thinking for immediate quality checks.
     """
 
     def __init__(self):
+        """Initialize the heuristic evaluator."""
         # No longer rely on regex patterns - trust the LLM's capabilities
         pass
 
@@ -125,13 +145,13 @@ class HeuristicEvaluator:
 
         # Check for empty or very short responses
         response_length = len(response.strip())
-        if response_length < 10:
+        if response_length < MINIMUM_RESPONSE_LENGTH:
             score -= 0.5
-        elif response_length < 50:
+        elif response_length < SHORT_RESPONSE_LENGTH:
             score -= 0.2
 
         # Check for excessive length (might be unclear rambling)
-        if response_length > 2000:
+        if response_length > EXCESSIVE_RESPONSE_LENGTH:
             score -= 0.1
 
         return max(0.0, min(1.0, score))
@@ -146,14 +166,14 @@ class HeuristicEvaluator:
 
         # If query asks specific questions, give bonus for longer responses
         query_has_question = any(word in query_lower for word in question_words)
-        if query_has_question and len(response) > 100:
+        if query_has_question and len(response) > LONG_RESPONSE_THRESHOLD:
             score += 0.3
 
         # Length consideration - very short responses likely incomplete
         response_length = len(response.strip())
-        if response_length < 50:
+        if response_length < SHORT_RESPONSE_LENGTH:
             score -= 0.3
-        elif response_length > 200:
+        elif response_length > LONG_QUERY_THRESHOLD:
             score += 0.2
 
         return max(0.0, min(1.0, score))
@@ -165,10 +185,10 @@ class HeuristicEvaluator:
         score = 0.8  # Higher base score - trust the model
 
         response_length = len(response.strip())
-        if response_length < 20:
+        if response_length < MIN_CONFIDENT_RESPONSE_LENGTH:
             # Very short responses might lack coherence
             score -= 0.2
-        elif response_length > 100:
+        elif response_length > MEDIUM_CONFIDENT_RESPONSE_LENGTH:
             # Longer responses likely have better structure
             score += 0.1
 
@@ -191,7 +211,8 @@ class HeuristicEvaluator:
             relevance_score = 0.7  # Trust the model by default
 
         # Boost for question queries
-        if "?" in user_query and len(response) > 50:
+        question_boost_threshold = 50
+        if "?" in user_query and len(response) > question_boost_threshold:
             relevance_score += 0.1
 
         return max(0.0, min(1.0, relevance_score))
@@ -203,9 +224,9 @@ class HeuristicEvaluator:
 
         # Simple length-based heuristic
         response_length = len(response.strip())
-        if response_length < 30:
+        if response_length < MIN_HELPFUL_RESPONSE_LENGTH:
             score -= 0.3  # Very short responses are less helpful
-        elif response_length > 100:
+        elif response_length > LONG_RESPONSE_THRESHOLD:
             score += 0.2  # Longer responses tend to be more helpful
 
         return max(0.0, min(1.0, score))
@@ -216,9 +237,9 @@ class HeuristicEvaluator:
         # Use response length as a simple proxy
         response_length = len(response.strip())
 
-        if response_length < 20:
+        if response_length < MIN_CONFIDENT_RESPONSE_LENGTH:
             return 0.5  # Very short responses show less confidence
-        elif response_length < 100:
+        elif response_length < MEDIUM_CONFIDENT_RESPONSE_LENGTH:
             return 0.7  # Medium confidence
         else:
             return 0.8  # Longer, detailed responses show confidence
@@ -226,10 +247,12 @@ class HeuristicEvaluator:
 
 class LLMCritic:
     """LLM-based response critic for deeper quality assessment.
+
     Implements the "System 2" thinking for nuanced evaluation.
     """
 
     def __init__(self, llm, model_lock: GPULock):
+        """Initialize LLM critic with model and GPU lock."""
         self.llm = llm
         self.model_lock = model_lock
 
@@ -271,12 +294,11 @@ class LLMCritic:
 
             # Parse the evaluation result
             assessment = self._parse_evaluation_result(evaluation_text)
-            return assessment
 
-        except Exception as e:
-            logger.error(f"LLM evaluation failed: {e}")
+        except Exception:
+            logger.exception("LLM evaluation failed")
             # Return neutral assessment on failure
-            return ResponseAssessment(
+            assessment = ResponseAssessment(
                 factual_accuracy=0.5,
                 relevance=0.5,
                 completeness=0.5,
@@ -285,6 +307,8 @@ class LLMCritic:
                 helpfulness=0.5,
                 confidence=0.5,
             )
+
+        return assessment
 
     def _create_evaluation_prompt(self, response: str, user_query: str, context: str) -> str:
         """Create structured evaluation prompt for the LLM."""
@@ -331,11 +355,11 @@ Format your response as JSON:
         """Parse LLM evaluation result into ResponseAssessment."""
         try:
             # Try to find JSON-like content by looking for curly braces
-            start_idx = evaluation_text.find('{')
-            end_idx = evaluation_text.rfind('}')
+            start_idx = evaluation_text.find("{")
+            end_idx = evaluation_text.rfind("}")
 
             if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
-                json_str = evaluation_text[start_idx:end_idx + 1]
+                json_str = evaluation_text[start_idx : end_idx + 1]
                 eval_data = json.loads(json_str)
 
                 return ResponseAssessment(
@@ -372,18 +396,19 @@ Format your response as JSON:
                 helpfulness=0.7,
                 confidence=0.7,
             )
-        except Exception as e:
-            logger.error(f"Error parsing LLM evaluation: {e}")
+        except Exception:
+            logger.exception("Error parsing LLM evaluation")
             return ResponseAssessment()  # Default neutral scores
-
 
 
 class MetacognitiveEngine:
     """Main metacognitive engine that orchestrates response evaluation and improvement.
+
     Implements true "neural consciousness" through self-reflection.
     """
 
     def __init__(self, llm, model_lock: GPULock):
+        """Initialize metacognitive engine with model and GPU lock."""
         self.llm = llm
         self.model_lock = model_lock
         self.heuristic_evaluator = HeuristicEvaluator()
@@ -501,11 +526,11 @@ class MetacognitiveEngine:
                 confidence=0.7 * llm_assessment.confidence + 0.3 * heuristic_assessment.confidence,
             )
 
-            return blended_assessment
-
         except Exception as e:
             logger.warning(f"LLM evaluation failed, using heuristics only: {e}")
-            return heuristic_assessment
+            blended_assessment = heuristic_assessment
+
+        return blended_assessment
 
     def _generate_improvement_suggestions(
         self, assessment: ResponseAssessment, response: str, user_query: str
@@ -618,8 +643,8 @@ class MetacognitiveEngine:
 
             return improved_text.strip() if improved_text.strip() else None
 
-        except Exception as e:
-            logger.error(f"Response improvement failed: {e}")
+        except Exception:
+            logger.exception("Response improvement failed")
             return None
 
     def _create_improvement_prompt(
@@ -646,7 +671,7 @@ class MetacognitiveEngine:
 **Improvement Areas:**
 {suggestions_text}
 
-Please provide an improved version that addresses these specific issues while maintaining 
+Please provide an improved version that addresses these specific issues while maintaining
 the helpful and informative tone. Keep the response concise but comprehensive."""
 
 
@@ -667,26 +692,49 @@ def select_quality_tier(user_query: str, context: str = "") -> QualityTier:
     query_length = len(user_query.strip())
 
     # Check for real-time keywords (quick, casual queries)
-    real_time_keywords = ["hi", "hello", "hey", "thanks", "thank", "joke", "funny", "quick", "briefly"]
+    real_time_keywords = [
+        "hi",
+        "hello",
+        "hey",
+        "thanks",
+        "thank",
+        "joke",
+        "funny",
+        "quick",
+        "briefly",
+    ]
     for keyword in real_time_keywords:
         if keyword in query_lower:
             return QualityTier.REAL_TIME
 
     # Check for analytical keywords (complex, detailed requests)
     analytical_keywords = [
-        "detailed", "comprehensive", "thorough", "complete", "in-depth",
-        "analyze", "analysis", "report", "research", "study",
-        "explain everything", "tell me all", "full explanation",
-        "business plan", "strategy", "architecture", "design"
+        "detailed",
+        "comprehensive",
+        "thorough",
+        "complete",
+        "in-depth",
+        "analyze",
+        "analysis",
+        "report",
+        "research",
+        "study",
+        "explain everything",
+        "tell me all",
+        "full explanation",
+        "business plan",
+        "strategy",
+        "architecture",
+        "design",
     ]
     for keyword in analytical_keywords:
         if keyword in query_lower:
             return QualityTier.ANALYTICAL
 
     # Check query length
-    if query_length < 20:
+    if query_length < SHORT_QUERY_THRESHOLD:
         return QualityTier.REAL_TIME
-    elif query_length > 200:
+    elif query_length > LONG_QUERY_THRESHOLD:
         return QualityTier.ANALYTICAL
 
     # Default to balanced
@@ -700,8 +748,7 @@ _global_metacognitive_engine: MetacognitiveEngine | None = None
 
 def initialize_metacognitive_engine(llm, model_lock: GPULock) -> MetacognitiveEngine:
     """Initialize global metacognitive engine."""
-    global _global_metacognitive_engine
-    _global_metacognitive_engine = MetacognitiveEngine(llm, model_lock)
+    globals()["_global_metacognitive_engine"] = MetacognitiveEngine(llm, model_lock)
     logger.info("🧠 Metacognitive Engine v1 initialized successfully")
     return _global_metacognitive_engine
 

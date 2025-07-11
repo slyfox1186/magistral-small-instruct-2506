@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Circuit Breaker Pattern Implementation for External Services
+"""Circuit Breaker Pattern Implementation for External Services.
+
 Prevents cascading failures from external API timeouts and errors.
 """
 
@@ -46,6 +47,7 @@ class CircuitBreaker:
     """
 
     def __init__(self, name: str, config: CircuitBreakerConfig | None = None):
+        """Initialize the circuit breaker."""
         self.name = name
         self.config = config or CircuitBreakerConfig()
 
@@ -98,16 +100,15 @@ class CircuitBreaker:
         # Execute the function call with timeout
         try:
             result = await asyncio.wait_for(func(*args, **kwargs), timeout=self.config.timeout)
-            await self._on_success()
-            return result
-
         except TimeoutError:
             await self._on_failure(f"Timeout after {self.config.timeout}s")
             raise
-
         except Exception as e:
             await self._on_failure(str(e))
             raise
+        else:
+            await self._on_success()
+            return result
 
     async def _on_success(self):
         """Handle successful function call."""
@@ -219,6 +220,7 @@ class CircuitBreakerManager:
     """Manager for multiple circuit breakers."""
 
     def __init__(self):
+        """Initialize the circuit breaker manager."""
         self.breakers: dict[str, CircuitBreaker] = {}
 
     def get_breaker(self, name: str, config: CircuitBreakerConfig | None = None) -> CircuitBreaker:

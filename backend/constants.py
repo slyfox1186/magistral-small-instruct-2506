@@ -1,4 +1,5 @@
-"""Backend Constants for Neural Consciousness Chat System
+"""Backend Constants for Neural Consciousness Chat System.
+
 Centralized configuration values to prevent magic numbers throughout the codebase.
 """
 
@@ -6,6 +7,37 @@ Centralized configuration values to prevent magic numbers throughout the codebas
 MAX_EMBEDDING_QUEUE_SIZE = 1000  # Maximum items in embedding queue
 MAX_MEMORY_EXTRACTION_QUEUE_SIZE = 1000  # Maximum items in memory extraction queue
 MEMORY_CONSOLIDATION_INTERVAL = 3600  # Memory consolidation interval in seconds (1 hour)
+
+# Text processing constants
+MINIMAL_TEXT_LENGTH = 20  # Minimum meaningful text length
+MAX_REASONABLE_TEXT_LENGTH = 200  # Maximum reasonable text length
+CONTENT_PREVIEW_LENGTH = 100  # Length for content previews
+EXTENDED_CONTENT_PREVIEW_LENGTH = 200  # Extended content preview length
+
+# Echo detection constants
+MIN_EMBEDDINGS_FOR_COMPARISON = 2  # Minimum embeddings needed for similarity comparison
+
+# Redis module constants
+MIN_MODULE_LIST_LENGTH = 2  # Minimum module list length for Redis module parsing
+
+# Crypto trading constants
+TRILLION_THRESHOLD = 1_000_000_000_000
+BILLION_THRESHOLD = 1_000_000_000
+MILLION_THRESHOLD = 1_000_000
+THOUSAND_THRESHOLD = 1_000
+
+# Sentiment thresholds
+POSITIVE_SENTIMENT_THRESHOLD = 0.1
+NEGATIVE_SENTIMENT_THRESHOLD = -0.1
+
+# Model similarity thresholds
+LOW_SIMILARITY_THRESHOLD = 0.6
+MEDIUM_SIMILARITY_THRESHOLD = 0.8
+HIGH_SIMILARITY_THRESHOLD = 0.9
+
+# Performance constants
+SLOW_OPERATION_THRESHOLD_MS = 100  # Milliseconds
+EMBEDDING_DIMENSION_COUNT = 10  # Number of dimensions for version tracking
 
 # Model and Processing
 DEFAULT_BATCH_SIZE = 2048  # Default n_batch for Llama model

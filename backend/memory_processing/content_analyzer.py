@@ -1,4 +1,4 @@
-"""Content Analysis Component for Memory Processing
+"""Content Analysis Component for Memory Processing.
 
 Uses LLM-powered analysis to understand conversation content,
 categorize memories, and determine what information is worth storing.
@@ -16,9 +16,11 @@ from .utils import detect_emotional_content, extract_entities, validate_memory_c
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass
 class ContentAnalysis:
-    """Results of content analysis"""
+    """Results of content analysis."""
+
     categories: list[str]
     importance_score: float
     confidence: float
@@ -29,45 +31,84 @@ class ContentAnalysis:
     context_type: str
     processing_time: float
 
+
 class ContentAnalyzer:
-    """Advanced content analyzer using LLM for intelligent content understanding
-    """
+    """Advanced content analyzer using LLM for intelligent content understanding."""
 
     def __init__(self, llm_server, config: MemoryProcessingConfig):
+        """Initialize the content analyzer.
+
+        Args:
+            llm_server: LLM server instance for content analysis
+            config: Memory processing configuration
+        """
         self.llm_server = llm_server
         self.config = config
         self.logger = logging.getLogger(__name__)
 
         # Memory categories and their patterns
         self.memory_categories = {
-            'personal_facts': [
-                'name', 'age', 'location', 'job', 'profession', 'education', 'background'
+            "personal_facts": [
+                "name",
+                "age",
+                "location",
+                "job",
+                "profession",
+                "education",
+                "background",
             ],
-            'preferences': [
-                'like', 'dislike', 'prefer', 'favorite', 'hate', 'love', 'enjoy', 'opinion'
+            "preferences": [
+                "like",
+                "dislike",
+                "prefer",
+                "favorite",
+                "hate",
+                "love",
+                "enjoy",
+                "opinion",
             ],
-            'experiences': [
-                'did', 'went', 'visited', 'happened', 'experience', 'event', 'story', 'memory'
+            "experiences": [
+                "did",
+                "went",
+                "visited",
+                "happened",
+                "experience",
+                "event",
+                "story",
+                "memory",
             ],
-            'relationships': [
-                'family', 'friend', 'colleague', 'partner', 'spouse', 'parent', 'child', 'sibling'
+            "relationships": [
+                "family",
+                "friend",
+                "colleague",
+                "partner",
+                "spouse",
+                "parent",
+                "child",
+                "sibling",
             ],
-            'knowledge': [
-                'learned', 'discovered', 'understand', 'know', 'teach', 'explain', 'fact'
+            "knowledge": [
+                "learned",
+                "discovered",
+                "understand",
+                "know",
+                "teach",
+                "explain",
+                "fact",
             ],
-            'goals': [
-                'want', 'plan', 'goal', 'dream', 'ambition', 'hope', 'wish', 'future'
-            ]
+            "goals": ["want", "plan", "goal", "dream", "ambition", "hope", "wish", "future"],
         }
 
-    async def analyze_content(self, user_prompt: str, assistant_response: str, session_id: str) -> ContentAnalysis:
-        """Analyze conversation content for memory extraction
-        
+    async def analyze_content(
+        self, user_prompt: str, assistant_response: str, session_id: str
+    ) -> ContentAnalysis:
+        """Analyze conversation content for memory extraction.
+
         Args:
             user_prompt: User's message
             assistant_response: Assistant's response
             session_id: Conversation session ID
-            
+
         Returns:
             ContentAnalysis object with analysis results
         """
@@ -112,38 +153,43 @@ class ContentAnalyzer:
             analysis = ContentAnalysis(
                 categories=categories,
                 importance_score=importance_score,
-                confidence=llm_analysis.get('confidence', 0.5),
+                confidence=llm_analysis.get("confidence", 0.5) if llm_analysis else 0.5,
                 entities=entities,
                 emotional_content=emotional_content,
                 memory_worthy=memory_worthy,
                 key_facts=key_facts,
                 context_type=context_type,
-                processing_time=processing_time
+                processing_time=processing_time,
             )
 
             if self.config.enable_detailed_logging:
-                self.logger.debug(f"Content analysis complete for session {session_id}: "
-                                f"importance={importance_score:.2f}, "
-                                f"categories={categories}, "
-                                f"memory_worthy={memory_worthy}")
+                self.logger.debug(
+                    f"Content analysis complete for session {session_id}: "
+                    f"importance={importance_score:.2f}, "
+                    f"categories={categories}, "
+                    f"memory_worthy={memory_worthy}"
+                )
 
+        except Exception:
+            self.logger.exception("Error analyzing content")
+            return self._create_empty_analysis(time.time() - start_time)
+        else:
             return analysis
 
-        except Exception as e:
-            self.logger.error(f"Error analyzing content: {e!s}")
-            return self._create_empty_analysis(time.time() - start_time)
-
     async def _perform_llm_analysis(self, content: str) -> dict[str, Any]:
-        """Use LLM to analyze content for memory extraction
-        
+        """Use LLM to analyze content for memory extraction.
+
         Args:
             content: Content to analyze
-            
+
         Returns:
             Dictionary with LLM analysis results
         """
         try:
             # Import format_prompt function
+            import sys
+            import os
+            sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
             from utils import format_prompt
 
             system_prompt = """You are an advanced memory analysis system. Analyze conversations to extract meaningful information for long-term storage.
@@ -179,7 +225,7 @@ Provide your analysis as a JSON object:"""
             try:
                 response = await asyncio.wait_for(
                     self.llm_server.generate(formatted_prompt, max_tokens=512, temperature=0.7),
-                    timeout=self.config.llm_timeout
+                    timeout=self.config.llm_timeout,
                 )
 
                 # Parse JSON response
@@ -188,81 +234,122 @@ Provide your analysis as a JSON object:"""
                     return analysis
                 except json.JSONDecodeError:
                     # Try to extract JSON from response
-                    json_start = response.find('{')
-                    json_end = response.rfind('}') + 1
+                    json_start = response.find("{")
+                    json_end = response.rfind("}") + 1
                     if json_start != -1 and json_end != -1:
-                        json_str = response[json_start:json_end]
-                        analysis = json.loads(json_str)
-                        return analysis
+                        try:
+                            json_str = response[json_start:json_end]
+                            analysis = json.loads(json_str)
+                            return analysis
+                        except json.JSONDecodeError:
+                            self.logger.warning("Failed to parse extracted JSON from LLM response")
+                            return await self._create_fallback_analysis(content)
                     else:
-                        self.logger.warning("Failed to parse LLM response as JSON")
-                        return self._create_fallback_analysis(content)
+                        self.logger.warning("Failed to find JSON in LLM response")
+                        return await self._create_fallback_analysis(content)
 
             except TimeoutError:
                 self.logger.warning(f"LLM analysis timed out after {self.config.llm_timeout}s")
-                return self._create_fallback_analysis(content)
+                return await self._create_fallback_analysis(content)
 
-        except Exception as e:
-            self.logger.error(f"Error in LLM analysis: {e!s}")
-            return self._create_fallback_analysis(content)
+        except Exception:
+            self.logger.exception("Error in LLM analysis")
+            return await self._create_fallback_analysis(content)
 
-    def _create_fallback_analysis(self, content: str) -> dict[str, Any]:
-        """Create fallback analysis when LLM analysis fails
-        
+    async def _create_fallback_analysis(self, content: str) -> dict[str, Any]:
+        """Create fallback analysis using LLM when primary analysis fails.
+
         Args:
             content: Content to analyze
-            
+
         Returns:
-            Basic analysis dictionary
+            Basic analysis dictionary using LLM
         """
-        # Simple keyword-based analysis
-        categories = []
-        key_facts = []
+        try:
+            # Use LLM for fallback analysis with simplified prompt
+            from persistent_llm_server import get_llm_server
+            
+            system_prompt = """You are a memory analysis system. Analyze the following content and return a JSON object.
 
-        content_lower = content.lower()
+Identify key information to remember and categorize it. Categories include:
+- personal_facts: Names, age, location, job, personal details
+- preferences: Likes, dislikes, opinions
+- experiences: Events, activities, stories
+- relationships: Family, friends, colleagues
+- knowledge: Facts, information shared
+- goals: Plans, ambitions
 
-        # Check for personal information patterns
-        if any(keyword in content_lower for keyword in ['name', 'age', 'live', 'work', 'job']):
-            categories.append('personal_facts')
-            key_facts.append("Contains personal information")
+Return only valid JSON:
+{
+  "key_facts": ["list of important facts"],
+  "categories": ["list of categories"],
+  "importance_reasons": ["why this is important"],
+  "confidence": 0.8,
+  "memory_worthy": true,
+  "context_type": "conversation_type"
+}"""
 
-        # Check for preferences
-        if any(keyword in content_lower for keyword in ['like', 'dislike', 'prefer', 'favorite']):
-            categories.append('preferences')
-            key_facts.append("Contains preferences")
-
-        # Check for experiences
-        if any(keyword in content_lower for keyword in ['did', 'went', 'visited', 'happened']):
-            categories.append('experiences')
-            key_facts.append("Contains experiences")
-
+            user_prompt = f"Analyze this content: {content}"
+            
+            llm_server = await get_llm_server()
+            response = await llm_server.generate(
+                prompt=f"{system_prompt}\n\n{user_prompt}",
+                max_tokens=300,
+                temperature=0.3,
+            )
+            
+            # Parse JSON response
+            try:
+                import json
+                analysis = json.loads(response)
+                return analysis
+            except json.JSONDecodeError:
+                # Try to extract JSON from response
+                json_start = response.find("{")
+                json_end = response.rfind("}") + 1
+                if json_start != -1 and json_end != -1:
+                    try:
+                        json_str = response[json_start:json_end]
+                        analysis = json.loads(json_str)
+                        return analysis
+                    except json.JSONDecodeError:
+                        pass
+                        
+        except Exception as e:
+            self.logger.warning(f"LLM fallback analysis failed: {e}")
+        
+        # Ultimate fallback - return minimal analysis
         return {
-            'key_facts': key_facts,
-            'categories': categories,
-            'importance_reasons': ['Fallback analysis'],
-            'confidence': 0.3,
-            'memory_worthy': len(key_facts) > 0,
-            'context_type': 'general_conversation'
+            "key_facts": ["Content analyzed"],
+            "categories": ["general"],
+            "importance_reasons": ["Contains user content"],
+            "confidence": 0.5,
+            "memory_worthy": True,  # Always consider worthy as fallback
+            "context_type": "general_conversation",
         }
 
-    def _calculate_importance_score(self, content: str, entities: dict[str, list[str]],
-                                  emotional_content: dict[str, Any],
-                                  llm_analysis: dict[str, Any]) -> float:
-        """Calculate importance score for memory storage
-        
+    def _calculate_importance_score(
+        self,
+        content: str,
+        entities: dict[str, list[str]],
+        emotional_content: dict[str, Any],
+        llm_analysis: dict[str, Any],
+    ) -> float:
+        """Calculate importance score for memory storage.
+
         Args:
             content: Content to analyze
             entities: Extracted entities
             emotional_content: Emotional analysis
             llm_analysis: LLM analysis results
-            
+
         Returns:
             Importance score between 0 and 1
         """
         base_score = 0.3  # Base score for all content
 
         # LLM confidence boost
-        llm_confidence = llm_analysis.get('confidence', 0.5)
+        llm_confidence = llm_analysis.get("confidence", 0.5) if llm_analysis else 0.5
         base_score += llm_confidence * 0.3
 
         # Entity boost
@@ -271,16 +358,19 @@ Provide your analysis as a JSON object:"""
         base_score += entity_boost
 
         # Emotional content boost
-        if emotional_content.get('has_emotional_content', False):
-            emotional_boost = min(emotional_content.get('intensity', 0) * 0.1, 0.2)
+        if emotional_content.get("has_emotional_content", False):
+            emotional_boost = min(emotional_content.get("intensity", 0) * 0.1, 0.2)
             base_score += emotional_boost
 
         # Personal information boost
-        if any(category in llm_analysis.get('categories', []) for category in ['personal_facts', 'relationships']):
+        if llm_analysis and any(
+            category in llm_analysis.get("categories", [])
+            for category in ["personal_facts", "relationships"]
+        ):
             base_score += self.config.personal_info_boost
 
         # Key facts boost
-        key_facts_count = len(llm_analysis.get('key_facts', []))
+        key_facts_count = len(llm_analysis.get("key_facts", [])) if llm_analysis else 0
         key_facts_boost = min(key_facts_count * 0.05, 0.2)
         base_score += key_facts_boost
 
@@ -291,82 +381,88 @@ Provide your analysis as a JSON object:"""
         return max(0.0, min(1.0, final_score))
 
     def _determine_categories(self, content: str, llm_analysis: dict[str, Any]) -> list[str]:
-        """Determine memory categories for content
-        
+        """Determine memory categories for content.
+
         Args:
             content: Content to analyze
             llm_analysis: LLM analysis results
-            
+
         Returns:
             List of applicable categories
         """
-        categories = llm_analysis.get('categories', [])
+        categories = llm_analysis.get("categories", []) if llm_analysis else []
 
         # Validate categories
-        valid_categories = []
-        for category in categories:
-            if category in self.memory_categories:
-                valid_categories.append(category)
+        valid_categories = [
+            category for category in categories if category in self.memory_categories
+        ]
 
         # Add fallback category if none found
         if not valid_categories:
-            valid_categories.append('knowledge')
+            valid_categories.append("knowledge")
 
         return valid_categories
 
     def _extract_key_facts(self, content: str, llm_analysis: dict[str, Any]) -> list[str]:
-        """Extract key facts from content
-        
+        """Extract key facts from content.
+
         Args:
             content: Content to analyze
             llm_analysis: LLM analysis results
-            
+
         Returns:
             List of key facts
         """
-        key_facts = llm_analysis.get('key_facts', [])
+        key_facts = llm_analysis.get("key_facts", []) if llm_analysis else []
 
         # Validate and filter key facts
-        valid_facts = []
-        for fact in key_facts:
-            if isinstance(fact, str) and len(fact.strip()) > 10:
-                valid_facts.append(fact.strip())
+        min_fact_length = 10
+        valid_facts = [
+            fact.strip()
+            for fact in key_facts
+            if isinstance(fact, str) and len(fact.strip()) > min_fact_length
+        ]
 
         return valid_facts[:5]  # Limit to top 5 facts
 
     def _determine_context_type(self, content: str, llm_analysis: dict[str, Any]) -> str:
-        """Determine the context type of the conversation
-        
+        """Determine the context type of the conversation.
+
         Args:
             content: Content to analyze
             llm_analysis: LLM analysis results
-            
+
         Returns:
             Context type string
         """
-        context_type = llm_analysis.get('context_type', 'general_conversation')
+        context_type = llm_analysis.get("context_type", "general_conversation") if llm_analysis else "general_conversation"
 
         # Validate context type
         valid_context_types = [
-            'personal_introduction', 'casual_conversation', 'question_answer',
-            'problem_solving', 'information_request', 'creative_collaboration',
-            'general_conversation'
+            "personal_introduction",
+            "casual_conversation",
+            "question_answer",
+            "problem_solving",
+            "information_request",
+            "creative_collaboration",
+            "general_conversation",
         ]
 
         if context_type not in valid_context_types:
-            context_type = 'general_conversation'
+            context_type = "general_conversation"
 
         return context_type
 
-    def _is_memory_worthy(self, importance_score: float, categories: list[str],
-                         key_facts: list[str]) -> bool:
-        """Determine if content is worth storing in memory
-        
+    def _is_memory_worthy(
+        self, importance_score: float, categories: list[str], key_facts: list[str]
+    ) -> bool:
+        """Determine if content is worth storing in memory.
+
         Args:
             importance_score: Calculated importance score
             categories: Memory categories
             key_facts: Extracted key facts
-            
+
         Returns:
             True if content should be stored
         """
@@ -379,7 +475,7 @@ Provide your analysis as a JSON object:"""
             return False
 
         # High-value categories are always worth storing
-        high_value_categories = ['personal_facts', 'relationships', 'goals']
+        high_value_categories = ["personal_facts", "relationships", "goals"]
         if any(category in high_value_categories for category in categories):
             return True
 
@@ -387,11 +483,11 @@ Provide your analysis as a JSON object:"""
         return importance_score >= self.config.high_confidence_threshold
 
     def _create_empty_analysis(self, processing_time: float) -> ContentAnalysis:
-        """Create empty analysis for failed processing
-        
+        """Create empty analysis for failed processing.
+
         Args:
             processing_time: Time taken for processing
-            
+
         Returns:
             Empty ContentAnalysis object
         """
@@ -403,6 +499,6 @@ Provide your analysis as a JSON object:"""
             emotional_content={},
             memory_worthy=False,
             key_facts=[],
-            context_type='unknown',
-            processing_time=processing_time
+            context_type="unknown",
+            processing_time=processing_time,
         )

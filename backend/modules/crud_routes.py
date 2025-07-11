@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """CRUD API routes for conversations, messages, and user settings."""
 
-
 from fastapi import FastAPI, HTTPException, Query
 
 from modules.models import (
@@ -23,17 +22,17 @@ from services.crud_service import CRUDService
 crud_service = CRUDService()
 
 
-def setup_crud_routes(app: FastAPI) -> None:
-    """Setup CRUD routes for the FastAPI app."""
-    # ===================== Conversation Routes =====================
-
+def _create_conversation_routes(app: FastAPI) -> None:
+    """Create conversation-related routes."""
     @app.post("/api/conversations", response_model=ConversationResponse)
     async def create_conversation(conversation: ConversationCreate):
         """Create a new conversation."""
         try:
             return await crud_service.create_conversation(conversation)
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Failed to create conversation: {e!s}")
+            raise HTTPException(
+                status_code=500, detail=f"Failed to create conversation: {e!s}"
+            ) from e
 
     @app.get("/api/conversations/{conversation_id}", response_model=ConversationResponse)
     async def get_conversation(conversation_id: str):
@@ -47,13 +46,17 @@ def setup_crud_routes(app: FastAPI) -> None:
     async def list_conversations(
         page: int = Query(1, ge=1, description="Page number"),
         page_size: int = Query(20, ge=1, le=100, description="Items per page"),
-        archived: bool | None = Query(None, description="Filter by archived status")
+        archived: bool | None = Query(None, description="Filter by archived status"),
     ):
         """List conversations with pagination and optional filtering."""
         try:
-            return await crud_service.list_conversations(page=page, page_size=page_size, archived=archived)
+            return await crud_service.list_conversations(
+                page=page, page_size=page_size, archived=archived
+            )
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Failed to list conversations: {e!s}")
+            raise HTTPException(
+                status_code=500, detail=f"Failed to list conversations: {e!s}"
+            ) from e
 
     @app.put("/api/conversations/{conversation_id}", response_model=ConversationResponse)
     async def update_conversation(conversation_id: str, update_data: ConversationUpdate):
@@ -63,23 +66,16 @@ def setup_crud_routes(app: FastAPI) -> None:
             raise HTTPException(status_code=404, detail="Conversation not found")
         return conversation
 
-    @app.delete("/api/conversations/{conversation_id}")
-    async def delete_conversation(conversation_id: str):
-        """Delete a conversation."""
-        success = await crud_service.delete_conversation(conversation_id)
-        if not success:
-            raise HTTPException(status_code=404, detail="Conversation not found")
-        return {"message": "Conversation deleted successfully"}
 
-    # ===================== Message Routes =====================
-
+def _create_message_routes(app: FastAPI) -> None:
+    """Create message-related routes."""
     @app.post("/api/messages", response_model=MessageResponse)
     async def create_message(message: MessageCreate):
         """Create a new message."""
         try:
             return await crud_service.create_message(message)
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Failed to create message: {e!s}")
+            raise HTTPException(status_code=500, detail=f"Failed to create message: {e!s}") from e
 
     @app.get("/api/messages/{message_id}", response_model=MessageResponse)
     async def get_message(message_id: str):
@@ -93,13 +89,15 @@ def setup_crud_routes(app: FastAPI) -> None:
     async def list_messages(
         conversation_id: str,
         page: int = Query(1, ge=1, description="Page number"),
-        page_size: int = Query(50, ge=1, le=200, description="Items per page")
+        page_size: int = Query(50, ge=1, le=200, description="Items per page"),
     ):
         """List messages for a conversation with pagination."""
         try:
-            return await crud_service.list_messages(conversation_id=conversation_id, page=page, page_size=page_size)
+            return await crud_service.list_messages(
+                conversation_id=conversation_id, page=page, page_size=page_size
+            )
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Failed to list messages: {e!s}")
+            raise HTTPException(status_code=500, detail=f"Failed to list messages: {e!s}") from e
 
     @app.put("/api/messages/{message_id}", response_model=MessageResponse)
     async def update_message(message_id: str, update_data: MessageUpdate):
@@ -117,8 +115,32 @@ def setup_crud_routes(app: FastAPI) -> None:
             raise HTTPException(status_code=404, detail="Message not found")
         return {"message": "Message deleted successfully"}
 
-    # ===================== User Settings Routes =====================
 
+def setup_crud_routes(app: FastAPI) -> None:
+    """Setup CRUD routes for the FastAPI app."""
+    # ===================== Conversation Routes =====================
+    _create_conversation_routes(app)
+
+    @app.delete("/api/conversations/{conversation_id}")
+    async def delete_conversation(conversation_id: str):
+        """Delete a conversation."""
+        success = await crud_service.delete_conversation(conversation_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        return {"message": "Conversation deleted successfully"}
+
+    # ===================== Message Routes =====================
+    _create_message_routes(app)
+
+    # ===================== User Settings Routes =====================
+    _create_user_settings_routes(app)
+
+    # ===================== Utility Routes =====================
+    _create_utility_routes(app)
+
+
+def _create_user_settings_routes(app: FastAPI) -> None:
+    """Create user settings routes."""
     @app.post("/api/users/{user_id}/settings", response_model=UserSettingsResponse)
     async def create_user_settings(user_id: str, settings: UserSettingsCreate):
         """Create user settings."""
@@ -127,7 +149,9 @@ def setup_crud_routes(app: FastAPI) -> None:
         try:
             return await crud_service.create_user_settings(settings)
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Failed to create user settings: {e!s}")
+            raise HTTPException(
+                status_code=500, detail=f"Failed to create user settings: {e!s}"
+            ) from e
 
     @app.get("/api/users/{user_id}/settings", response_model=UserSettingsResponse)
     async def get_user_settings(user_id: str):
@@ -153,8 +177,9 @@ def setup_crud_routes(app: FastAPI) -> None:
             raise HTTPException(status_code=404, detail="User settings not found")
         return {"message": "User settings deleted successfully"}
 
-    # ===================== Utility Routes =====================
 
+def _create_utility_routes(app: FastAPI) -> None:
+    """Create utility routes."""
     @app.get("/api/conversations/{conversation_id}/summary")
     async def get_conversation_summary(conversation_id: str):
         """Get a summary of a conversation."""
@@ -168,7 +193,7 @@ def setup_crud_routes(app: FastAPI) -> None:
         return {
             "conversation": conversation,
             "recent_messages": messages.messages[-5:] if messages.messages else [],
-            "total_messages": messages.total
+            "total_messages": messages.total,
         }
 
     @app.post("/api/conversations/{conversation_id}/archive")
@@ -198,16 +223,21 @@ def setup_crud_routes(app: FastAPI) -> None:
             total_conversations = all_conversations.total
 
             # Get archived conversations
-            archived_conversations = await crud_service.list_conversations(page=1, page_size=1, archived=True)
+            archived_conversations = await crud_service.list_conversations(
+                page=1, page_size=1, archived=True
+            )
             total_archived = archived_conversations.total
 
             # Get active conversations
             active_conversations = total_conversations - total_archived
 
+        except Exception as e:
+            raise HTTPException(
+                status_code=500, detail=f"Failed to get conversation stats: {e!s}"
+            ) from e
+        else:
             return {
                 "total_conversations": total_conversations,
                 "active_conversations": active_conversations,
-                "archived_conversations": total_archived
+                "archived_conversations": total_archived,
             }
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Failed to get conversation stats: {e!s}")

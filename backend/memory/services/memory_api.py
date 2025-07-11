@@ -1,4 +1,5 @@
-"""Memory API Service
+"""Memory API Service.
+
 ==================
 
 Core CRUD operations for the memory system.
@@ -27,10 +28,10 @@ logger = logging.getLogger(__name__)
 
 
 class MemoryAPI:
-    """Core memory operations API"""
+    """Core memory operations API."""
 
     def __init__(self, redis_client: redis.Redis, config_path: str = "config/redis.yaml"):
-        """Initialize Memory API
+        """Initialize Memory API.
 
         Args:
             redis_client: Async Redis client
@@ -48,14 +49,14 @@ class MemoryAPI:
         self.consolidation_prefix = "consolidation:"
 
     def _load_config(self, config_path: str) -> dict:
-        """Load Redis configuration"""
-        with open(Path(__file__).parent.parent / config_path) as f:
-            return yaml.safe_load(f)
+        """Load Redis configuration."""
+        config_file = Path(__file__).parent.parent / config_path
+        return yaml.safe_load(config_file.read_text())
 
     def _load_circles(self) -> dict[str, MemoryCircle]:
-        """Load memory circle definitions"""
-        with open(Path(__file__).parent.parent / "config/circles.yaml") as f:
-            circles_config = yaml.safe_load(f)
+        """Load memory circle definitions."""
+        circles_file = Path(__file__).parent.parent / "config/circles.yaml"
+        circles_config = yaml.safe_load(circles_file.read_text())
 
         circles = {}
         for name, data in circles_config["circles"].items():
@@ -73,7 +74,7 @@ class MemoryAPI:
         tags: list[str] | None = None,
         metadata: dict | None = None,
     ) -> ShortTermMemory:
-        """Create a new short-term memory
+        """Create a new short-term memory.
 
         Args:
             content: Memory content
@@ -125,7 +126,7 @@ class MemoryAPI:
             return memory
 
     async def get_stm(self, memory_id: str) -> ShortTermMemory | None:
-        """Retrieve a short-term memory by ID"""
+        """Retrieve a short-term memory by ID."""
         key = f"{self.stm_prefix}{memory_id}"
         try:
             data = await self.redis.hgetall(key)
@@ -134,7 +135,9 @@ class MemoryAPI:
                 logger.debug(f"🧠 MEMORY DEBUG: STM not found: {memory_id}")
                 return None
         except Exception as e:
-            logger.error(f"🧠 MEMORY DEBUG: ❌ Error retrieving STM {memory_id}: {e}", exc_info=True)
+            logger.error(
+                f"🧠 MEMORY DEBUG: ❌ Error retrieving STM {memory_id}: {e}", exc_info=True
+            )
             return None
 
         # Convert byte strings to proper types
@@ -148,7 +151,7 @@ class MemoryAPI:
         tags: list[str] | None = None,
         metadata: dict | None = None,
     ) -> ShortTermMemory | None:
-        """Update an existing STM"""
+        """Update an existing STM."""
         memory = await self.get_stm(memory_id)
         if not memory:
             logger.warning(f"🧠 MEMORY DEBUG: Cannot update STM - not found: {memory_id}")
@@ -172,7 +175,7 @@ class MemoryAPI:
         return memory
 
     async def delete_stm(self, memory_id: str) -> bool:
-        """Delete a short-term memory"""
+        """Delete a short-term memory."""
         key = f"{self.stm_prefix}{memory_id}"
         result = await self.redis.delete(key)
 
@@ -182,7 +185,7 @@ class MemoryAPI:
         return bool(result)
 
     async def delete_ltm(self, memory_id: str) -> bool:
-        """Delete a long-term memory"""
+        """Delete a long-term memory."""
         key = f"{self.ltm_prefix}{memory_id}"
         result = await self.redis.delete(key)
 
@@ -194,7 +197,7 @@ class MemoryAPI:
     async def promote_to_ltm(
         self, stm_ids: list[str], summary: str, user_approved: bool = True
     ) -> LongTermMemory:
-        """Promote STMs to a consolidated LTM
+        """Promote STMs to a consolidated LTM.
 
         Args:
             stm_ids: List of STM IDs to consolidate
@@ -258,7 +261,7 @@ class MemoryAPI:
             return ltm
 
     async def get_ltm(self, memory_id: str) -> LongTermMemory | None:
-        """Retrieve a long-term memory by ID"""
+        """Retrieve a long-term memory by ID."""
         key = f"{self.ltm_prefix}{memory_id}"
         data = await self.redis.hgetall(key)
 
@@ -278,7 +281,7 @@ class MemoryAPI:
     async def update_ltm_links(
         self, memory_id: str, linked_ids: list[str]
     ) -> LongTermMemory | None:
-        """Update links between LTMs"""
+        """Update links between LTMs."""
         ltm = await self.get_ltm(memory_id)
         if not ltm:
             return None
@@ -291,7 +294,7 @@ class MemoryAPI:
         return ltm
 
     async def queue_consolidation_candidate(self, candidate: ConsolidationCandidate):
-        """Queue a consolidation candidate for user review"""
+        """Queue a consolidation candidate for user review."""
         key = f"{self.consolidation_prefix}{candidate.created_at}"
 
         await self.redis.hset(
@@ -310,12 +313,9 @@ class MemoryAPI:
         await self.redis.expire(key, 7 * 24 * 3600)
 
     async def get_pending_consolidations(self) -> list[ConsolidationCandidate]:
-        """Get all pending consolidation candidates"""
+        """Get all pending consolidation candidates."""
         pattern = f"{self.consolidation_prefix}*"
-        keys = []
-
-        async for key in self.redis.scan_iter(match=pattern):
-            keys.append(key)
+        keys = [key async for key in self.redis.scan_iter(match=pattern)]
 
         candidates = []
         for key in keys:
@@ -334,7 +334,7 @@ class MemoryAPI:
         return sorted(candidates, key=lambda x: x.created_at, reverse=True)
 
     def _extract_tags(self, content: str) -> list[str]:
-        """Extract hashtags from content"""
+        """Extract hashtags from content."""
         # Simple hashtag extraction without regex
         hashtags = []
         words = content.split()
@@ -352,7 +352,7 @@ class MemoryAPI:
         return list(set(hashtags))  # Remove duplicates
 
     def _determine_circle(self, content: str) -> str:
-        """Determine which memory circle this content belongs to"""
+        """Determine which memory circle this content belongs to."""
         content_lower = content.lower()
 
         # Check selection rules in order
@@ -368,7 +368,7 @@ class MemoryAPI:
         return self.default_circle
 
     async def get_memory_stats(self) -> dict[str, Any]:
-        """Get memory system statistics"""
+        """Get memory system statistics."""
         # Count STMs
         stm_count = 0
         async for _ in self.redis.scan_iter(match=f"{self.stm_prefix}*"):
@@ -498,6 +498,6 @@ class MemoryAPI:
 
 
 async def create_memory_api(redis_url: str = "redis://localhost:6379") -> MemoryAPI:
-    """Factory function to create MemoryAPI with Redis connection"""
+    """Factory function to create MemoryAPI with Redis connection."""
     redis_client = await redis.from_url(redis_url)
     return MemoryAPI(redis_client)

@@ -13,7 +13,9 @@ import {
   UserSettingsUpdate,
 } from '@/utils/types';
 
-const BASE_URL = API_URL || 'http://localhost:8000';
+// In development, use empty string to leverage Vite proxy
+// In production, use the full API URL
+const BASE_URL = import.meta.env.DEV ? '' : (API_URL || 'http://localhost:8000');
 
 class CrudApiClient {
   private async makeRequest<T>(

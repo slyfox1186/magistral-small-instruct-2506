@@ -57,18 +57,8 @@ const MarkdownItRenderer = lazy(() =>
     })
 );
 
-// Lazy load CRUD interface
-const CrudInterface = lazy(() =>
-  import('./components/crud/CrudInterface')
-    .then((module) => {
-      logger.debug('CrudInterface component loaded');
-      return { default: module.CrudInterface };
-    })
-    .catch((error) => {
-      logger.error('Failed to load CrudInterface:', error);
-      throw error;
-    })
-);
+// Import CRUD interface directly to avoid Suspense/hook issues
+import CrudInterface from './components/crud/CrudInterface';
 
 // Fix timeout type compatibility
 type TimeoutType = ReturnType<typeof setTimeout>;
@@ -130,10 +120,18 @@ function App() {
   const alert = useAlert();
   // Use fixed session ID from environment or generated ID
   const sessionId = MEMORY_SESSION_ID;
+  // Separate API session ID for conversation switching
+  const [apiSessionId, setApiSessionId] = useState(MEMORY_SESSION_ID);
   // Interface mode state
   const [interfaceMode, setInterfaceMode] = useState<'chat' | 'crud'>('chat');
+  // Conversation loading state
+  const [loadingConversation, setLoadingConversation] = useState(false);
   // Backend health state  
   const [,] = useState<boolean | null>(null);
+  // State machine for chat integration lifecycle
+  const [chatIntegrationState, setChatIntegrationState] = useState<
+    'uninitialized' | 'initializing' | 'initialized' | 'switching_conversation'
+  >('uninitialized');
 
   // Initialize cache management for development
   useEffect(() => {
@@ -408,6 +406,10 @@ function App() {
     // Clear attached files and errors
     setAttachedFiles([]);
     setFileError(null);
+    
+    // Reset API session ID to default for new conversations
+    setApiSessionId(MEMORY_SESSION_ID);
+    logger.info(`Reset API session ID to default: ${MEMORY_SESSION_ID}`);
 
     // Clear from localStorage
     try {
@@ -454,9 +456,9 @@ function App() {
     setError(null); // Clear previous errors before starting
 
     try {
-      logger.info(`🧹 Attempting to clear memories via ${config.API_URL}/clear-vital-memories`);
+      logger.info(`🧹 Attempting to clear conversation memories via ${config.API_URL}/clear-conversation-memories/${apiSessionId}`);
 
-      const response = await fetch(`${config.API_URL}/clear-vital-memories`, {
+      const response = await fetch(`${config.API_URL}/clear-conversation-memories/${apiSessionId}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
@@ -493,6 +495,61 @@ function App() {
       setClearingMemory(false);
     }
   }, [clearingMemory, clearChatHistory, clearAdditionalState]);
+
+  // Load conversation messages from CRUD database
+  const loadConversationMessages = useCallback(async (conversationId: string) => {
+    try {
+      setLoadingConversation(true);
+      setChatIntegrationState('switching_conversation');
+      logger.info(`Loading messages for conversation: ${conversationId}`);
+      
+      // Import the CRUD API
+      const { crudApi } = await import('@/api/crud');
+      
+      // Load messages from the conversation
+      const response = await crudApi.listMessages(conversationId, 1, 100);
+      
+      // Convert CRUD messages to AppMessage format
+      const convertedMessages: AppMessage[] = response.messages.map((msg: any) => ({
+        id: msg.id,
+        role: msg.role,
+        content: msg.content,
+        timestamp: new Date(msg.created_at).toLocaleTimeString(),
+        status: 'sent' as const,
+      }));
+      
+      // Update the chat state with loaded messages
+      setMessages(convertedMessages);
+      
+      // CRITICAL: Update API session ID to conversation ID for memory context
+      setApiSessionId(conversationId);
+      
+      // Update chat integration to use this conversation
+      await chatIntegration.setCurrentConversation(conversationId);
+      
+      logger.info(`Successfully loaded ${convertedMessages.length} messages from conversation ${conversationId}`);
+      logger.info(`Updated API session ID to: ${conversationId} for memory context`);
+      
+      // Set state to initialized after successful conversation switch
+      setChatIntegrationState('initialized');
+      
+    } catch (error) {
+      logger.error('Failed to load conversation messages:', error);
+      alert.show('Failed to load conversation messages', 'error');
+      setChatIntegrationState('initialized'); // Reset to stable state
+    } finally {
+      setLoadingConversation(false);
+    }
+  }, [alert]);
+
+  // Handle back to chat with optional conversation switching
+  const handleBackToChat = useCallback(async (conversationId?: string) => {
+    if (conversationId) {
+      await loadConversationMessages(conversationId);
+    }
+    setInterfaceMode('chat');
+  }, [loadConversationMessages]);
+
   // Add flag to track if we have a confirmed final completion from backend
   const isFinalCompletionRef = useRef<boolean>(false);
 
@@ -532,31 +589,35 @@ function App() {
     }
   }, [focusInput]);
 
-  // Initialize chat integration and sync existing messages
+  // Initialize chat integration using explicit state machine
   useEffect(() => {
     const initializeChatIntegration = async () => {
       try {
-        if (messages.length > 0) {
+        // ONLY initialize if in uninitialized state AND have messages from localStorage
+        if (chatIntegrationState === 'uninitialized' && messages.length > 0) {
+          setChatIntegrationState('initializing');
+          
           // Initialize conversation with first user message
           const firstUserMessage = messages.find(m => m.role === 'user');
           await chatIntegration.initializeConversation(
-            sessionId, 
+            apiSessionId, 
             firstUserMessage?.content || undefined
           );
           
-          // Save existing messages to CRUD database
+          // Save existing messages to CRUD database (ONLY for localStorage messages)
           await chatIntegration.saveMessages(messages);
           logger.info('Synced existing chat messages to CRUD database');
+          
+          setChatIntegrationState('initialized');
         }
       } catch (error) {
         logger.error('Failed to initialize chat integration:', error);
-        // Don't block the app if CRUD integration fails
+        setChatIntegrationState('initialized'); // Reset to stable state
       }
     };
 
-    // Only run once on component mount
     initializeChatIntegration();
-  }, [messages, sessionId]); // Include dependencies but still only run when they change
+  }, [messages, apiSessionId, chatIntegrationState]); // Explicit state dependency
 
   // Simplified effect to handle stream completion
   useEffect(() => {
@@ -1056,7 +1117,7 @@ function App() {
 
     // Initialize conversation and save user message to CRUD database
     try {
-      await chatIntegration.initializeConversation(sessionId, userMessageText);
+      await chatIntegration.initializeConversation(apiSessionId, userMessageText);
       await chatIntegration.saveMessage(newUserMessage);
     } catch (error) {
       logger.error('Failed to save user message to CRUD database:', error);
@@ -1107,7 +1168,7 @@ function App() {
       const response = await networkService.streamRequest('/api/chat-stream', {
         method: 'POST',
         body: {
-          session_id: sessionId,
+          session_id: apiSessionId,
           messages: formatMessagesForAPI(messages, apiMessageText),
         },
         signal: controller.signal, // Pass the abort controller signal
@@ -1498,6 +1559,13 @@ function App() {
       
       {interfaceMode === 'chat' ? (
         <div className="chat-container">
+          {/* Conversation loading indicator */}
+          {loadingConversation && (
+            <div className="loading-conversation">
+              <div className="loading-spinner"></div>
+              <span>Loading conversation...</span>
+            </div>
+          )}
           {/* Messages container with autoscroll control */}
           <div ref={scrollContainerRef} className="messages-container">
           <TransitionGroup component={null}>
@@ -1773,9 +1841,12 @@ function App() {
         </div>
         </div>
       ) : (
-        <Suspense fallback={<div className="loading">Loading CRUD interface...</div>}>
-          <CrudInterface userId={sessionId} />
-        </Suspense>
+        <ErrorBoundary>
+          <CrudInterface 
+            userId={sessionId} 
+            onBackToChat={handleBackToChat}
+          />
+        </ErrorBoundary>
       )}
     </div>
   );

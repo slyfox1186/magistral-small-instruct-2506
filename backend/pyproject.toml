@@ -62,6 +62,7 @@ ignore = [
     "S101",   # Use of assert (needed for tests)
     "TRY003", # Avoid specifying long messages outside the exception class
     "PLR0913", # Too many arguments (common in FastAPI)
+    "T201",   # Print statements (allowed for CLI scripts)
 ]
 
 exclude = [

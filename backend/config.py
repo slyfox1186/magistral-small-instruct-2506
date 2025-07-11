@@ -42,24 +42,24 @@ GENERATION_CONFIG = {
 # Redis configuration
 REDIS_CONFIG = {
     "host": os.environ.get("REDIS_HOST", "localhost"),
-    "port": int(os.environ.get("REDIS_PORT", 6379)),
+    "port": int(os.environ.get("REDIS_PORT", "6379")),
     "decode_responses": True,
-    "max_history": int(os.environ.get("REDIS_MAX_HISTORY", 10)),
+    "max_history": int(os.environ.get("REDIS_MAX_HISTORY", "10")),
 }
 
 # API configuration
 API_CONFIG = {
-    "host": os.environ.get("API_HOST", "0.0.0.0"),
-    "port": int(os.environ.get("API_PORT", 8000)),
+    "host": os.environ.get("API_HOST", "127.0.0.1"),  # Use localhost instead of all interfaces
+    "port": int(os.environ.get("API_PORT", "8000")),
     "cors_origins": os.environ.get("CORS_ORIGINS", "http://localhost:4000").split(","),
-    "timeout": float(os.environ.get("API_TIMEOUT", 120.0)),
+    "timeout": float(os.environ.get("API_TIMEOUT", "120.0")),
 }
 
 
 # Cache configuration
 CACHE_CONFIG = {
-    "scrape_cache_ttl": int(os.environ.get("SCRAPE_CACHE_TTL", 900)),  # 15 minutes
-    "memory_cache_size": int(os.environ.get("MEMORY_CACHE_SIZE", 10000)),
+    "scrape_cache_ttl": int(os.environ.get("SCRAPE_CACHE_TTL", "900")),  # 15 minutes
+    "memory_cache_size": int(os.environ.get("MEMORY_CACHE_SIZE", "10000")),
 }
 
 # External services

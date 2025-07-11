@@ -1,5 +1,4 @@
-"""Memory System Metrics
-====================
+"""Memory System Metrics.
 
 Performance tracking and monitoring for the memory system.
 """
@@ -10,14 +9,18 @@ import logging
 import time
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
+# Constants
+SLOW_OPERATION_THRESHOLD_MS = 100
+
 
 @dataclass
 class OperationMetric:
-    """Single operation metric"""
+    """Single operation metric."""
 
     operation: str
     duration_ms: float
@@ -27,10 +30,10 @@ class OperationMetric:
 
 
 class MetricsCollector:
-    """Collects and aggregates memory system metrics"""
+    """Collects and aggregates memory system metrics."""
 
     def __init__(self, window_size: int = 1000):
-        """Initialize metrics collector
+        """Initialize metrics collector.
 
         Args:
             window_size: Number of recent operations to keep for each metric
@@ -47,7 +50,7 @@ class MetricsCollector:
         success: bool = True,
         metadata: dict | None = None,
     ):
-        """Record a single operation metric"""
+        """Record a single operation metric."""
         metric = OperationMetric(
             operation=operation, duration_ms=duration_ms, success=success, metadata=metadata or {}
         )
@@ -60,7 +63,7 @@ class MetricsCollector:
             self.counters[f"{operation}_failure"] += 1
 
     def get_operation_stats(self, operation: str) -> dict[str, Any]:
-        """Get statistics for a specific operation"""
+        """Get statistics for a specific operation."""
         metrics = list(self.metrics.get(operation, []))
 
         if not metrics:
@@ -93,7 +96,7 @@ class MetricsCollector:
         }
 
     def _percentile(self, values: list[float], percentile: int) -> float:
-        """Calculate percentile of a sorted list"""
+        """Calculate percentile of a sorted list."""
         if not values:
             return 0.0
 
@@ -101,7 +104,7 @@ class MetricsCollector:
         return values[min(index, len(values) - 1)]
 
     def get_all_stats(self) -> dict[str, Any]:
-        """Get statistics for all operations"""
+        """Get statistics for all operations."""
         stats = {}
 
         # Operation-specific stats
@@ -125,39 +128,43 @@ class MetricsCollector:
         return stats
 
     def export_metrics(self, filepath: str):
-        """Export metrics to JSON file"""
-        with open(filepath, "w") as f:
+        """Export metrics to JSON file."""
+        with Path(filepath).open("w") as f:
             json.dump(self.get_all_stats(), f, indent=2)
 
 
 class AsyncMetricsContext:
-    """Async context manager for timing operations"""
+    """Async context manager for timing operations."""
 
     def __init__(self, collector: MetricsCollector, operation: str):
+        """Initialize metrics context."""
         self.collector = collector
         self.operation = operation
         self.start_time = None
         self.metadata = {}
 
     async def __aenter__(self):
+        """Enter async context."""
         self.start_time = time.time()
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Exit async context."""
         duration_ms = (time.time() - self.start_time) * 1000
         success = exc_type is None
 
         self.collector.record_operation(self.operation, duration_ms, success, self.metadata)
 
         # Log slow operations
-        if duration_ms > 100:
+        if duration_ms > SLOW_OPERATION_THRESHOLD_MS:
             logger.warning(f"Slow operation {self.operation}: {duration_ms:.2f}ms")
 
 
 class MemorySystemMetrics:
-    """High-level metrics for the memory system"""
+    """High-level metrics for the memory system."""
 
     def __init__(self):
+        """Initialize memory system metrics."""
         self.collector = MetricsCollector()
         self.memory_stats = {
             "stm_count": 0,
@@ -168,15 +175,15 @@ class MemorySystemMetrics:
         }
 
     def track_operation(self, operation: str) -> AsyncMetricsContext:
-        """Create a context manager for tracking an operation"""
+        """Create a context manager for tracking an operation."""
         return AsyncMetricsContext(self.collector, operation)
 
     def increment_counter(self, counter: str, amount: int = 1):
-        """Increment a counter metric"""
+        """Increment a counter metric."""
         self.memory_stats[counter] = self.memory_stats.get(counter, 0) + amount
 
     def get_summary(self) -> dict[str, Any]:
-        """Get comprehensive metrics summary"""
+        """Get comprehensive metrics summary."""
         operation_stats = self.collector.get_all_stats()
 
         # Calculate derived metrics
@@ -210,7 +217,7 @@ class MemorySystemMetrics:
         }
 
     async def log_periodic_summary(self, interval_seconds: int = 300):
-        """Log metrics summary periodically"""
+        """Log metrics summary periodically."""
         while True:
             await asyncio.sleep(interval_seconds)
             summary = self.get_summary()
@@ -218,12 +225,12 @@ class MemorySystemMetrics:
 
 
 # Global metrics instance
-_metrics = None
+_metrics: MemorySystemMetrics | None = None
 
 
 def get_metrics() -> MemorySystemMetrics:
-    """Get global metrics instance"""
-    global _metrics
+    """Get global metrics instance."""
+    global _metrics  # noqa: PLW0603
     if _metrics is None:
         _metrics = MemorySystemMetrics()
     return _metrics

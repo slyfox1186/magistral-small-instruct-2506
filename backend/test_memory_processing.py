@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Test script for the Advanced Memory Processing System
+"""Test script for the Advanced Memory Processing System.
 
 This script tests the new world-class memory processing implementation
 to ensure it's working correctly before deploying to production.
@@ -16,13 +16,13 @@ sys.path.insert(0, str(backend_dir))
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
+
 async def test_memory_processing():
-    """Test the advanced memory processing system"""
+    """Test the advanced memory processing system."""
     try:
         # Import the memory processing system
         from memory_processing import AdvancedMemoryProcessor, get_config
@@ -30,7 +30,7 @@ async def test_memory_processing():
         logger.info("✅ Successfully imported memory processing system")
 
         # Test configuration loading
-        config = get_config('development')
+        config = get_config("development")
         logger.info(f"✅ Configuration loaded: {config.log_level}")
 
         # Test component creation (without actual memory system for now)
@@ -52,7 +52,7 @@ async def test_memory_processing():
         class MockLLMServer:
             async def generate(self, prompt, max_tokens=512, temperature=0.7, **kwargs):
                 # Return a mock JSON response for testing
-                return '''
+                return """  # noqa: W291
                 {
                     "key_facts": ["User lives in Midway Georgia", "User is asking about weather"],
                     "categories": ["personal_facts", "preferences"],
@@ -61,7 +61,7 @@ async def test_memory_processing():
                     "memory_worthy": true,
                     "context_type": "information_request"
                 }
-                '''
+                """
 
         # Create mock systems
         mock_memory = MockMemorySystem()
@@ -74,16 +74,18 @@ async def test_memory_processing():
         logger.info("✅ Advanced memory processor initialized successfully")
 
         # Test processing a conversation
-        test_user_prompt = "I live in Midway Georgia and I want to know what the weather will be like tomorrow."
-        test_assistant_response = "I'll help you check the weather forecast for Midway, Georgia for tomorrow."
+        test_user_prompt = (
+            "I live in Midway Georgia and I want to know what the weather will be like tomorrow."
+        )
+        test_assistant_response = (
+            "I'll help you check the weather forecast for Midway, Georgia for tomorrow."
+        )
         test_session_id = "test_001"
 
         logger.info("🧪 Testing conversation processing...")
 
         result = await processor.process_conversation(
-            test_user_prompt,
-            test_assistant_response,
-            test_session_id
+            test_user_prompt, test_assistant_response, test_session_id
         )
 
         logger.info(f"✅ Processing completed: success={result.success}")
@@ -99,34 +101,38 @@ async def test_memory_processing():
         logger.info(f"🏥 System health: {health['status']}")
 
         # Test configuration profiles
-        for profile in ['default', 'production', 'development', 'fast']:
+        for profile in ["default", "production", "development", "fast"]:
             test_config = get_config(profile)
             logger.info(f"✅ {profile} config: timeout={test_config.max_processing_time}s")
 
+    except Exception:
+        logger.exception("❌ Test failed")
+        import traceback
+
+        traceback.print_exc()
+        return False
+    else:
         logger.info("🎉 All tests passed! Memory processing system is ready.")
         return True
 
-    except Exception as e:
-        logger.error(f"❌ Test failed: {e!s}")
-        import traceback
-        traceback.print_exc()
-        return False
 
 async def test_individual_components():
-    """Test individual components of the memory system"""
+    """Test individual components of the memory system."""
     try:
         from memory_processing.config import get_config, validate_config
         from memory_processing.utils import calculate_text_similarity, extract_entities
 
         # Test configuration
-        config = get_config('default')
+        config = get_config("default")
         validate_config(config)
         logger.info("✅ Configuration validation passed")
 
         # Test utilities
         test_text = "My name is Jeff and I live in Midway, Georgia. I work as a software engineer."
         entities = extract_entities(test_text)
-        logger.info(f"✅ Entity extraction: found {sum(len(v) for v in entities.values())} entities")
+        logger.info(
+            f"✅ Entity extraction: found {sum(len(v) for v in entities.values())} entities"
+        )
 
         # Test similarity calculation
         text1 = "I love pizza and pasta"
@@ -134,15 +140,18 @@ async def test_individual_components():
         similarity = calculate_text_similarity(text1, text2)
         logger.info(f"✅ Text similarity: {similarity:.2f}")
 
+    except Exception:
+        logger.exception("❌ Component test failed")
+        return False
+    else:
         logger.info("🎉 Individual component tests passed!")
         return True
 
-    except Exception as e:
-        logger.error(f"❌ Component test failed: {e!s}")
-        return False
 
 if __name__ == "__main__":
+
     async def main():
+        """Main test function."""
         logger.info("🚀 Starting Advanced Memory Processing System Tests")
         logger.info("=" * 60)
 

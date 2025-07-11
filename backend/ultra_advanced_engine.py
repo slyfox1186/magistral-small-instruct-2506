@@ -1,5 +1,6 @@
-"""🚀 ULTRA-ADVANCED AI ENGINE
-Cutting-edge error handling, self-correction, and quality assessment loops
+"""🚀 ULTRA-ADVANCED AI ENGINE.
+
+Cutting-edge error handling, self-correction, and quality assessment loops.
 """
 
 import asyncio
@@ -14,9 +15,16 @@ from gpu_lock import Priority
 
 logger = logging.getLogger(__name__)
 
+# Constants for magic numbers
+QUALITY_THRESHOLD_DEFAULT = 0.75
+MAX_CORRECTION_ITERATIONS_DEFAULT = 3
+MIN_RESPONSE_LENGTH = 10
+SUBSTANTIAL_RESPONSE_LENGTH = 50
+HIGH_QUALITY_THRESHOLD = 0.8
+
 
 class QualityDimension(Enum):
-    """Quality assessment dimensions"""
+    """Quality assessment dimensions."""
 
     ACCURACY = "accuracy"
     RELEVANCE = "relevance"
@@ -27,7 +35,7 @@ class QualityDimension(Enum):
 
 
 class ErrorType(Enum):
-    """Error classification types"""
+    """Error classification types."""
 
     FACTUAL_ERROR = "factual_error"
     LOGICAL_INCONSISTENCY = "logical_inconsistency"
@@ -39,7 +47,7 @@ class ErrorType(Enum):
 
 @dataclass
 class QualityScore:
-    """Quality assessment score structure"""
+    """Quality assessment score structure."""
 
     dimension: QualityDimension
     score: float  # 0.0 to 1.0
@@ -49,7 +57,7 @@ class QualityScore:
 
 @dataclass
 class ErrorDetection:
-    """Error detection result"""
+    """Error detection result."""
 
     error_type: ErrorType
     severity: float  # 0.0 to 1.0
@@ -59,13 +67,19 @@ class ErrorDetection:
 
 
 class UltraAdvancedEngine:
-    """🧠 Ultra-Advanced AI Engine with Self-Correction and Quality Loops"""
+    """🧠 Ultra-Advanced AI Engine with Self-Correction and Quality Loops."""
 
     def __init__(self, llm, model_lock):
+        """Initialize the ultra-advanced engine.
+
+        Args:
+            llm: Language model instance
+            model_lock: GPU lock for resource management
+        """
         self.llm = llm
         self.model_lock = model_lock
-        self.quality_threshold = 0.75  # Minimum quality score
-        self.max_correction_iterations = 3
+        self.quality_threshold = QUALITY_THRESHOLD_DEFAULT  # Minimum quality score
+        self.max_correction_iterations = MAX_CORRECTION_ITERATIONS_DEFAULT
         self.performance_metrics = {
             "corrections_applied": 0,
             "quality_improvements": 0,
@@ -79,8 +93,17 @@ class UltraAdvancedEngine:
         user_context: dict[str, Any],
         query_analysis: dict[str, Any],
     ) -> tuple[str, dict[str, Any]]:
-        """🚀 ULTRA-ADVANCED RESPONSE GENERATION with Quality Loops
-        Includes self-correction, quality assessment, and adaptive optimization
+        """🚀 ULTRA-ADVANCED RESPONSE GENERATION with Quality Loops.
+
+        Includes self-correction, quality assessment, and adaptive optimization.
+
+        Args:
+            messages: List of conversation messages
+            user_context: User context information
+            query_analysis: Analysis of the user query
+
+        Returns:
+            Tuple of (response, metadata)
         """
         iteration = 0
         current_response = ""
@@ -136,8 +159,8 @@ class UltraAdvancedEngine:
                     )
                     self.performance_metrics["corrections_applied"] += 1
 
-            except Exception as e:
-                logger.error(f"❌ Error in ultra-advanced generation iteration {iteration}: {e}")
+            except Exception:
+                logger.exception(f"❌ Error in ultra-advanced generation iteration {iteration}")
                 if iteration == 1:
                     # Fallback to basic generation
                     current_response = await self._generate_basic_fallback(messages)
@@ -160,7 +183,14 @@ class UltraAdvancedEngine:
         return current_response, quality_report
 
     async def _generate_initial_response(self, messages: list[dict[str, str]]) -> str:
-        """Generate initial response using the LLM"""
+        """Generate initial response using the LLM.
+
+        Args:
+            messages: List of conversation messages
+
+        Returns:
+            Generated response text
+        """
         try:
             async with self.model_lock.acquire_context(priority=Priority.HIGH, timeout=30.0):
                 response = await asyncio.to_thread(
@@ -174,8 +204,8 @@ class UltraAdvancedEngine:
 
                 return response["choices"][0]["message"]["content"].strip()
 
-        except Exception as e:
-            logger.error(f"Error in initial response generation: {e}")
+        except Exception:
+            logger.exception("Error in initial response generation")
             return "I apologize, but I encountered an error generating a response."
 
     async def _assess_response_quality(
@@ -185,7 +215,17 @@ class UltraAdvancedEngine:
         user_context: dict[str, Any],
         query_analysis: dict[str, Any],
     ) -> list[QualityScore]:
-        """🎯 Multi-dimensional quality assessment using advanced LLM analysis"""
+        """🎯 Multi-dimensional quality assessment using advanced LLM analysis.
+
+        Args:
+            response: Generated response to assess
+            messages: Conversation messages
+            user_context: User context information
+            query_analysis: Analysis of the user query
+
+        Returns:
+            List of quality scores for different dimensions
+        """
         system_prompt = """🧠 ULTRA-ADVANCED QUALITY ASSESSMENT
 Analyze this AI response across multiple quality dimensions and provide detailed scoring.
 Assess the response on these dimensions (score 0.0-1.0):
@@ -272,8 +312,8 @@ QUERY ANALYSIS CONTEXT:
                 except json.JSONDecodeError as e:
                     logger.warning(f"Failed to parse quality assessment JSON: {e}")
 
-        except Exception as e:
-            logger.error(f"Error in quality assessment: {e}")
+        except Exception:
+            logger.exception("Error in quality assessment")
 
         # Fallback to basic quality scores
         return [
@@ -285,11 +325,20 @@ QUERY ANALYSIS CONTEXT:
     async def _detect_response_errors(
         self, response: str, messages: list[dict[str, str]], user_context: dict[str, Any]
     ) -> list[ErrorDetection]:
-        """🔍 Advanced error detection using pattern analysis and LLM verification"""
+        """🔍 Advanced error detection using pattern analysis and LLM verification.
+
+        Args:
+            response: Generated response to check for errors
+            messages: Conversation messages
+            user_context: User context information
+
+        Returns:
+            List of detected errors
+        """
         detected_errors = []
 
         # Pattern-based error detection
-        if len(response) < 10:
+        if len(response) < MIN_RESPONSE_LENGTH:
             detected_errors.append(
                 ErrorDetection(
                     ErrorType.INCOMPLETE_RESPONSE,
@@ -306,7 +355,7 @@ QUERY ANALYSIS CONTEXT:
             pass
 
         # LLM-based error detection for complex issues
-        if len(response) > 50:  # Only for substantial responses
+        if len(response) > SUBSTANTIAL_RESPONSE_LENGTH:  # Only for substantial responses
             try:
                 system_prompt = """Analyze this AI response for potential errors or issues.
 
@@ -383,12 +432,22 @@ AI RESPONSE: {response}"""
         quality_history: list[list[QualityScore]],
         error_history: list[ErrorDetection],
     ) -> str:
-        """Generate improved response based on quality feedback and error detection"""
+        """Generate improved response based on quality feedback and error detection.
+
+        Args:
+            original_messages: Original conversation messages
+            previous_response: Previous response to improve
+            quality_history: History of quality assessments
+            error_history: History of detected errors
+
+        Returns:
+            Improved response text
+        """
         # Compile improvement suggestions
         improvements = []
         for quality_scores in quality_history:
             for score in quality_scores:
-                if score.score < 0.8:
+                if score.score < HIGH_QUALITY_THRESHOLD:
                     improvements.extend(score.improvement_suggestions)
 
         error_fixes = []
@@ -424,12 +483,19 @@ Generate an improved response that addresses these issues while maintaining accu
 
                 return response["choices"][0]["message"]["content"].strip()
 
-        except Exception as e:
-            logger.error(f"Error in corrected response generation: {e}")
+        except Exception:
+            logger.exception("Error in corrected response generation")
             return previous_response  # Return previous if correction fails
 
     async def _generate_basic_fallback(self, messages: list[dict[str, str]]) -> str:
-        """Generate basic fallback response when advanced system fails"""
+        """Generate basic fallback response when advanced system fails.
+
+        Args:
+            messages: Conversation messages
+
+        Returns:
+            Basic fallback response
+        """
         try:
             async with self.model_lock.acquire_context(priority=Priority.HIGH, timeout=20.0):
                 response = await asyncio.to_thread(
@@ -442,12 +508,19 @@ Generate an improved response that addresses these issues while maintaining accu
 
                 return response["choices"][0]["message"]["content"].strip()
 
-        except Exception as e:
-            logger.error(f"Error in fallback response generation: {e}")
+        except Exception:
+            logger.exception("Error in fallback response generation")
             return "I apologize, but I'm experiencing technical difficulties. Please try again."
 
     def _calculate_overall_quality(self, quality_scores: list[QualityScore]) -> float:
-        """Calculate weighted overall quality score"""
+        """Calculate weighted overall quality score.
+
+        Args:
+            quality_scores: List of quality scores for different dimensions
+
+        Returns:
+            Weighted overall quality score
+        """
         if not quality_scores:
             return 0.5
 
@@ -472,7 +545,11 @@ Generate an improved response that addresses these issues while maintaining accu
         return weighted_sum / total_weight if total_weight > 0 else 0.5
 
     def get_performance_metrics(self) -> dict[str, Any]:
-        """Get performance metrics for the ultra-advanced engine"""
+        """Get performance metrics for the ultra-advanced engine.
+
+        Returns:
+            Dictionary containing performance metrics
+        """
         metrics = self.performance_metrics.copy()
 
         if metrics["total_assessments"] > 0:

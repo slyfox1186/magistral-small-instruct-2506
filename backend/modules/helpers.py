@@ -6,12 +6,11 @@ import logging
 import time
 from datetime import UTC, datetime
 
-UTC = UTC
-
 from constants import (
     DEFAULT_IMPORTANCE_SCORE,
     ECHO_SIMILARITY_THRESHOLD,
     MEMORY_CONSOLIDATION_INTERVAL,
+    MIN_EMBEDDINGS_FOR_COMPARISON,
 )
 
 logger = logging.getLogger(__name__)
@@ -31,8 +30,8 @@ async def periodic_memory_consolidation():
         except asyncio.CancelledError:
             logger.debug("Memory consolidation task cancelled")
             raise
-        except (AttributeError, TypeError) as e:
-            logger.error(f"Memory consolidation error - invalid memory system: {e}")
+        except (AttributeError, TypeError):
+            logger.exception("Memory consolidation error - invalid memory system")
         except Exception as e:
             logger.error(f"Unexpected memory consolidation error: {e}", exc_info=True)
 
@@ -41,6 +40,7 @@ async def detect_echo(
     user_message: str, assistant_response: str, threshold: float = ECHO_SIMILARITY_THRESHOLD
 ) -> bool:
     """Detect if assistant response is just echoing user data using semantic similarity.
+
     Returns True if response is likely an echo, False otherwise.
     """
     try:
@@ -56,7 +56,7 @@ async def detect_echo(
 
         embeddings, cosine_similarity = await asyncio.to_thread(_import_and_get_embeddings)
 
-        if embeddings is None or len(embeddings) < 2:
+        if embeddings is None or len(embeddings) < MIN_EMBEDDINGS_FOR_COMPARISON:
             logger.warning("[ECHO_DETECTION] Could not generate embeddings for comparison")
             return False
 
@@ -72,128 +72,136 @@ async def detect_echo(
             f"Threshold: {threshold} | Echo: {is_echo}"
         )
 
-        return is_echo
-
-    except ImportError as e:
-        logger.error(f"[ECHO_DETECTION] Missing dependencies: {e}")
+    except ImportError:
+        logger.exception("[ECHO_DETECTION] Missing dependencies")
         return False
-    except ValueError as e:
-        logger.error(f"[ECHO_DETECTION] Invalid input data: {e}")
+    except ValueError:
+        logger.exception("[ECHO_DETECTION] Invalid input data")
         return False
     except Exception as e:
         logger.error(f"[ECHO_DETECTION] Unexpected error: {e}", exc_info=True)
         return False
+    else:
+        return is_echo
 
 
 async def store_conversation_memory(user_prompt: str, assistant_response: str, session_id: str):
     """Store conversation turn in personal memory system with echo detection."""
     try:
-        # Import here to avoid circular imports
         from .globals import app_state
 
-        if app_state.personal_memory:
-            start_time = time.time()
-            logger.debug(f"[MEMORY_STORE] Storing memory for session {session_id}")
+        if not app_state.personal_memory:
+            return
 
-            # Echo Detection: Check if assistant response is just echoing user data
-            is_echo = await detect_echo(user_prompt, assistant_response)
+        start_time = time.time()
+        logger.debug(f"[MEMORY_STORE] Storing memory for session {session_id}")
 
-            # Calculate importance for user message
-            user_importance = DEFAULT_IMPORTANCE_SCORE  # Default
-            user_analysis = None
-            if app_state.importance_calculator:
-                try:
-                    user_importance, user_analysis = app_state.importance_calculator.calculate_importance(
-                        user_prompt,
-                        context={
-                            "is_user_message": True,
-                            "session_id": session_id,
-                            "timestamp": datetime.now(UTC).timestamp(),
-                        },
-                    )
-                    logger.debug(f"[MEMORY_STORE_USER] User importance: {user_importance}")
-                except (AttributeError, TypeError) as e:
-                    logger.error(f"[MEMORY_STORE_USER] Invalid importance calculator: {e}")
-                except ValueError as e:
-                    logger.error(
-                        f"[MEMORY_STORE_USER] Invalid user message for importance calculation: {e}"
-                    )
-                except Exception as e:
-                    logger.error(
-                        f"[MEMORY_STORE_USER] Unexpected error calculating user importance: {e}",
-                        exc_info=True,
-                    )
+        is_echo = await detect_echo(user_prompt, assistant_response)
 
-            # Store user message with calculated importance
-            await app_state.personal_memory.add_memory(
-                content=f"User: {user_prompt}",
-                conversation_id=session_id,
-                importance=user_importance,
-                metadata={"analysis": user_analysis} if user_analysis else None,
+        user_importance = await _store_user_memory(user_prompt, session_id, app_state)
+
+        if not is_echo:
+            assistant_importance = await _store_assistant_memory(
+                assistant_response, user_prompt, session_id, app_state
             )
+        else:
+            assistant_importance = None
+            logger.debug("[MEMORY_STORE_ASSISTANT] Echo detected - skipping storage")
 
-            # Only store assistant response if it's NOT an echo
-            if not is_echo:
-                # Calculate importance for assistant response
-                assistant_importance = DEFAULT_IMPORTANCE_SCORE  # Default
-                assistant_analysis = None
-                if app_state.importance_calculator:
-                    try:
-                        assistant_importance, assistant_analysis = (
-                            app_state.importance_calculator.calculate_importance(
-                                assistant_response,
-                                context={
-                                    "is_assistant_response": True,
-                                    "session_id": session_id,
-                                    "timestamp": datetime.now(UTC).timestamp(),
-                                    "responding_to": user_prompt[
-                                        :100
-                                    ],  # Context of what we're responding to
-                                },
-                            )
-                        )
-                        logger.debug(
-                            f"[MEMORY_STORE_ASSISTANT] Assistant importance: {assistant_importance}"
-                        )
-                    except (AttributeError, TypeError) as e:
-                        logger.error(f"[MEMORY_STORE_ASSISTANT] Invalid importance calculator: {e}")
-                    except ValueError as e:
-                        logger.error(
-                            f"[MEMORY_STORE_ASSISTANT] Invalid assistant response for importance calculation: {e}"
-                        )
-                    except Exception as e:
-                        logger.error(
-                            f"[MEMORY_STORE_ASSISTANT] Unexpected error calculating assistant importance: {e}",
-                            exc_info=True,
-                        )
-
-                # Store assistant response with calculated importance
-                await app_state.personal_memory.add_memory(
-                    content=f"Assistant: {assistant_response}",
-                    conversation_id=session_id,
-                    importance=assistant_importance,
-                    metadata={"analysis": assistant_analysis} if assistant_analysis else None,
-                )
-            else:
-                logger.debug("[MEMORY_STORE_ASSISTANT] Echo detected - skipping storage")
-
-            # Trigger conversation summarization for this session
-            try:
-                await app_state.personal_memory._summarize_conversation(session_id)
-                logger.debug(f"[CONVERSATION_SUMMARY] Created summary for session {session_id}")
-            except Exception as e:
-                logger.error(f"[CONVERSATION_SUMMARY] Failed to create summary: {e}")
-
-            # Log summary of what was stored with timing
-            end_time = time.time()
-            duration = end_time - start_time
-            logger.debug(
-                f"[MEMORY_STORE_COMPLETE] Stored in {duration:.2f}s, "
-                f"importance: user={user_importance}, assistant="
-                f"{assistant_importance if not is_echo else 'skipped'}"
-            )
+        await _handle_conversation_summarization(session_id, app_state)
+        _log_memory_storage_complete(start_time, user_importance=user_importance,
+                                   assistant_importance=assistant_importance, is_echo=is_echo)
 
     except Exception as e:
-        logger.error(
-            f"[MEMORY_STORE_ERROR] Failed to store conversation memory: {e}", exc_info=True
-        )
+        logger.error(f"[MEMORY_STORE_ERROR] Failed to store conversation memory: {e}", exc_info=True)
+
+
+async def _store_user_memory(user_prompt: str, session_id: str, app_state) -> float:
+    """Store user message and return its importance score."""
+    user_importance, user_analysis = await _calculate_message_importance(
+        user_prompt, session_id, is_user_message=True, app_state=app_state
+    )
+
+    await app_state.personal_memory.add_memory(
+        content=f"User: {user_prompt}",
+        conversation_id=session_id,
+        importance=user_importance,
+        metadata={"analysis": user_analysis} if user_analysis else None,
+    )
+
+    return user_importance
+
+
+async def _store_assistant_memory(assistant_response: str, user_prompt: str,
+                                session_id: str, app_state) -> float:
+    """Store assistant response and return its importance score."""
+    assistant_importance, assistant_analysis = await _calculate_message_importance(
+        assistant_response, session_id, is_user_message=False,
+        app_state=app_state, responding_to=user_prompt[:100]
+    )
+
+    await app_state.personal_memory.add_memory(
+        content=f"Assistant: {assistant_response}",
+        conversation_id=session_id,
+        importance=assistant_importance,
+        metadata={"analysis": assistant_analysis} if assistant_analysis else None,
+    )
+
+    return assistant_importance
+
+
+async def _calculate_message_importance(message: str, session_id: str, is_user_message: bool,
+                                      app_state, responding_to: str | None = None) -> tuple[float, dict]:
+    """Calculate importance score for a message."""
+    importance = DEFAULT_IMPORTANCE_SCORE
+    analysis = None
+
+    if not app_state.importance_calculator:
+        return importance, analysis
+
+    context = {
+        "session_id": session_id,
+        "timestamp": datetime.now(UTC).timestamp(),
+    }
+
+    if is_user_message:
+        context["is_user_message"] = True
+        message_type = "USER"
+    else:
+        context["is_assistant_response"] = True
+        if responding_to:
+            context["responding_to"] = responding_to
+        message_type = "ASSISTANT"
+
+    try:
+        importance, analysis = app_state.importance_calculator.calculate_importance(message, context=context)
+        logger.debug(f"[MEMORY_STORE_{message_type}] {message_type.title()} importance: {importance}")
+    except (AttributeError, TypeError):
+        logger.exception(f"[MEMORY_STORE_{message_type}] Invalid importance calculator")
+    except ValueError:
+        logger.exception(f"[MEMORY_STORE_{message_type}] Invalid message for importance calculation")
+    except Exception as e:
+        logger.error(f"[MEMORY_STORE_{message_type}] Unexpected error calculating importance: {e}", exc_info=True)
+
+    return importance, analysis
+
+
+async def _handle_conversation_summarization(session_id: str, app_state):
+    """Handle conversation summarization for the session."""
+    try:
+        await app_state.personal_memory._summarize_conversation(session_id)
+        logger.debug(f"[CONVERSATION_SUMMARY] Created summary for session {session_id}")
+    except Exception:
+        logger.exception("[CONVERSATION_SUMMARY] Failed to create summary")
+
+
+def _log_memory_storage_complete(start_time: float, user_importance: float,
+                                assistant_importance: float, is_echo: bool):
+    """Log completion of memory storage with timing."""
+    end_time = time.time()
+    duration = end_time - start_time
+    assistant_imp_text = assistant_importance if not is_echo else 'skipped'
+    logger.debug(
+        f"[MEMORY_STORE_COMPLETE] Stored in {duration:.2f}s, "
+        f"importance: user={user_importance}, assistant={assistant_imp_text}"
+    )

@@ -1,5 +1,4 @@
-"""Model Manager
-=============
+"""Model Manager.
 
 Handles embedding model versioning, updates, and validation.
 """
@@ -7,7 +6,7 @@ Handles embedding model versioning, updates, and validation.
 import hashlib
 import json
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 import torch
@@ -18,10 +17,10 @@ logger = logging.getLogger(__name__)
 
 
 class ModelManager:
-    """Manages embedding model lifecycle and versioning"""
+    """Manages embedding model lifecycle and versioning."""
 
     def __init__(self, config_path: str = "config/models.yaml"):
-        """Initialize model manager with configuration"""
+        """Initialize model manager with configuration."""
         self.config_path = Path(config_path)
         self.config = self._load_config()
         self.models_dir = Path(self.config["embedding"]["versioning"]["versions_path"])
@@ -29,15 +28,15 @@ class ModelManager:
         self.golden_records = self._load_golden_records()
 
     def _load_config(self) -> dict:
-        """Load model configuration"""
-        with open(self.config_path) as f:
+        """Load model configuration."""
+        with self.config_path.open() as f:
             return yaml.safe_load(f)
 
     def _load_golden_records(self) -> dict[str, list[float]]:
-        """Load golden test records for validation"""
+        """Load golden test records for validation."""
         golden_path = self.models_dir / "golden_records.json"
         if golden_path.exists():
-            with open(golden_path) as f:
+            with golden_path.open() as f:
                 return json.load(f)
         return {
             "test_identity": "My name is John Doe",
@@ -46,7 +45,7 @@ class ModelManager:
         }
 
     def get_current_model(self) -> SentenceTransformer:
-        """Load the current active model"""
+        """Load the current active model."""
         model_name = self.config["embedding"]["primary"]["name"]
         device = self.config["embedding"]["primary"]["device"]
 
@@ -71,7 +70,7 @@ class ModelManager:
         return model
 
     def validate_model(self, model: SentenceTransformer) -> tuple[bool, dict[str, float]]:
-        """Validate model against golden records"""
+        """Validate model against golden records."""
         results = {}
         all_valid = True
 
@@ -87,7 +86,8 @@ class ModelManager:
                 results[test_name] = similarity
 
                 # Flag if similarity is too low (potential breaking change)
-                if similarity < 0.9:
+                similarity_threshold = 0.9
+                if similarity < similarity_threshold:
                     logger.warning(f"Low similarity for {test_name}: {similarity}")
                     all_valid = False
             else:
@@ -97,7 +97,7 @@ class ModelManager:
         return all_valid, results
 
     def _cosine_similarity(self, vec1: list[float], vec2: list[float]) -> float:
-        """Calculate cosine similarity between two vectors"""
+        """Calculate cosine similarity between two vectors."""
         import numpy as np
 
         vec1 = np.array(vec1)
@@ -105,7 +105,7 @@ class ModelManager:
         return np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2))
 
     def install_new_model(self, model_name: str, version: str) -> bool:
-        """Install a new model version"""
+        """Install a new model version."""
         try:
             # Create version directory
             version_dir = self.models_dir / version
@@ -120,9 +120,13 @@ class ModelManager:
             valid, results = self.validate_model(model)
 
             # Save validation results
-            with open(version_dir / "validation_results.json", "w") as f:
+            with (version_dir / "validation_results.json").open("w") as f:
                 json.dump(
-                    {"timestamp": datetime.now().isoformat(), "valid": valid, "results": results},
+                    {
+                        "timestamp": datetime.now(UTC).isoformat(),
+                        "valid": valid,
+                        "results": results,
+                    },
                     f,
                     indent=2,
                 )
@@ -138,18 +142,19 @@ class ModelManager:
 
             # Update config
             self.config["embedding"]["versioning"]["current_version"] = version
-            with open(self.config_path, "w") as f:
+            with self.config_path.open("w") as f:
                 yaml.dump(self.config, f)
 
             logger.info(f"Successfully installed model version {version}")
+
+        except Exception:
+            logger.exception("Failed to install model")
+            return False
+        else:
             return True
 
-        except Exception as e:
-            logger.error(f"Failed to install model: {e}")
-            return False
-
     def rollback_model(self, version: str) -> bool:
-        """Rollback to a previous model version"""
+        """Rollback to a previous model version."""
         version_dir = self.models_dir / version
 
         if not version_dir.exists():
@@ -164,18 +169,19 @@ class ModelManager:
 
             # Update config
             self.config["embedding"]["versioning"]["current_version"] = version
-            with open(self.config_path, "w") as f:
+            with self.config_path.open("w") as f:
                 yaml.dump(self.config, f)
 
             logger.info(f"Rolled back to model version {version}")
+
+        except Exception:
+            logger.exception("Failed to rollback model")
+            return False
+        else:
             return True
 
-        except Exception as e:
-            logger.error(f"Failed to rollback model: {e}")
-            return False
-
     def list_versions(self) -> list[dict[str, any]]:
-        """List all available model versions"""
+        """List all available model versions."""
         versions = []
 
         for version_dir in self.models_dir.glob("*/"):
@@ -191,7 +197,7 @@ class ModelManager:
                 # Load validation results if available
                 validation_file = version_dir / "validation_results.json"
                 if validation_file.exists():
-                    with open(validation_file) as f:
+                    with validation_file.open() as f:
                         info["validation"] = json.load(f)
 
                 versions.append(info)
@@ -199,20 +205,24 @@ class ModelManager:
         return sorted(versions, key=lambda x: x["version"], reverse=True)
 
     def compute_embedding_version_hash(self, embedding: list[float]) -> str:
-        """Compute a hash for embedding version tracking"""
+        """Compute a hash for embedding version tracking."""
         # Use first 10 dimensions for version hash
-        version_dims = embedding[:10] if len(embedding) >= 10 else embedding
+        # Define minimum dimensions for hash calculation
+        min_embedding_dims = 10
+        version_dims = (
+            embedding[:min_embedding_dims] if len(embedding) >= min_embedding_dims else embedding
+        )
         version_str = ",".join(f"{x:.6f}" for x in version_dims)
-        return hashlib.md5(version_str.encode()).hexdigest()[:8]
+        return hashlib.sha256(version_str.encode()).hexdigest()[:8]
 
 
 # Singleton instance
-_model_manager = None
+_model_manager: ModelManager | None = None
 
 
 def get_model_manager() -> ModelManager:
-    """Get singleton model manager instance"""
-    global _model_manager
-    if _model_manager is None:
-        _model_manager = ModelManager()
-    return _model_manager
+    """Get singleton model manager instance."""
+    # Using module-level singleton pattern
+    if globals().get("_model_manager") is None:
+        globals()["_model_manager"] = ModelManager()
+    return globals()["_model_manager"]

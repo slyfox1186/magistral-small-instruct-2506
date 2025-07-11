@@ -5,7 +5,7 @@ import json
 import sqlite3
 import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import UTC, datetime
 
 from modules.models import (
     ConversationCreate,
@@ -26,6 +26,7 @@ class CRUDService:
     """Service for handling CRUD operations on conversations, messages, and user settings."""
 
     def __init__(self, db_path: str = "neural_consciousness.db"):
+        """Initialize CRUDService with database path."""
         self.db_path = db_path
         self._init_db()
 
@@ -67,7 +68,7 @@ class CRUDService:
                 CREATE TABLE IF NOT EXISTS user_settings (
                     id TEXT PRIMARY KEY,
                     user_id TEXT NOT NULL UNIQUE,
-                    theme TEXT DEFAULT 'dark',
+                    theme TEXT DEFAULT 'celestial-indigo',
                     ai_personality TEXT DEFAULT 'helpful',
                     response_style TEXT DEFAULT 'balanced',
                     memory_retention BOOLEAN DEFAULT TRUE,
@@ -80,10 +81,18 @@ class CRUDService:
             """)
 
             # Create indexes for better performance
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON messages(conversation_id)")
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at)")
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_conversations_created_at ON conversations(created_at)")
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_conversations_archived ON conversations(archived)")
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON messages(conversation_id)"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at)"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_conversations_created_at ON conversations(created_at)"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_conversations_archived ON conversations(archived)"
+            )
 
             conn.commit()
 
@@ -99,25 +108,30 @@ class CRUDService:
 
     # ===================== Conversation CRUD =====================
 
-    async def create_conversation(self, conversation_data: ConversationCreate) -> ConversationResponse:
+    async def create_conversation(
+        self, conversation_data: ConversationCreate
+    ) -> ConversationResponse:
         """Create a new conversation."""
         conversation_id = str(uuid.uuid4())
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
 
         async with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO conversations (id, title, tags, archived, metadata, created_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (
-                conversation_id,
-                conversation_data.title,
-                json.dumps(conversation_data.tags),
-                conversation_data.archived,
-                json.dumps(conversation_data.metadata),
-                now.isoformat(),
-                now.isoformat()
-            ))
+            """,
+                (
+                    conversation_id,
+                    conversation_data.title,
+                    json.dumps(conversation_data.tags),
+                    conversation_data.archived,
+                    json.dumps(conversation_data.metadata),
+                    now.isoformat(),
+                    now.isoformat(),
+                ),
+            )
             conn.commit()
 
         return ConversationResponse(
@@ -128,17 +142,20 @@ class CRUDService:
             metadata=conversation_data.metadata,
             created_at=now,
             updated_at=now,
-            message_count=0
+            message_count=0,
         )
 
     async def get_conversation(self, conversation_id: str) -> ConversationResponse | None:
         """Get a conversation by ID."""
         async with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT id, title, tags, archived, metadata, created_at, updated_at, message_count
                 FROM conversations WHERE id = ?
-            """, (conversation_id,))
+            """,
+                (conversation_id,),
+            )
             row = cursor.fetchone()
 
             if not row:
@@ -152,10 +169,12 @@ class CRUDService:
                 metadata=json.loads(row["metadata"]),
                 created_at=datetime.fromisoformat(row["created_at"]),
                 updated_at=datetime.fromisoformat(row["updated_at"]),
-                message_count=row["message_count"]
+                message_count=row["message_count"],
             )
 
-    async def list_conversations(self, page: int = 1, page_size: int = 20, archived: bool | None = None) -> ConversationListResponse:
+    async def list_conversations(
+        self, page: int = 1, page_size: int = 20, archived: bool | None = None
+    ) -> ConversationListResponse:
         """List conversations with pagination."""
         offset = (page - 1) * page_size
 
@@ -163,29 +182,38 @@ class CRUDService:
             cursor = conn.cursor()
 
             # Build query with optional archived filter
-            where_clause = ""
-            params = []
             if archived is not None:
-                where_clause = "WHERE archived = ?"
-                params.append(archived)
+                count_query = "SELECT COUNT(*) FROM conversations WHERE archived = ?"
+                list_query = """
+                    SELECT id, title, tags, archived, metadata, created_at, updated_at, message_count
+                    FROM conversations WHERE archived = ?
+                    ORDER BY updated_at DESC
+                    LIMIT ? OFFSET ?
+                """
+                count_params = [archived]
+                list_params = [archived, page_size, offset]
+            else:
+                count_query = "SELECT COUNT(*) FROM conversations"
+                list_query = """
+                    SELECT id, title, tags, archived, metadata, created_at, updated_at, message_count
+                    FROM conversations
+                    ORDER BY updated_at DESC
+                    LIMIT ? OFFSET ?
+                """
+                count_params = []
+                list_params = [page_size, offset]
 
             # Get total count
-            cursor.execute(f"SELECT COUNT(*) FROM conversations {where_clause}", params)
+            cursor.execute(count_query, count_params)
             total = cursor.fetchone()[0]
 
             # Get conversations
-            cursor.execute(f"""
-                SELECT id, title, tags, archived, metadata, created_at, updated_at, message_count
-                FROM conversations {where_clause}
-                ORDER BY updated_at DESC
-                LIMIT ? OFFSET ?
-            """, params + [page_size, offset])
+            cursor.execute(list_query, list_params)
 
             rows = cursor.fetchall()
 
-            conversations = []
-            for row in rows:
-                conversations.append(ConversationResponse(
+            conversations = [
+                ConversationResponse(
                     id=row["id"],
                     title=row["title"],
                     tags=json.loads(row["tags"]),
@@ -193,17 +221,18 @@ class CRUDService:
                     metadata=json.loads(row["metadata"]),
                     created_at=datetime.fromisoformat(row["created_at"]),
                     updated_at=datetime.fromisoformat(row["updated_at"]),
-                    message_count=row["message_count"]
-                ))
+                    message_count=row["message_count"],
+                )
+                for row in rows
+            ]
 
             return ConversationListResponse(
-                conversations=conversations,
-                total=total,
-                page=page,
-                page_size=page_size
+                conversations=conversations, total=total, page=page, page_size=page_size
             )
 
-    async def update_conversation(self, conversation_id: str, update_data: ConversationUpdate) -> ConversationResponse | None:
+    async def update_conversation(
+        self, conversation_id: str, update_data: ConversationUpdate
+    ) -> ConversationResponse | None:
         """Update a conversation."""
         async with self.get_connection() as conn:
             cursor = conn.cursor()
@@ -213,36 +242,34 @@ class CRUDService:
             if not cursor.fetchone():
                 return None
 
-            # Build update query
-            update_fields = []
+            # Build update query using a whitelist approach
+            set_clauses = []
             params = []
 
-            if update_data.title is not None:
-                update_fields.append("title = ?")
-                params.append(update_data.title)
+            # Whitelist of allowed fields to prevent injection
+            allowed_updates = {
+                "title": update_data.title,
+                "tags": json.dumps(update_data.tags) if update_data.tags is not None else None,
+                "archived": update_data.archived,
+                "metadata": json.dumps(update_data.metadata)
+                if update_data.metadata is not None
+                else None,
+            }
 
-            if update_data.tags is not None:
-                update_fields.append("tags = ?")
-                params.append(json.dumps(update_data.tags))
+            for field, value in allowed_updates.items():
+                if value is not None:
+                    set_clauses.append(f"{field} = ?")
+                    params.append(value)
 
-            if update_data.archived is not None:
-                update_fields.append("archived = ?")
-                params.append(update_data.archived)
-
-            if update_data.metadata is not None:
-                update_fields.append("metadata = ?")
-                params.append(json.dumps(update_data.metadata))
-
-            if update_fields:
-                update_fields.append("updated_at = ?")
-                params.append(datetime.utcnow().isoformat())
+            if set_clauses:
+                set_clauses.append("updated_at = ?")
+                params.append(datetime.now(UTC).isoformat())
                 params.append(conversation_id)
 
-                cursor.execute(f"""
-                    UPDATE conversations 
-                    SET {', '.join(update_fields)}
-                    WHERE id = ?
-                """, params)
+                # Construct safe SQL with whitelisted field names (safe from injection)
+                set_clause = ", ".join(set_clauses)  # Only contains whitelisted field names
+                sql = f"UPDATE conversations SET {set_clause} WHERE id = ?"  # noqa: S608
+                cursor.execute(sql, params)
                 conn.commit()
 
             # Return updated conversation
@@ -261,32 +288,38 @@ class CRUDService:
     async def create_message(self, message_data: MessageCreate) -> MessageResponse:
         """Create a new message."""
         message_id = str(uuid.uuid4())
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
 
         async with self.get_connection() as conn:
             cursor = conn.cursor()
 
             # Insert message
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO messages (id, conversation_id, role, content, metadata, created_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (
-                message_id,
-                message_data.conversation_id,
-                message_data.role,
-                message_data.content,
-                json.dumps(message_data.metadata),
-                now.isoformat(),
-                now.isoformat()
-            ))
+            """,
+                (
+                    message_id,
+                    message_data.conversation_id,
+                    message_data.role,
+                    message_data.content,
+                    json.dumps(message_data.metadata),
+                    now.isoformat(),
+                    now.isoformat(),
+                ),
+            )
 
             # Update conversation message count and updated_at
-            cursor.execute("""
-                UPDATE conversations 
+            cursor.execute(
+                """
+                UPDATE conversations
                 SET message_count = message_count + 1,
                     updated_at = ?
                 WHERE id = ?
-            """, (now.isoformat(), message_data.conversation_id))
+            """,
+                (now.isoformat(), message_data.conversation_id),
+            )
 
             conn.commit()
 
@@ -297,17 +330,20 @@ class CRUDService:
             content=message_data.content,
             metadata=message_data.metadata,
             created_at=now,
-            updated_at=now
+            updated_at=now,
         )
 
     async def get_message(self, message_id: str) -> MessageResponse | None:
         """Get a message by ID."""
         async with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT id, conversation_id, role, content, metadata, created_at, updated_at
                 FROM messages WHERE id = ?
-            """, (message_id,))
+            """,
+                (message_id,),
+            )
             row = cursor.fetchone()
 
             if not row:
@@ -320,10 +356,12 @@ class CRUDService:
                 content=row["content"],
                 metadata=json.loads(row["metadata"]),
                 created_at=datetime.fromisoformat(row["created_at"]),
-                updated_at=datetime.fromisoformat(row["updated_at"])
+                updated_at=datetime.fromisoformat(row["updated_at"]),
             )
 
-    async def list_messages(self, conversation_id: str, page: int = 1, page_size: int = 50) -> MessageListResponse:
+    async def list_messages(
+        self, conversation_id: str, page: int = 1, page_size: int = 50
+    ) -> MessageListResponse:
         """List messages for a conversation with pagination."""
         offset = (page - 1) * page_size
 
@@ -331,40 +369,45 @@ class CRUDService:
             cursor = conn.cursor()
 
             # Get total count
-            cursor.execute("SELECT COUNT(*) FROM messages WHERE conversation_id = ?", (conversation_id,))
+            cursor.execute(
+                "SELECT COUNT(*) FROM messages WHERE conversation_id = ?", (conversation_id,)
+            )
             total = cursor.fetchone()[0]
 
             # Get messages
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT id, conversation_id, role, content, metadata, created_at, updated_at
-                FROM messages 
+                FROM messages
                 WHERE conversation_id = ?
                 ORDER BY created_at ASC
                 LIMIT ? OFFSET ?
-            """, (conversation_id, page_size, offset))
+            """,
+                (conversation_id, page_size, offset),
+            )
 
             rows = cursor.fetchall()
 
-            messages = []
-            for row in rows:
-                messages.append(MessageResponse(
+            messages = [
+                MessageResponse(
                     id=row["id"],
                     conversation_id=row["conversation_id"],
                     role=row["role"],
                     content=row["content"],
                     metadata=json.loads(row["metadata"]),
                     created_at=datetime.fromisoformat(row["created_at"]),
-                    updated_at=datetime.fromisoformat(row["updated_at"])
-                ))
+                    updated_at=datetime.fromisoformat(row["updated_at"]),
+                )
+                for row in rows
+            ]
 
             return MessageListResponse(
-                messages=messages,
-                total=total,
-                page=page,
-                page_size=page_size
+                messages=messages, total=total, page=page, page_size=page_size
             )
 
-    async def update_message(self, message_id: str, update_data: MessageUpdate) -> MessageResponse | None:
+    async def update_message(
+        self, message_id: str, update_data: MessageUpdate
+    ) -> MessageResponse | None:
         """Update a message."""
         async with self.get_connection() as conn:
             cursor = conn.cursor()
@@ -374,28 +417,32 @@ class CRUDService:
             if not cursor.fetchone():
                 return None
 
-            # Build update query
-            update_fields = []
+            # Build update query using a whitelist approach
+            set_clauses = []
             params = []
 
-            if update_data.content is not None:
-                update_fields.append("content = ?")
-                params.append(update_data.content)
+            # Whitelist of allowed fields to prevent injection
+            allowed_updates = {
+                "content": update_data.content,
+                "metadata": json.dumps(update_data.metadata)
+                if update_data.metadata is not None
+                else None,
+            }
 
-            if update_data.metadata is not None:
-                update_fields.append("metadata = ?")
-                params.append(json.dumps(update_data.metadata))
+            for field, value in allowed_updates.items():
+                if value is not None:
+                    set_clauses.append(f"{field} = ?")
+                    params.append(value)
 
-            if update_fields:
-                update_fields.append("updated_at = ?")
-                params.append(datetime.utcnow().isoformat())
+            if set_clauses:
+                set_clauses.append("updated_at = ?")
+                params.append(datetime.now(UTC).isoformat())
                 params.append(message_id)
 
-                cursor.execute(f"""
-                    UPDATE messages 
-                    SET {', '.join(update_fields)}
-                    WHERE id = ?
-                """, params)
+                # Construct safe SQL with whitelisted field names (safe from injection)
+                set_clause = ", ".join(set_clauses)  # Only contains whitelisted field names
+                sql = f"UPDATE messages SET {set_clause} WHERE id = ?"  # noqa: S608
+                cursor.execute(sql, params)
                 conn.commit()
 
             # Return updated message
@@ -418,12 +465,15 @@ class CRUDService:
             cursor.execute("DELETE FROM messages WHERE id = ?", (message_id,))
 
             # Update conversation message count
-            cursor.execute("""
-                UPDATE conversations 
+            cursor.execute(
+                """
+                UPDATE conversations
                 SET message_count = message_count - 1,
                     updated_at = ?
                 WHERE id = ?
-            """, (datetime.utcnow().isoformat(), conversation_id))
+            """,
+                (datetime.now(UTC).isoformat(), conversation_id),
+            )
 
             conn.commit()
             return cursor.rowcount > 0
@@ -433,29 +483,32 @@ class CRUDService:
     async def create_user_settings(self, settings_data: UserSettingsCreate) -> UserSettingsResponse:
         """Create user settings."""
         settings_id = str(uuid.uuid4())
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
 
         async with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO user_settings (
-                    id, user_id, theme, ai_personality, response_style, 
-                    memory_retention, auto_summarize, preferred_language, 
+                    id, user_id, theme, ai_personality, response_style,
+                    memory_retention, auto_summarize, preferred_language,
                     custom_prompts, created_at, updated_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                settings_id,
-                settings_data.user_id,
-                settings_data.theme,
-                settings_data.ai_personality,
-                settings_data.response_style,
-                settings_data.memory_retention,
-                settings_data.auto_summarize,
-                settings_data.preferred_language,
-                json.dumps(settings_data.custom_prompts),
-                now.isoformat(),
-                now.isoformat()
-            ))
+            """,
+                (
+                    settings_id,
+                    settings_data.user_id,
+                    settings_data.theme,
+                    settings_data.ai_personality,
+                    settings_data.response_style,
+                    settings_data.memory_retention,
+                    settings_data.auto_summarize,
+                    settings_data.preferred_language,
+                    json.dumps(settings_data.custom_prompts),
+                    now.isoformat(),
+                    now.isoformat(),
+                ),
+            )
             conn.commit()
 
         return UserSettingsResponse(
@@ -469,19 +522,22 @@ class CRUDService:
             preferred_language=settings_data.preferred_language,
             custom_prompts=settings_data.custom_prompts,
             created_at=now,
-            updated_at=now
+            updated_at=now,
         )
 
     async def get_user_settings(self, user_id: str) -> UserSettingsResponse | None:
         """Get user settings by user ID."""
         async with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT id, user_id, theme, ai_personality, response_style,
                        memory_retention, auto_summarize, preferred_language,
                        custom_prompts, created_at, updated_at
                 FROM user_settings WHERE user_id = ?
-            """, (user_id,))
+            """,
+                (user_id,),
+            )
             row = cursor.fetchone()
 
             if not row:
@@ -498,10 +554,12 @@ class CRUDService:
                 preferred_language=row["preferred_language"],
                 custom_prompts=json.loads(row["custom_prompts"]),
                 created_at=datetime.fromisoformat(row["created_at"]),
-                updated_at=datetime.fromisoformat(row["updated_at"])
+                updated_at=datetime.fromisoformat(row["updated_at"]),
             )
 
-    async def update_user_settings(self, user_id: str, update_data: UserSettingsUpdate) -> UserSettingsResponse | None:
+    async def update_user_settings(
+        self, user_id: str, update_data: UserSettingsUpdate
+    ) -> UserSettingsResponse | None:
         """Update user settings."""
         async with self.get_connection() as conn:
             cursor = conn.cursor()
@@ -511,48 +569,37 @@ class CRUDService:
             if not cursor.fetchone():
                 return None
 
-            # Build update query
-            update_fields = []
+            # Build update query using a whitelist approach
+            set_clauses = []
             params = []
 
-            if update_data.theme is not None:
-                update_fields.append("theme = ?")
-                params.append(update_data.theme)
+            # Whitelist of allowed fields to prevent injection
+            allowed_updates = {
+                "theme": update_data.theme,
+                "ai_personality": update_data.ai_personality,
+                "response_style": update_data.response_style,
+                "memory_retention": update_data.memory_retention,
+                "auto_summarize": update_data.auto_summarize,
+                "preferred_language": update_data.preferred_language,
+                "custom_prompts": json.dumps(update_data.custom_prompts)
+                if update_data.custom_prompts is not None
+                else None,
+            }
 
-            if update_data.ai_personality is not None:
-                update_fields.append("ai_personality = ?")
-                params.append(update_data.ai_personality)
+            for field, value in allowed_updates.items():
+                if value is not None:
+                    set_clauses.append(f"{field} = ?")
+                    params.append(value)
 
-            if update_data.response_style is not None:
-                update_fields.append("response_style = ?")
-                params.append(update_data.response_style)
-
-            if update_data.memory_retention is not None:
-                update_fields.append("memory_retention = ?")
-                params.append(update_data.memory_retention)
-
-            if update_data.auto_summarize is not None:
-                update_fields.append("auto_summarize = ?")
-                params.append(update_data.auto_summarize)
-
-            if update_data.preferred_language is not None:
-                update_fields.append("preferred_language = ?")
-                params.append(update_data.preferred_language)
-
-            if update_data.custom_prompts is not None:
-                update_fields.append("custom_prompts = ?")
-                params.append(json.dumps(update_data.custom_prompts))
-
-            if update_fields:
-                update_fields.append("updated_at = ?")
-                params.append(datetime.utcnow().isoformat())
+            if set_clauses:
+                set_clauses.append("updated_at = ?")
+                params.append(datetime.now(UTC).isoformat())
                 params.append(user_id)
 
-                cursor.execute(f"""
-                    UPDATE user_settings 
-                    SET {', '.join(update_fields)}
-                    WHERE user_id = ?
-                """, params)
+                # Construct safe SQL with whitelisted field names (safe from injection)
+                set_clause = ", ".join(set_clauses)  # Only contains whitelisted field names
+                sql = f"UPDATE user_settings SET {set_clause} WHERE user_id = ?"  # noqa: S608
+                cursor.execute(sql, params)
                 conn.commit()
 
             # Return updated settings

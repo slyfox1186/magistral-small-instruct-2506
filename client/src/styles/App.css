@@ -1567,3 +1567,47 @@ a:active::before,
     opacity: 1;
   }
 }
+
+/* Conversation loading indicator */
+.loading-conversation {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  background: var(--bg-secondary);
+  padding: 1rem 2rem;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  z-index: 100;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  pointer-events: none; /* Allow mouse interactions to pass through */
+}
+
+.loading-conversation .loading-spinner {
+  display: flex;
+  align-items: center;
+  pointer-events: auto; /* Allow spinner to be visible */
+}
+
+.loading-conversation span {
+  pointer-events: auto; /* Allow text to be visible */
+  gap: 0.5rem;
+}
+
+.loading-conversation .loading-spinner::before {
+  content: "";
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--border-color);
+  border-top: 2px solid var(--accent-primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.loading-conversation span {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}

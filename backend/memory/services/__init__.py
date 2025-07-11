@@ -1,4 +1,4 @@
-"""Memory system services"""
+"""Memory system services."""
 
 from .consolidation_worker import ConsolidationWorker, create_consolidation_worker
 from .embedding_service import EmbeddingService, create_embedding_service

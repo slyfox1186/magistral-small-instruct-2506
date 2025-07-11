@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Centralized Resource Manager for ML Models
+"""Centralized Resource Manager for ML Models.
+
 ==========================================
 
 This module provides a thread-safe, singleton resource manager that handles:
@@ -94,7 +95,7 @@ class ResourceManager:
 
     def get_model(
         self, model_identifier: str, force_device: str | None = None
-    ) -> tuple[Any, threading.Lock | None]:
+    ) -> tuple[Any, Any]:
         """Get a model instance with thread-safe loading and caching.
 
         Args:
@@ -143,10 +144,7 @@ class ResourceManager:
 
             # Determine execution lock based on actual device
             model_device = getattr(model, "device", target_device)
-            if hasattr(model_device, "type"):
-                device_type = model_device.type
-            else:
-                device_type = str(model_device)
+            device_type = model_device.type if hasattr(model_device, "type") else str(model_device)
 
             execution_lock = self._gpu_execution_lock if "cuda" in device_type else None
 
@@ -194,13 +192,14 @@ class ResourceManager:
             logger.info(f"📐 SentenceTransformer embedding dimension: {embedding_dim}")
             logger.info("💾 Model loaded in FP32 for full precision")
 
+        except ImportError:
+            logger.exception("❌ Failed to import sentence_transformers")
+            raise
+        except Exception:
+            logger.exception(f"❌ Failed to load SentenceTransformer {model_identifier}")
+            raise
+        else:
             return model
-        except ImportError as e:
-            logger.error(f"❌ Failed to import sentence_transformers: {e}")
-            raise
-        except Exception as e:
-            logger.error(f"❌ Failed to load SentenceTransformer {model_identifier}: {e}")
-            raise
 
     def _load_llm_model(self, model_identifier: str) -> Any:
         """Load an LLM model (placeholder for future implementation)."""
@@ -240,10 +239,11 @@ class ResourceManager:
                     logger.debug(
                         f"🔓 Released GPU lock for {model_identifier} (execution: {execution_time:.3f}s)"
                     )
-                    return result
-                except Exception as e:
-                    logger.error(f"❌ Error during GPU inference for {model_identifier}: {e}")
+                except Exception:
+                    logger.exception(f"❌ Error during GPU inference for {model_identifier}")
                     raise
+                else:
+                    return result
         else:
             # CPU model - no lock needed
             logger.debug(f"💻 Running CPU inference for {model_identifier}")
@@ -255,10 +255,11 @@ class ResourceManager:
                 logger.debug(
                     f"✅ CPU inference completed for {model_identifier} (execution: {execution_time:.3f}s)"
                 )
-                return result
-            except Exception as e:
-                logger.error(f"❌ Error during CPU inference for {model_identifier}: {e}")
+            except Exception:
+                logger.exception(f"❌ Error during CPU inference for {model_identifier}")
                 raise
+            else:
+                return result
 
     def get_stats(self) -> dict[str, Any]:
         """Get resource manager statistics."""

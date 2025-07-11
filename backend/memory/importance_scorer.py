@@ -1,19 +1,31 @@
 """Sophisticated memory importance scoring system using NLP and heuristics.
+
 Calculates dynamic importance scores based on content analysis, entities, sentiment, and conversation context.
 """
 
 import logging
 import re
 
+logger = logging.getLogger(__name__)
+
+# Length scoring constants
+MIN_MEANINGFUL_LENGTH = 20
+MAX_REASONABLE_LENGTH = 200
+
+# Similarity thresholds for novelty scoring
+LOW_SIMILARITY_THRESHOLD = 0.6
+MEDIUM_SIMILARITY_THRESHOLD = 0.8
+
+# Importance scoring threshold
+HIGH_IMPORTANCE_THRESHOLD = 0.7
+
 try:
     import spacy
-    from spacytextblob.spacytextblob import SpacyTextBlob
+
     SPACY_AVAILABLE = True
 except ImportError:
     SPACY_AVAILABLE = False
-    logging.warning("SpaCy not available. Falling back to heuristic-only scoring.")
-
-logger = logging.getLogger(__name__)
+    logger.warning("SpaCy not available. Falling back to heuristic-only scoring.")
 
 
 def _clamp(value: float, min_val: float = 0.0, max_val: float = 1.0) -> float:
@@ -23,7 +35,7 @@ def _clamp(value: float, min_val: float = 0.0, max_val: float = 1.0) -> float:
 
 class MemoryImportanceScorer:
     """Calculates an importance score using a hybrid heuristic and NLP model.
-    
+
     Score ranges:
     - 0.0-0.3: Low importance (greetings, fillers)
     - 0.3-0.6: Medium importance (general conversation)
@@ -32,6 +44,7 @@ class MemoryImportanceScorer:
     """
 
     def __init__(self, config: dict | None = None):
+        """Initialize the importance scorer with optional configuration."""
         if config is None:
             config = {}
 
@@ -40,8 +53,12 @@ class MemoryImportanceScorer:
         if SPACY_AVAILABLE:
             try:
                 self.nlp = spacy.load("en_core_web_md")
-                self.nlp.add_pipe("spacytextblob")
-                logger.info("Loaded spaCy model for advanced importance scoring")
+                # Try to add spacytextblob if available
+                try:
+                    self.nlp.add_pipe("spacytextblob")
+                    logger.info("Loaded spaCy model with textblob for advanced importance scoring")
+                except Exception:
+                    logger.info("Loaded spaCy model without textblob for basic importance scoring")
             except Exception as e:
                 logger.warning(f"Failed to load spaCy model: {e}. Using heuristic-only scoring.")
                 self.nlp = None
@@ -69,51 +86,119 @@ class MemoryImportanceScorer:
 
         # Keywords and patterns
         self.high_importance_keywords = [
-            "remember", "important", "critical", "key point", "don't forget",
-            "fact is", "rule is", "my name is", "my birthday is", "my email is",
-            "my phone is", "deadline", "urgent", "password", "credential"
+            "remember",
+            "important",
+            "critical",
+            "key point",
+            "don't forget",
+            "fact is",
+            "rule is",
+            "my name is",
+            "my birthday is",
+            "my email is",
+            "my phone is",
+            "deadline",
+            "urgent",
+            "password",
+            "credential",
         ]
 
         self.low_importance_keywords = [
-            "hello", "hi", "hey", "thanks", "thank you", "ok", "okay", "cool",
-            "sounds good", "got it", "understood", "bye", "goodbye", "see you"
+            "hello",
+            "hi",
+            "hey",
+            "thanks",
+            "thank you",
+            "ok",
+            "okay",
+            "cool",
+            "sounds good",
+            "got it",
+            "understood",
+            "bye",
+            "goodbye",
+            "see you",
         ]
 
         self.instructional_verbs = [
-            "create", "generate", "summarize", "analyze", "list", "find", "explain",
-            "code", "write", "build", "run", "implement", "design", "calculate",
-            "develop", "configure", "setup", "install", "debug", "fix"
+            "create",
+            "generate",
+            "summarize",
+            "analyze",
+            "list",
+            "find",
+            "explain",
+            "code",
+            "write",
+            "build",
+            "run",
+            "implement",
+            "design",
+            "calculate",
+            "develop",
+            "configure",
+            "setup",
+            "install",
+            "debug",
+            "fix",
         ]
 
         # Regex patterns for PII detection
         self.pii_patterns = {
-            "EMAIL": re.compile(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'),
-            "PHONE": re.compile(r'\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b'),
-            "SSN": re.compile(r'\b\d{3}-\d{2}-\d{4}\b'),
-            "CREDIT_CARD": re.compile(r'\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b'),
-            "DATE": re.compile(r'\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b'),
+            "EMAIL": re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b"),
+            "PHONE": re.compile(r"\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b"),
+            "SSN": re.compile(r"\b\d{3}-\d{2}-\d{4}\b"),
+            "CREDIT_CARD": re.compile(r"\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b"),
+            "DATE": re.compile(r"\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b"),
         }
 
         # Important entity types for spaCy
-        self.important_entities = ["PERSON", "ORG", "GPE", "LOC", "DATE", "MONEY", "TIME", "PERCENT"]
+        self.important_entities = [
+            "PERSON",
+            "ORG",
+            "GPE",
+            "LOC",
+            "DATE",
+            "MONEY",
+            "TIME",
+            "PERCENT",
+        ]
 
     def _score_length(self, text: str) -> float:
         """Scores based on length with diminishing returns."""
         # Short messages (<20 chars) get 0.0
         # Medium messages (20-200 chars) scale linearly
         # Long messages (>200 chars) cap at 1.0
-        if len(text) < 20:
+        if len(text) < MIN_MEANINGFUL_LENGTH:
             return 0.0
-        elif len(text) > 200:
+        elif len(text) > MAX_REASONABLE_LENGTH:
             return 1.0
         else:
-            return (len(text) - 20) / 180
+            return (len(text) - MIN_MEANINGFUL_LENGTH) / (
+                MAX_REASONABLE_LENGTH - MIN_MEANINGFUL_LENGTH
+            )
 
     def _is_question(self, text: str) -> bool:
         """Checks if the text is a question."""
         text = text.strip().lower()
         # Check for question mark or question words at start
-        question_starters = ["who", "what", "where", "when", "why", "how", "do", "does", "is", "are", "can", "could", "will", "would", "should"]
+        question_starters = [
+            "who",
+            "what",
+            "where",
+            "when",
+            "why",
+            "how",
+            "do",
+            "does",
+            "is",
+            "are",
+            "can",
+            "could",
+            "will",
+            "would",
+            "should",
+        ]
         return text.endswith("?") or any(text.startswith(q + " ") for q in question_starters)
 
     def _score_keywords(self, text: str) -> float:
@@ -123,7 +208,9 @@ class MemoryImportanceScorer:
         # Check high importance keywords
         high_count = sum(1 for keyword in self.high_importance_keywords if keyword in text_lower)
         if high_count > 0:
-            return min(1.0, high_count * 0.5)  # Cap at 1.0, but allow multiple keywords to increase score
+            return min(
+                1.0, high_count * 0.5
+            )  # Cap at 1.0, but allow multiple keywords to increase score
 
         # Check low importance keywords
         low_count = sum(1 for keyword in self.low_importance_keywords if keyword in text_lower)
@@ -158,8 +245,10 @@ class MemoryImportanceScorer:
         # Sentiment: Polarity is [-1, 1]. We care about magnitude, not direction.
         try:
             sentiment_score = abs(doc._.blob.polarity)  # Score is [0, 1]
-        except:
-            sentiment_score = 0.0
+        except (AttributeError, ValueError):
+            # Fallback to heuristic sentiment scoring if textblob is not available
+            # For now, use simple heuristic since we can't make this async easily
+            sentiment_score = self._get_simple_heuristic_sentiment(doc.text)
 
         # Entities: Score based on number and type of entities
         entity_score = 0.0
@@ -179,28 +268,26 @@ class MemoryImportanceScorer:
                 return 0.0
 
             similarity = doc.similarity(prev_doc)
-            # Low similarity (<0.6) suggests a topic shift, which is important
-            if similarity < 0.6:
+            # Low similarity suggests a topic shift, which is important
+            if similarity < LOW_SIMILARITY_THRESHOLD:
                 return 1.0
-            elif similarity < 0.8:
+            elif similarity < MEDIUM_SIMILARITY_THRESHOLD:
                 return 0.5
-            return 0.0
-        except:
+            else:
+                return 0.0
+        except (AttributeError, ValueError, TypeError):
             return 0.0
 
     def calculate_importance(
-        self,
-        text: str,
-        role: str,
-        conversation_history: list[dict[str, str]] | None = None
+        self, text: str, role: str, conversation_history: list[dict[str, str]] | None = None
     ) -> float:
         """Calculates the final importance score for a given message.
-        
+
         Args:
             text: The message content
             role: "user" or "assistant"
             conversation_history: List of previous messages [{"role": "user/assistant", "content": "..."}]
-            
+
         Returns:
             Float between 0.0 and 1.0 representing importance
         """
@@ -242,7 +329,7 @@ class MemoryImportanceScorer:
                     try:
                         last_doc = self.nlp(last_msg["content"])
                         topic_shift_score = self._score_topic_shift(doc, last_doc)
-                    except:
+                    except (AttributeError, ValueError, TypeError):
                         pass
 
         # Contextual answer boost
@@ -269,22 +356,85 @@ class MemoryImportanceScorer:
 
         # Log detailed scoring for high-importance messages
         clamped_score = _clamp(final_score)
-        if clamped_score >= 0.7:
-            logger.info(f"High importance score {clamped_score:.3f} for {role} message: '{text[:100]}...'")
-            logger.debug(f"Score breakdown: base={base_score}, length={length_score*self.weights['length_weight']:.3f}, "
-                        f"question={question_score*self.weights['question_weight']:.3f}, "
-                        f"keyword={keyword_score*self.weights['keyword_weight']:.3f}, "
-                        f"pii={pii_score*self.weights['pii_weight']:.3f}")
+        if clamped_score >= HIGH_IMPORTANCE_THRESHOLD:
+            logger.info(
+                f"High importance score {clamped_score:.3f} for {role} message: '{text[:100]}...'"
+            )
+            logger.debug(
+                f"Score breakdown: base={base_score}, length={length_score * self.weights['length_weight']:.3f}, "
+                f"question={question_score * self.weights['question_weight']:.3f}, "
+                f"keyword={keyword_score * self.weights['keyword_weight']:.3f}, "
+                f"pii={pii_score * self.weights['pii_weight']:.3f}"
+            )
 
         return clamped_score
+    
+    def _get_simple_heuristic_sentiment(self, text: str) -> float:
+        """Simple word-based sentiment scoring fallback."""
+        positive_words = ['good', 'great', 'excellent', 'amazing', 'wonderful', 'fantastic', 'love', 'happy', 'excited']
+        negative_words = ['bad', 'terrible', 'awful', 'hate', 'sad', 'angry', 'disappointed', 'frustrated', 'worried']
+        
+        text_lower = text.lower()
+        pos_count = sum(1 for word in positive_words if word in text_lower)
+        neg_count = sum(1 for word in negative_words if word in text_lower)
+        
+        if pos_count == 0 and neg_count == 0:
+            return 0.0
+        
+        # Return absolute sentiment magnitude (0.0 to 1.0)
+        total_sentiment_words = pos_count + neg_count
+        return min(total_sentiment_words * 0.1, 1.0)
+    
+    async def _get_heuristic_sentiment(self, text: str) -> float:
+        """LLM-based sentiment scoring when textblob is not available."""
+        try:
+            from persistent_llm_server import get_llm_server
+            
+            system_prompt = """Analyze the sentiment of the following text and return a JSON response with a single number between 0.0 and 1.0 representing the absolute sentiment magnitude (0.0 = neutral, 1.0 = very strong emotion either positive or negative).
+
+Example responses:
+{"sentiment": 0.0}  # for neutral text
+{"sentiment": 0.8}  # for very positive or very negative text
+{"sentiment": 0.3}  # for mildly emotional text"""
+            
+            user_prompt = f"Text to analyze: {text}"
+            
+            llm_server = await get_llm_server()
+            response = await llm_server.generate(
+                prompt=f"{system_prompt}\n\n{user_prompt}",
+                max_tokens=50,
+                temperature=0.1,
+            )
+            
+            # Extract JSON from response
+            response_text = response.strip()
+            if "```json" in response_text:
+                start = response_text.find("```json") + 7
+                end = response_text.find("```", start)
+                if end > start:
+                    response_text = response_text[start:end].strip()
+            
+            start_idx = response_text.find("{")
+            end_idx = response_text.rfind("}")
+            if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+                response_text = response_text[start_idx : end_idx + 1]
+            
+            import json
+            sentiment_data = json.loads(response_text)
+            return min(max(sentiment_data.get("sentiment", 0.0), 0.0), 1.0)
+            
+        except Exception as e:
+            logger.warning(f"LLM sentiment analysis failed: {e}. Using fallback heuristic.")
+            return self._get_simple_heuristic_sentiment(text)
 
 
 # Singleton instance for reuse
 _scorer_instance = None
 
+
 def get_importance_scorer(config: dict | None = None) -> MemoryImportanceScorer:
     """Get or create the singleton importance scorer instance."""
-    global _scorer_instance
+    global _scorer_instance  # noqa: PLW0603
     if _scorer_instance is None:
         _scorer_instance = MemoryImportanceScorer(config)
     return _scorer_instance

@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 # ===================== Chat Models =====================
 
+
 class Message(BaseModel):
     """Chat message structure."""
 
@@ -23,6 +24,7 @@ class ChatStreamRequest(BaseModel):
 
 
 # ===================== Memory Models =====================
+
 
 class VitalMemoryBRequest(BaseModel):
     """Vital memory storage request model."""
@@ -66,6 +68,7 @@ class MemoryIngestion(BaseModel):
 
 # ===================== Status Models =====================
 
+
 class ServiceStatus(BaseModel):
     """Individual service status."""
 
@@ -91,6 +94,7 @@ class StatusResponse(BaseModel):
 
 
 # ===================== Trading API Models =====================
+
 
 class CryptoQuoteRequest(BaseModel):
     """Request model for cryptocurrency quotes."""
@@ -124,6 +128,7 @@ class StockDataResponse(BaseModel):
 
 # ===================== CRUD Models =====================
 
+
 class ConversationBase(BaseModel):
     """Base model for conversations."""
 
@@ -135,6 +140,7 @@ class ConversationBase(BaseModel):
 
 class ConversationCreate(ConversationBase):
     """Model for creating new conversations."""
+
     pass
 
 
@@ -189,7 +195,7 @@ class MessageResponse(MessageBase):
 class UserSettingsBase(BaseModel):
     """Base model for user settings."""
 
-    theme: str = Field(default="dark", pattern="^(light|dark|auto)$")
+    theme: str = Field(default="celestial-indigo", pattern="^(celestial-indigo|veridian-twilight|solaris-flare|hunters-vision|nebula|crimson-ember|cyberpunk-neon|obsidian-slate)$")
     ai_personality: str = Field(default="helpful", max_length=100)
     response_style: str = Field(default="balanced", max_length=100)
     memory_retention: bool = Field(default=True)
@@ -207,7 +213,7 @@ class UserSettingsCreate(UserSettingsBase):
 class UserSettingsUpdate(BaseModel):
     """Model for updating user settings."""
 
-    theme: str | None = Field(None, pattern="^(light|dark|auto)$")
+    theme: str | None = Field(None, pattern="^(celestial-indigo|veridian-twilight|solaris-flare|hunters-vision|nebula|crimson-ember|cyberpunk-neon|obsidian-slate)$")
     ai_personality: str | None = Field(None, max_length=100)
     response_style: str | None = Field(None, max_length=100)
     memory_retention: bool | None = None

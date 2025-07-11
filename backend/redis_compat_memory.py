@@ -1,4 +1,5 @@
 """Redis compatibility layer for PersonalMemorySystem.
+
 Provides Redis-like API while using SQLite backend.
 """
 
@@ -12,19 +13,36 @@ logger = logging.getLogger(__name__)
 
 class RedisCompatMemorySystem:
     """Adapter that makes PersonalMemorySystem look like Redis.
+
     This is a transitional layer to minimize changes to dependent code.
     """
 
     def __init__(self, personal_memory: PersonalMemorySystem):
+        """Initialize the Redis compatibility adapter.
+
+        Args:
+            personal_memory: The PersonalMemorySystem instance to wrap.
+        """
         self.memory = personal_memory
         self._pub_sub_handlers = {}
+        self._current_conversation_id = None  # Track current conversation context
 
-    async def get(self, key: str) -> str | None:
+    def set_conversation_context(self, conversation_id: str):
+        """Set the current conversation context for core memory operations."""
+        self._current_conversation_id = conversation_id
+        logger.debug(f"RedisCompatMemorySystem: Set conversation context to {conversation_id}")
+
+    async def get(self, key: str, conversation_id: str = None) -> str | None:
         """Redis GET command compatibility."""
         # Check if it's a core memory key
         if key.startswith("core_memory:"):
             core_key = key.replace("core_memory:", "")
-            value = await self.memory.get_core_memory(core_key)
+            # Use provided conversation_id or fallback to current context
+            conv_id = conversation_id or self._current_conversation_id
+            if not conv_id:
+                logger.warning(f"No conversation context for core memory get: {core_key}")
+                return None
+            value = await self.memory.get_core_memory(core_key, conv_id)
             return value
 
         # For regular memories, return the most recent one
@@ -33,12 +51,17 @@ class RedisCompatMemorySystem:
             return memories[0].content
         return None
 
-    async def set(self, key: str, value: str, ex: int | None = None) -> bool:
+    async def set(self, key: str, value: str, ex: int | None = None, conversation_id: str = None) -> bool:
         """Redis SET command compatibility."""
         # If it's a core memory
         if key.startswith("core_memory:"):
             core_key = key.replace("core_memory:", "")
-            await self.memory.set_core_memory(core_key, value)
+            # Use provided conversation_id or fallback to current context
+            conv_id = conversation_id or self._current_conversation_id
+            if not conv_id:
+                logger.warning(f"No conversation context for core memory set: {core_key}")
+                return False
+            await self.memory.set_core_memory(core_key, value, conv_id)
             return True
 
         # Otherwise, add as a regular memory
@@ -111,6 +134,13 @@ class RedisCompatMemorySystem:
         )
         return 0
 
+    def clear_conversation_memories(self, conversation_id: str) -> int:
+        """Clear memories for a specific conversation - delegates to underlying PersonalMemorySystem."""
+        logger.info(
+            f"🧹 RedisCompatMemorySystem: Delegating clear_conversation_memories to underlying SQLite system for conversation {conversation_id}"
+        )
+        return self.memory.clear_conversation_memories(conversation_id)
+
     def clear_all_memories(self) -> int:
         """Clear all memories - delegates to underlying PersonalMemorySystem."""
         logger.info(
@@ -131,8 +161,8 @@ class RedisCompatMemorySystem:
         for handler in handlers:
             try:
                 await handler(channel, message)
-            except Exception as e:
-                logger.error(f"Error in pub/sub handler: {e}")
+            except Exception:
+                logger.exception("Error in pub/sub handler")
         return len(handlers)
 
     def subscribe_handler(self, channel: str, handler):

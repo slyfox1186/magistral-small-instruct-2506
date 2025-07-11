@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 def classify_query_fast_pattern_based(user_prompt: str) -> dict[str, any]:
     """DEPRECATED: Always use LLM classification for better accuracy.
-    
+
     Returns None to force LLM classification for all queries.
     """
     # Always use LLM classification - it's more accurate than regex
@@ -31,7 +31,7 @@ def classify_query_fast_pattern_based(user_prompt: str) -> dict[str, any]:
 
 
 async def classify_query_with_llm(user_prompt: str) -> dict[str, any]:
-    """Simple single-word route classification"""
+    """Simple single-word route classification."""
     logger.debug(f"🎯 ROUTE CLASSIFIER: Analyzing '{user_prompt}'")
 
     # Enhanced system prompt that handles STORE/RECALL intents
@@ -43,7 +43,7 @@ STORE - user is providing personal information, facts about themselves, preferen
 RECALL - user is asking you to recall previously stored information, asking "what is my", "who is my", "where do I", etc.
 WEATHER - for weather conditions, forecasts, temperature, climate queries ("what's the weather", "is it raining", "temperature in")
 WEB - for current events, recent news, real-time information (excluding weather), "latest" anything, OR when user provides a full URL (https://...) and asks to scan, parse, read, or analyze it
-CRYPTO - for cryptocurrency prices, Bitcoin, Ethereum, crypto market data  
+CRYPTO - for cryptocurrency prices, Bitcoin, Ethereum, crypto market data
 STOCKS - for stock prices, company shares, market data (Apple, Tesla, etc.)
 MEMORY - ONLY when user asks about past conversation ("what did we discuss", "remember when")
 INTERNAL - for ALL other requests (code generation, explanations, tutorials, how-to, creative tasks)
@@ -56,7 +56,7 @@ Examples:
 "What is my name?" → RECALL
 "What is my address?" → RECALL
 "Create a bash function" → INTERNAL
-"Latest news about AI" → WEB  
+"Latest news about AI" → WEB
 "Bitcoin price" → CRYPTO
 "Apple stock" → STOCKS
 "What did we talk about?" → MEMORY
@@ -70,6 +70,7 @@ Return ONLY the single word - nothing else."""
 
     try:
         from persistent_llm_server import get_llm_server
+
         server = await get_llm_server()
 
         # Get single word classification
@@ -99,14 +100,18 @@ Return ONLY the single word - nothing else."""
         if classification_word in route_mapping:
             intent = route_mapping[classification_word]
         else:
-            logger.warning(f"Unknown classification word '{classification_word}', defaulting to conversation")
+            logger.warning(
+                f"Unknown classification word '{classification_word}', defaulting to conversation"
+            )
             intent = "conversation"
 
-        return {"primary_intent": intent}
+        intent_result = {"primary_intent": intent}
 
     except Exception as e:
         logger.warning(f"Classification error for '{user_prompt}': {e}, defaulting to conversation")
-        return {"primary_intent": "conversation"}
+        intent_result = {"primary_intent": "conversation"}
+
+    return intent_result
 
 
 def check_service_availability() -> None:
@@ -126,9 +131,234 @@ def check_service_availability() -> None:
 
     logger.info("🧠 MEMORY DEBUG: ✅ All services available")
 
+
 # NO FALLBACK MESSAGE CREATION - SYSTEM MUST WORK OR FAIL
 
 # ===================== FAST PATH IMPLEMENTATION =====================
+
+
+async def _get_memory_context_for_fast_path(user_prompt: str, session_id: str) -> str:
+    """Get minimal memory context for fast path processing."""
+    memory_context = ""
+    logger.info(f"🧠 MEMORY DEBUG: Attempting to get memory context for session {session_id}")
+
+    if not app_state.personal_memory:
+        logger.info("🧠 MEMORY DEBUG: personal_memory not available")
+        return memory_context
+
+    logger.info(
+        f"🧠 MEMORY DEBUG: personal_memory is available: {type(app_state.personal_memory)}"
+    )
+    try:
+        # Quick memory retrieval for context - FIXED: Use conversation-specific memories
+        logger.info(
+            f"🧠 MEMORY DEBUG: Calling get_conversation_context for session: '{session_id}'"
+        )
+        memories = await app_state.personal_memory.get_conversation_context(
+            conversation_id=session_id, max_messages=10
+        )
+        logger.info(f"🧠 MEMORY DEBUG: Retrieved {len(memories) if memories else 0} memories for session {session_id}")
+
+        # CRITICAL FIX: Also get core memories (user facts) for this conversation
+        logger.info(f"🧠 MEMORY DEBUG: Getting core memories for conversation {session_id}...")
+        core_memories = await app_state.personal_memory.get_all_core_memories(session_id)
+        logger.info(
+            f"🧠 MEMORY DEBUG: Retrieved {len(core_memories) if core_memories else 0} core memories"
+        )
+
+        # Build memory context from both sources
+        memory_parts = []
+
+        # Add core memories first (user facts)
+        if core_memories:
+            logger.info("🧠 MEMORY DEBUG: Processing core memories...")
+            for mem in core_memories[:3]:  # Limit to 3 most important
+                if hasattr(mem, "content") and mem.content:
+                    memory_parts.append(f"- {mem.content}")
+                    logger.info(f"🧠 MEMORY DEBUG: Added core memory: {mem.content[:50]}...")
+
+        # Add relevant contextual memories
+        if memories:
+            logger.info("🧠 MEMORY DEBUG: Processing contextual memories...")
+            for mem in memories[:2]:  # Limit to 2 most relevant
+                if hasattr(mem, "content") and mem.content:
+                    memory_parts.append(f"- {mem.content}")
+                    logger.info(f"🧠 MEMORY DEBUG: Added memory: {mem.content[:50]}...")
+
+        if memory_parts:
+            memory_context = "\n".join(memory_parts)
+            logger.info(f"🧠 MEMORY DEBUG: Final memory context length: {len(memory_context)} chars")
+        else:
+            logger.info("🧠 MEMORY DEBUG: No useful memory context found")
+
+    except Exception as mem_error:
+        logger.error(
+            f"🧠 MEMORY DEBUG: ❌ Memory retrieval failed: {mem_error}",
+            exc_info=True,
+        )
+
+    return memory_context
+
+
+async def _get_conversation_history_for_fast_path(session_id: str) -> list:
+    """Get minimal conversation history for fast path processing."""
+    history = []
+    logger.info(f"🧠 MEMORY DEBUG: Attempting to get conversation history for session {session_id}")
+
+    if not app_state.personal_memory:
+        logger.info("🧠 MEMORY DEBUG: personal_memory not available for history")
+        return history
+
+    try:
+        logger.info(
+            f"🧠 MEMORY DEBUG: Calling get_conversation_context for session {session_id}"
+        )
+        recent_memories = await app_state.personal_memory.get_conversation_context(
+            session_id, max_messages=4
+        )  # Last 2 turns
+        logger.info(
+            f"🧠 MEMORY DEBUG: Retrieved {len(recent_memories) if recent_memories else 0} conversation memories"
+        )
+
+        # Convert to history format
+        for i in range(0, len(recent_memories), 2):
+            if i + 1 < len(recent_memories):
+                user_msg = recent_memories[i].content.replace("User: ", "")
+                assistant_msg = recent_memories[i + 1].content.replace("Assistant: ", "")
+                # Include timestamp from the user message
+                timestamp = recent_memories[i].timestamp.strftime("%Y-%m-%d %H:%M:%S")
+                history.append(
+                    {"user": user_msg, "model": assistant_msg, "timestamp": timestamp}
+                )
+        logger.info(f"🧠 MEMORY DEBUG: ✅ Converted to {len(history)} history entries")
+    except Exception as e:
+        logger.error(
+            f"🧠 MEMORY DEBUG: ❌ Failed to get conversation history: {e}", exc_info=True
+        )
+
+    return history
+
+
+def _parse_chat_messages(messages: list) -> tuple[str, str, list]:
+    """Parse chat messages into system content, user content, and conversation history."""
+    system_content = ""
+    user_content = ""
+    conversation_history = []
+    prev_user_content = ""
+
+    for msg in messages:
+        role = msg.get("role", "user")
+        content = msg.get("content", "")
+
+        if role == "system":
+            system_content = content
+        elif role == "user":
+            prev_user_content = content
+            if messages.index(msg) == len(messages) - 1:
+                user_content = content
+        elif role == "assistant" and prev_user_content:
+            conversation_history.append(f"User: {prev_user_content}\nAssistant: {content}")
+
+    return system_content, user_content, conversation_history
+
+
+async def _stream_llm_response(server, prompt: str):
+    """Stream tokens from LLM server."""
+    async for token in server.generate_stream(
+        prompt=prompt,
+        max_tokens=1024,
+        temperature=0.7,
+        stop_strings=["User:", "Assistant:", "<|endoftext|>", "<|end|>"],
+        top_p=0.9,
+    ):
+        if token:
+            yield f"data: {json.dumps({'text': token})}\n\n"
+
+
+async def _handle_background_memory_processing(user_prompt: str, full_response: str, session_id: str):
+    """Handle background memory processing tasks."""
+    logger.info(f"🧠 MEMORY DEBUG: Starting background memory processing for session {session_id}")
+    logger.info(f"🧠 MEMORY DEBUG: Response length: {len(full_response)} chars")
+
+    # Schedule minimal memory processing in background
+    try:
+        logger.info("🧠 MEMORY DEBUG: Creating background task for lightweight_memory_processing")
+        task = asyncio.create_task(
+            lightweight_memory_processing(user_prompt, full_response, session_id)
+        )
+        # Store task reference to prevent garbage collection
+        getattr(asyncio.current_task(), '_background_tasks', set()).add(task)
+        task.add_done_callback(lambda t: getattr(asyncio.current_task(), '_background_tasks', set()).discard(t))
+        logger.info("🧠 MEMORY DEBUG: ✅ Background memory processing task created")
+    except Exception as memory_task_error:
+        logger.error(
+            f"🧠 MEMORY DEBUG: ❌ Failed to create memory processing task: {memory_task_error}",
+            exc_info=True,
+        )
+
+    # Update conversation history (also background)
+    try:
+        logger.info("🧠 MEMORY DEBUG: Adding conversation to Redis history")
+        redis_utils.add_to_conversation_history(
+            session_id,
+            user_prompt,
+            full_response,
+            app_state.redis_client,
+            redis_utils.CONVERSATION_HISTORY_KEY_PREFIX,
+            redis_utils.MAX_NON_VITAL_HISTORY,
+        )
+        logger.info("🧠 MEMORY DEBUG: ✅ Conversation added to Redis history")
+    except Exception as redis_history_error:
+        logger.error(
+            f"🧠 MEMORY DEBUG: ❌ Failed to add to Redis history: {redis_history_error}",
+            exc_info=True,
+        )
+
+
+async def _generate_fast_response_stream(messages: list, user_prompt: str, session_id: str):
+    """Generate streaming response for fast path processing."""
+    logger.info(f" FAST PATH: Starting lightweight response generation for session {session_id}")
+
+    try:
+        from persistent_llm_server import get_llm_server
+        server = await get_llm_server()
+
+        # Parse messages into components
+        system_content, user_content, conversation_history = _parse_chat_messages(messages)
+
+        # Format prompt based on conversation history
+        prompt = (
+            utils.format_prompt_with_history(system_content, user_content, "\n".join(conversation_history))
+            if conversation_history
+            else utils.format_prompt(system_content, user_content)
+        )
+
+        logger.info(" FAST PATH: Using persistent server for streaming generation")
+        logger.info(f" FAST PATH: Prompt preview: {prompt[:200]}...")
+
+        # Stream tokens from server
+        full_response = ""
+        async for token_data in _stream_llm_response(server, prompt):
+            if token_data.startswith("data: "):
+                token_json = json.loads(token_data[6:])
+                if 'text' in token_json:
+                    full_response += token_json['text']
+            yield token_data
+
+        logger.info(f" FAST PATH: Response complete ({len(full_response)} chars)")
+        yield f"data: {json.dumps({'done': True})}\n\n"
+
+        # Handle background processing if we have a response
+        if full_response:
+            await _handle_background_memory_processing(user_prompt, full_response, session_id)
+        else:
+            logger.warning("🧠 MEMORY DEBUG: No response to process - skipping memory operations")
+
+    except Exception as e:
+        error_msg = f"Fast path error: {e!s}"
+        logger.error(error_msg, exc_info=True)
+        yield f"data: {json.dumps({'error': error_msg})}\n\n"
+
 
 async def handle_simple_conversational_request(
     request: ChatStreamRequest, user_prompt: str, session_id: str
@@ -144,81 +374,15 @@ async def handle_simple_conversational_request(
     Expected performance gain: 5-10x faster for 80% of simple requests.
     """
     # Get minimal memory context from personal memory
-    memory_context = ""
-    logger.info(f"🧠 MEMORY DEBUG: Attempting to get memory context for session {session_id}")
-
-    if app_state.personal_memory:
-        logger.info(f"🧠 MEMORY DEBUG: personal_memory is available: {type(app_state.personal_memory)}")
-        try:
-            # Quick memory retrieval for context
-            logger.info(f"🧠 MEMORY DEBUG: Calling get_relevant_memories with query: '{user_prompt[:50]}...'")
-            memories = await app_state.personal_memory.get_relevant_memories(query=user_prompt, limit=5)
-            logger.info(f"🧠 MEMORY DEBUG: Retrieved {len(memories) if memories else 0} memories")
-
-            # CRITICAL FIX: Also get core memories (user facts)
-            logger.info("🧠 MEMORY DEBUG: Getting core memories...")
-            core_memories = await app_state.personal_memory.get_all_core_memories()
-            logger.info(f"🧠 MEMORY DEBUG: Retrieved {len(core_memories) if core_memories else 0} core memories")
-
-            # Build memory context from both sources
-            memory_parts = []
-
-            # Add core memories first (most important user facts)
-            if core_memories:
-                core_facts = []
-                for key, value in core_memories.items():
-                    core_facts.append(f"{key}: {value}")
-                if core_facts:
-                    memory_parts.append("User Facts:\n" + "\n".join(core_facts))
-                    logger.info(f"🧠 MEMORY DEBUG: Added {len(core_facts)} core memory facts")
-
-            # Add regular memories
-            if memories:
-                regular_memories = [m.content for m in memories[:3]]
-                memory_parts.extend(regular_memories)
-                logger.info(f"🧠 MEMORY DEBUG: Added {len(regular_memories)} regular memories")
-
-            if memory_parts:
-                memory_context = "\n\n".join(memory_parts)
-                logger.info(f"🧠 MEMORY DEBUG: ✅ Using combined memory context ({len(memory_context)} chars)")
-                logger.debug(f"🧠 MEMORY DEBUG: Memory context preview: {memory_context[:200]}...")
-            else:
-                logger.info("🧠 MEMORY DEBUG: No memories found")
-        except Exception as e:
-            logger.error(f"🧠 MEMORY DEBUG: ❌ Fast path memory retrieval failed: {e}", exc_info=True)
-    else:
-        logger.warning("🧠 MEMORY DEBUG: personal_memory is None - no memory context available")
+    memory_context = await _get_memory_context_for_fast_path(user_prompt, session_id)
 
     # Get minimal conversation history from personal memory
-    history = []
-    logger.info(f"🧠 MEMORY DEBUG: Attempting to get conversation history for session {session_id}")
-
-    if app_state.personal_memory:
-        try:
-            logger.info(f"🧠 MEMORY DEBUG: Calling get_conversation_context for session {session_id}")
-            recent_memories = await app_state.personal_memory.get_conversation_context(
-                session_id, max_messages=4
-            )  # Last 2 turns
-            logger.info(f"🧠 MEMORY DEBUG: Retrieved {len(recent_memories) if recent_memories else 0} conversation memories")
-
-            # Convert to history format
-            for i in range(0, len(recent_memories), 2):
-                if i + 1 < len(recent_memories):
-                    user_msg = recent_memories[i].content.replace("User: ", "")
-                    assistant_msg = recent_memories[i + 1].content.replace("Assistant: ", "")
-                    # Include timestamp from the user message
-                    timestamp = recent_memories[i].timestamp.strftime("%Y-%m-%d %H:%M:%S")
-                    history.append(
-                        {"user": user_msg, "model": assistant_msg, "timestamp": timestamp}
-                    )
-            logger.info(f"🧠 MEMORY DEBUG: ✅ Converted to {len(history)} history entries")
-        except Exception as e:
-            logger.error(f"🧠 MEMORY DEBUG: ❌ Failed to get conversation history: {e}", exc_info=True)
-    else:
-        logger.warning("🧠 MEMORY DEBUG: personal_memory is None - no conversation history available")
+    history = await _get_conversation_history_for_fast_path(session_id)
 
     # Use condensed version of main system prompt with critical rules
-    simple_system_prompt = """You are Aria, a helpful AI assistant. Be natural and conversational."""
+    simple_system_prompt = (
+        """You are Aria, a helpful AI assistant. Be natural and conversational."""
+    )
 
     # Add memory context if available
     if memory_context:
@@ -238,109 +402,9 @@ async def handle_simple_conversational_request(
     # Add current message
     messages.append({"role": "user", "content": user_prompt})
 
-    # Fast path response generation
-    async def generate_fast_response():
-        logger.info(
-            f" FAST PATH: Starting lightweight response generation for session {session_id}"
-        )
-        full_response = ""
-
-        try:
-            # Use persistent LLM server for fast path too
-            from persistent_llm_server import get_llm_server
-
-            server = await get_llm_server()
-
-            # Convert messages to properly formatted prompt using utils.format_prompt
-            system_content = ""
-            user_content = ""
-            conversation_history = []
-            prev_user_content = ""
-
-            for msg in messages:
-                role = msg.get("role", "user")
-                content = msg.get("content", "")
-                if role == "system":
-                    system_content = content
-                elif role == "user":
-                    prev_user_content = content
-                    if messages.index(msg) == len(messages) - 1:
-                        # This is the current user message
-                        user_content = content
-                elif role == "assistant" and prev_user_content:
-                    conversation_history.append(f"User: {prev_user_content}\nAssistant: {content}")
-
-            # Use proper chat formatting with conversation history
-            if conversation_history:
-                conversation_str = "\n".join(conversation_history)
-                prompt = utils.format_prompt_with_history(
-                    system_content, user_content, conversation_str
-                )
-            else:
-                prompt = utils.format_prompt(system_content, user_content)
-
-            logger.info(" FAST PATH: Using persistent server for streaming generation")
-            logger.info(f" FAST PATH: Prompt preview: {prompt[:200]}...")
-
-            # Stream tokens directly from the server
-            full_response = ""
-            async for token in server.generate_stream(
-                prompt=prompt,
-                max_tokens=1024,  # Shorter for conversational
-                temperature=0.7,
-                session_id=session_id,
-                priority=0,  # High priority for fast path
-            ):
-                if token:  # Skip empty tokens
-                    full_response += token
-                    yield f"data: {json.dumps({'token': {'text': token}})}\n\n"
-
-            logger.info(f" FAST PATH: Response complete ({len(full_response)} chars)")
-            yield f"data: {json.dumps({'done': True})}\n\n"
-
-        except Exception as e:
-            error_msg = f"Fast path error: {e!s}"
-            logger.error(error_msg, exc_info=True)  # Add full traceback
-            yield f"data: {json.dumps({'error': error_msg})}\n\n"
-            return
-
-        # Lightweight background processing (don't block response)
-        if full_response:
-            logger.info(f"🧠 MEMORY DEBUG: Starting background memory processing for session {session_id}")
-            logger.info(f"🧠 MEMORY DEBUG: Response length: {len(full_response)} chars")
-
-            # Schedule minimal memory processing in background
-            try:
-                logger.info("🧠 MEMORY DEBUG: Creating background task for lightweight_memory_processing")
-                asyncio.create_task(
-                    lightweight_memory_processing(user_prompt, full_response, session_id)
-                )
-                logger.info("🧠 MEMORY DEBUG: ✅ Background memory processing task created")
-            except Exception as memory_task_error:
-                logger.error(f"🧠 MEMORY DEBUG: ❌ Failed to create memory processing task: {memory_task_error}", exc_info=True)
-
-            # Update conversation history (also background)
-            try:
-                logger.info(f"🧠 MEMORY DEBUG: Adding conversation to Redis history for session {session_id}")
-                logger.info(f"🧠 MEMORY DEBUG: Redis client available: {app_state.redis_client is not None}")
-
-                # Call async history function directly with ResourceManager-powered embeddings
-                redis_utils.add_to_conversation_history(
-                    session_id,
-                    user_prompt,
-                    full_response,
-                    app_state.redis_client,  # ResourceManager handles embedding model internally
-                    redis_utils.CONVERSATION_HISTORY_KEY_PREFIX,
-                    redis_utils.MAX_NON_VITAL_HISTORY,
-                )
-                logger.info("🧠 MEMORY DEBUG: ✅ Conversation added to Redis history")
-            except Exception as redis_history_error:
-                logger.error(f"🧠 MEMORY DEBUG: ❌ Failed to add to Redis history: {redis_history_error}", exc_info=True)
-        else:
-            logger.warning("🧠 MEMORY DEBUG: No response to process - skipping memory operations")
-
+    # Return StreamingResponse with extracted function
     return StreamingResponse(
-        generate_fast_response(),
+        _generate_fast_response_stream(messages, user_prompt, session_id),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -351,11 +415,9 @@ async def handle_simple_conversational_request(
         },
     )
 
-
 async def lightweight_memory_processing(user_prompt: str, response: str, session_id: str):
-    """World-class memory processing system that intelligently extracts, analyzes,
-    and stores conversational memories using advanced NLP and LLM techniques.
-    
+    """World-class memory processing system that intelligently extracts, analyzes, and stores conversational memories.
+
     This function implements a sophisticated 5-stage memory processing pipeline:
     1. Content Analysis - LLM-powered content understanding
     2. Memory Extraction - Structured memory extraction
@@ -363,7 +425,9 @@ async def lightweight_memory_processing(user_prompt: str, response: str, session
     4. Storage - Intelligent storage in appropriate tables
     5. Validation - Post-storage verification
     """
-    logger.info(f"🧠 ADVANCED_MEMORY: Starting world-class memory processing for session {session_id}")
+    logger.info(
+        f"🧠 ADVANCED_MEMORY: Starting world-class memory processing for session {session_id}"
+    )
 
     try:
         if not app_state.personal_memory:
@@ -374,7 +438,7 @@ async def lightweight_memory_processing(user_prompt: str, response: str, session
         from memory_processing import AdvancedMemoryProcessor, get_config
 
         # Get production configuration
-        config = get_config('production')
+        config = get_config("production")
 
         # Create advanced memory processor instance
         processor = AdvancedMemoryProcessor(app_state.personal_memory, config)
@@ -382,57 +446,66 @@ async def lightweight_memory_processing(user_prompt: str, response: str, session
         # Initialize processor with LLM server
         try:
             from persistent_llm_server import get_llm_server
+
             llm_server = await get_llm_server()
             await processor.initialize(llm_server)
             logger.info("🧠 ADVANCED_MEMORY: LLM server initialized successfully")
-        except Exception as e:
-            logger.error(f"🧠 ADVANCED_MEMORY: Failed to get LLM server: {e}")
+        except Exception:
+            logger.exception("🧠 ADVANCED_MEMORY: Failed to get LLM server")
             return
 
         # Process the conversation through the advanced pipeline
         logger.info("🧠 ADVANCED_MEMORY: Processing conversation through 5-stage pipeline")
 
         processing_result = await processor.process_with_retry(
-            user_prompt=user_prompt,
-            assistant_response=response,
-            session_id=session_id
+            user_prompt=user_prompt, assistant_response=response, session_id=session_id
         )
 
         # Log processing results
         if processing_result.success:
             logger.info(f"🧠 ADVANCED_MEMORY: ✅ Processing successful for session {session_id}")
-            logger.info(f"🧠 ADVANCED_MEMORY: Stored {processing_result.memories_stored} memories "
-                       f"in {processing_result.processing_time:.2f}s")
+            logger.info(
+                f"🧠 ADVANCED_MEMORY: Stored {processing_result.memories_stored} memories "
+                f"in {processing_result.processing_time:.2f}s"
+            )
 
             # Log detailed stage timings
             if processing_result.stage_timings:
-                stage_info = ", ".join([f"{stage}: {time:.2f}s"
-                                      for stage, time in processing_result.stage_timings.items()])
+                stage_info = ", ".join(
+                    [
+                        f"{stage}: {time:.2f}s"
+                        for stage, time in processing_result.stage_timings.items()
+                    ]
+                )
                 logger.info(f"🧠 ADVANCED_MEMORY: Stage timings - {stage_info}")
 
             # Log extraction statistics
             if processing_result.extraction_stats:
                 stats = processing_result.extraction_stats
-                logger.info(f"🧠 ADVANCED_MEMORY: Extraction stats - "
-                           f"Total: {stats.get('total_memories', 0)}, "
-                           f"Core: {stats.get('core_memories', 0)}, "
-                           f"Regular: {stats.get('regular_memories', 0)}, "
-                           f"Avg importance: {stats.get('avg_importance', 0):.2f}")
+                logger.info(
+                    f"🧠 ADVANCED_MEMORY: Extraction stats - "
+                    f"Total: {stats.get('total_memories', 0)}, "
+                    f"Core: {stats.get('core_memories', 0)}, "
+                    f"Regular: {stats.get('regular_memories', 0)}, "
+                    f"Avg importance: {stats.get('avg_importance', 0):.2f}"
+                )
 
         else:
             error_msg = processing_result.error_message or "Unknown error"
-            logger.error(f"🧠 ADVANCED_MEMORY: ❌ Processing failed for session {session_id}: {error_msg}")
+            logger.error(
+                f"🧠 ADVANCED_MEMORY: ❌ Processing failed for session {session_id}: {error_msg}"
+            )
 
         # Log system health periodically
         stats = processor.get_processing_stats()
-        if stats['total_processed'] % 10 == 0:
+        if stats["total_processed"] % 10 == 0:
             health = processor.get_health_status()
-            logger.info(f"🧠 ADVANCED_MEMORY: System health - "
-                       f"Status: {health['status']}, "
-                       f"Success rate: {health['success_rate']:.1f}%, "
-                       f"Avg time: {health['avg_processing_time']:.2f}s")
+            logger.info(
+                f"🧠 ADVANCED_MEMORY: System health - "
+                f"Status: {health['status']}, "
+                f"Success rate: {health['success_rate']:.1f}%, "
+                f"Avg time: {health['avg_processing_time']:.2f}s"
+            )
 
     except Exception as e:
         logger.error(f"🧠 ADVANCED_MEMORY: ❌ Advanced memory processing error: {e}", exc_info=True)
-
-

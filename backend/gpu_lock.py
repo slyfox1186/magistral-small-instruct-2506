@@ -1,4 +1,5 @@
 """Unified GPU lock implementation combining the best features from all three versions.
+
 Preserves priority queuing and GPU memory monitoring while simplifying the API.
 """
 
@@ -20,6 +21,7 @@ class Priority(Enum):
     HIGH = 1  # Lower value = higher priority for heap queue
 
     def __lt__(self, other: object) -> bool:
+        """Support comparison for priority queue ordering."""
         if self.__class__ is other.__class__ and isinstance(other, Priority):
             return self.value < other.value
         return NotImplemented
@@ -27,10 +29,11 @@ class Priority(Enum):
 
 class GPULock:
     """Unified GPU lock with priority support and optional memory monitoring.
+
     Combines the best of all three implementations:
     - Priority queuing from priority_lock.py
     - Safety improvements from simplified_lock.py
-    - GPU memory monitoring from optimized_gpu_lock.py
+    - GPU memory monitoring from optimized_gpu_lock.py.
     """
 
     def __init__(self, memory_threshold_gb: float | None = None):
@@ -61,14 +64,14 @@ class GPULock:
     async def acquire(
         self,
         priority: Priority = Priority.MEDIUM,
-        timeout: float | None = 60.0,
+        timeout_seconds: float | None = 60.0,
         task_name: str | None = None,
     ) -> bool:
         """Acquire the lock with priority support.
 
         Args:
             priority: Priority level for this request
-            timeout: Maximum time to wait for lock
+            timeout_seconds: Maximum time to wait for lock
             task_name: Optional name for debugging
 
         Returns:
@@ -94,7 +97,7 @@ class GPULock:
 
         try:
             # Wait for our turn or timeout
-            remaining_timeout = timeout - (time.time() - start_time) if timeout else None
+            remaining_timeout = timeout_seconds - (time.time() - start_time) if timeout_seconds else None
             if remaining_timeout and remaining_timeout <= 0:
                 logger.warning(f"[GPU_LOCK] {request_id} timed out before queuing")
                 return False
@@ -106,13 +109,14 @@ class GPULock:
             self._current_owner = request_id
             self._acquisition_time = time.time()
             logger.info(f"[GPU_LOCK] {request_id} acquired lock after waiting")
-            return True
 
         except TimeoutError:
             logger.warning(f"[GPU_LOCK] {request_id} timed out waiting for lock")
             # Remove from queue
             # Note: This is simplified - in production we'd need proper queue cleanup
             return False
+        else:
+            return True
 
     def release(self):
         """Release the lock and notify next waiter."""
@@ -128,7 +132,8 @@ class GPULock:
         self._lock.release()
 
         # Wake up next highest priority waiter
-        _ = asyncio.create_task(self._wake_next_waiter())
+        asyncio.create_task(self._wake_next_waiter())  # noqa: RUF006
+        # Don't await, let it run in background
 
     async def _wake_next_waiter(self):
         """Wake up the next highest priority waiter."""
@@ -138,9 +143,10 @@ class GPULock:
                     request_id, event = await self._priority_queues[priority].get()
                     event.set()
                     logger.debug(f"[GPU_LOCK] Woke up {request_id}")
+                except Exception:
+                    logger.exception("[GPU_LOCK] Error waking waiter")
+                else:
                     return
-                except Exception as e:
-                    logger.error(f"[GPU_LOCK] Error waking waiter: {e}")
 
     def get_status(self) -> dict[str, Any]:
         """Get current lock status.
@@ -165,12 +171,13 @@ class GPULock:
         self,
         task_name: str = "inference",
         priority: Priority = Priority.HIGH,
-        timeout: float | None = 60.0,
+        timeout_seconds: float | None = 60.0,
     ):
         """Context manager for inference tasks (high priority by default).
+
         Compatible with the optimized_gpu_lock API.
         """
-        acquired = await self.acquire(priority=priority, timeout=timeout, task_name=task_name)
+        acquired = await self.acquire(priority=priority, timeout_seconds=timeout_seconds, task_name=task_name)
         if not acquired:
             raise TimeoutError(f"Failed to acquire GPU lock for {task_name}")
         try:
@@ -188,12 +195,12 @@ gpu_for_inference = gpu_lock.acquire_for_inference
 
 # For backward compatibility with SimpleLock/PriorityLock patterns
 class SafePriorityLock(GPULock):
-    """Alias for backward compatibility with simplified_lock.py"""
+    """Alias for backward compatibility with simplified_lock.py."""
 
     pass
 
 
 class PriorityLock(GPULock):
-    """Alias for backward compatibility with priority_lock.py"""
+    """Alias for backward compatibility with priority_lock.py."""
 
     pass

@@ -19,7 +19,8 @@ from token_manager import TokenManager
 
 # Import prometheus metrics if available
 try:
-    from prometheus_client import Counter, Gauge, Histogram
+    import prometheus_client  # noqa: F401
+
     PROMETHEUS_AVAILABLE = True
 except ImportError:
     PROMETHEUS_AVAILABLE = False
@@ -27,6 +28,10 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 # ===================== Configuration =====================
+
+# Error codes and constants
+ENOSPC_ERROR_CODE = 28  # No space left on device
+MAX_RESPONSE_LENGTH = 8000  # Maximum response length for memory processing
 
 # Llama initialization parameters
 LLAMA_INIT_PARAMS = {
@@ -60,10 +65,12 @@ if GENERATION_CONFIG["max_tokens"] is not None:
 
 # ===================== Redis-based State Management =====================
 
+
 class RedisStateManager:
     """Manages global state in Redis for multi-worker safety."""
 
     def __init__(self, redis_client):
+        """Initialize the Redis state manager with a Redis client."""
         self.redis_client = redis_client
         self.MEMORY_DISABLED_KEY = "system:memory_extraction_disabled"
         self.MEMORY_DISABLE_UNTIL_KEY = "system:memory_disable_until"
@@ -105,14 +112,16 @@ class RedisStateManager:
 
 # ===================== Application State =====================
 
+
 class ApplicationState:
     """Centralized application state management.
-    
+
     This class encapsulates all global state to avoid scattered globals
     and provide better control over initialization and access.
     """
 
     def __init__(self):
+        """Initialize the application state."""
         # Core services
         self.llm = None
         self.llm_error: str | None = None
@@ -192,7 +201,8 @@ class ApplicationState:
         )
 
         self.model_lock_held = Gauge(
-            "neural_chat_model_lock_held", "Whether the model lock is currently held (1=held, 0=free)"
+            "neural_chat_model_lock_held",
+            "Whether the model lock is currently held (1=held, 0=free)",
         )
 
         # Additional neural consciousness specific metrics
@@ -230,20 +240,23 @@ class ApplicationState:
             ["session_id"],
         )
 
+
 # Single instance of application state
 app_state = ApplicationState()
 
 
 # ===================== Background Processing State =====================
 
+
 class BackgroundProcessingState:
     """Centralized background processing state management.
-    
+
     This class encapsulates all background processing state to avoid
     scattered globals and provide better control.
     """
 
     def __init__(self):
+        """Initialize the background processing state."""
         # Task queues
         self.memory_extraction_queue = deque(maxlen=MAX_MEMORY_EXTRACTION_QUEUE_SIZE)
         self.embedding_queue = deque(maxlen=MAX_EMBEDDING_QUEUE_SIZE)
@@ -269,13 +282,11 @@ class BackgroundProcessingState:
 bg_state = BackgroundProcessingState()
 
 
-
-
-
 # ===================== Background Processing Classes =====================
 
+
 class MemoryExtractionTask:
-    """Represents a queued memory extraction task"""
+    """Represents a queued memory extraction task."""
 
     def __init__(
         self,
@@ -285,6 +296,7 @@ class MemoryExtractionTask:
         assistant_response: str,
         timestamp: float,
     ):
+        """Initialize a memory extraction task."""
         self.user_id = user_id
         self.session_id = session_id
         self.user_prompt = user_prompt
@@ -293,6 +305,7 @@ class MemoryExtractionTask:
         self.priority = 1.0  # Could be based on importance
 
     def __repr__(self):
+        """Return string representation of the task."""
         return f"MemoryTask({self.user_id}, {self.timestamp})"
 
 
@@ -302,10 +315,11 @@ EmbeddingTask = namedtuple("EmbeddingTask", ["user_id", "user_prompt", "model_re
 
 # ===================== Background Processing Functions =====================
 
+
 async def queue_memory_extraction_task(
     user_id: str, session_id: str, user_prompt: str, assistant_response: str, timestamp: float
 ):
-    """Queue a memory extraction task for intelligent background processing"""
+    """Queue a memory extraction task for intelligent background processing."""
     task = MemoryExtractionTask(user_id, session_id, user_prompt, assistant_response, timestamp)
 
     # Check if queue is at capacity before adding (for eviction logging)
@@ -319,7 +333,7 @@ async def queue_memory_extraction_task(
         )
 
     logger.debug(
-        f"Queued memory task, queue size: {len(memory_extraction_queue)}/{MAX_MEMORY_EXTRACTION_QUEUE_SIZE}"
+        f"Queued memory task, queue size: {len(bg_state.memory_extraction_queue)}/{MAX_MEMORY_EXTRACTION_QUEUE_SIZE}"
     )
 
     # Start background processor if not running
@@ -327,7 +341,7 @@ async def queue_memory_extraction_task(
 
 
 async def ensure_background_processor():
-    """Ensure the background processor is running"""
+    """Ensure the background processor is running."""
     if not bg_state.background_processor_running:
         bg_state.background_processor_running = True
         bg_state.background_processor_task = asyncio.create_task(intelligent_background_processor())
@@ -335,7 +349,7 @@ async def ensure_background_processor():
 
 
 async def intelligent_background_processor():
-    """INTELLIGENT GPU OPTIMIZATION ENGINE
+    """INTELLIGENT GPU OPTIMIZATION ENGINE.
 
     Monitors GPU usage and chat activity to optimally batch process
     memory extraction and embedding tasks when GPU resources are available.
@@ -351,77 +365,113 @@ async def intelligent_background_processor():
 
     try:
         while True:
-            # Check if we have any tasks to process
-            if not bg_state.memory_extraction_queue and not bg_state.embedding_queue:
-                await asyncio.sleep(1.0)  # Check every second
+            if await _should_wait_for_tasks():
                 continue
 
-            # Check if GPU is idle (no recent chat activity)
-            current_time = time.time()
-            time_since_last_chat = current_time - bg_state.last_chat_activity
+            if await _should_wait_for_gpu_idle():
+                continue
 
-            if time_since_last_chat >= bg_state.gpu_idle_threshold:
-                # GPU is idle - start batch processing
-                memory_batch = []
-                embedding_batch = []
-
-                # Collect a batch of memory tasks (up to BATCH_SIZE)
-                while bg_state.memory_extraction_queue and len(memory_batch) < bg_state.batch_size:
-                    memory_batch.append(bg_state.memory_extraction_queue.popleft())
-
-                # Collect a batch of embedding tasks
-                while bg_state.embedding_queue and len(embedding_batch) < bg_state.batch_size:
-                    embedding_batch.append(bg_state.embedding_queue.popleft())
-
-                # Process memory tasks first (higher priority)
-                if memory_batch:
-                    logger.debug(f"Processing batch of {len(memory_batch)} memory tasks")
-                    await process_memory_batch(memory_batch)
-                    logger.debug(f"Memory batch complete - {len(bg_state.memory_extraction_queue)} remaining")
-
-                # Process embedding tasks (lower priority, SEGFAULT protection)
-                if embedding_batch:
-                    logger.info(f"SEGFAULT PROTECTION - Processing batch of {len(embedding_batch)} embedding tasks")
-                    await process_embedding_batch(embedding_batch)
-                    logger.info(f"Embedding batch complete - {len(bg_state.embedding_queue)} tasks remaining")
-            else:
-                # GPU busy with chat - wait for idle period
-                wait_time = bg_state.gpu_idle_threshold - time_since_last_chat
-                logger.debug(f"Waiting {wait_time:.1f}s for GPU idle period")
-                await asyncio.sleep(min(wait_time, 1.0))
+            await _process_gpu_idle_batches()
 
     except asyncio.CancelledError:
         logger.info("Background processor cancelled")
         raise
-    except OSError as e:
-        logger.error(f"Background processor I/O error: {e}")
-        # Specific handling for file system errors
-        if e.errno == 28:  # No space left on device
-            logger.critical("Disk full - pausing background processing")
-            await asyncio.sleep(300)  # Wait 5 minutes
-    except RuntimeError as e:
-        logger.error(f"Background processor runtime error: {e}")
-        # Specific handling for runtime errors
-        if "cannot schedule new futures" in str(e):
-            logger.critical("Event loop closed - stopping processor")
-            return
-    except MemoryError as e:
-        logger.critical(f"Out of memory in background processor: {e}")
-        # Clear queues to free memory
-        bg_state.memory_extraction_queue.clear()
-        bg_state.embedding_queue.clear()
     except Exception as e:
-        # Log unexpected errors with full traceback
-        logger.error(f"Background processor unexpected error: {type(e).__name__}: {e}", exc_info=True)
-        # Continue processing after a delay
-        await asyncio.sleep(5)
+        await _handle_processor_error(e)
     finally:
         bg_state.background_processor_running = False
         logger.info("Background processor stopped")
 
 
+async def _should_wait_for_tasks() -> bool:
+    """Check if we need to wait for tasks to be available."""
+    if not bg_state.memory_extraction_queue and not bg_state.embedding_queue:
+        await asyncio.sleep(1.0)
+        return True
+    return False
+
+
+async def _should_wait_for_gpu_idle() -> bool:
+    """Check if we need to wait for GPU to be idle."""
+    current_time = time.time()
+    time_since_last_chat = current_time - bg_state.last_chat_activity
+
+    if time_since_last_chat < bg_state.gpu_idle_threshold:
+        wait_time = bg_state.gpu_idle_threshold - time_since_last_chat
+        logger.debug(f"Waiting {wait_time:.1f}s for GPU idle period")
+        await asyncio.sleep(min(wait_time, 1.0))
+        return True
+    return False
+
+
+async def _process_gpu_idle_batches():
+    """Process batches when GPU is idle."""
+    memory_batch, embedding_batch = _collect_task_batches()
+
+    if memory_batch:
+        logger.debug(f"Processing batch of {len(memory_batch)} memory tasks")
+        await process_memory_batch(memory_batch)
+        logger.debug(f"Memory batch complete - {len(bg_state.memory_extraction_queue)} remaining")
+
+    if embedding_batch:
+        logger.info(f"SEGFAULT PROTECTION - Processing batch of {len(embedding_batch)} embedding tasks")
+        await process_embedding_batch(embedding_batch)
+        logger.info(f"Embedding batch complete - {len(bg_state.embedding_queue)} tasks remaining")
+
+
+def _collect_task_batches() -> tuple[list, list]:
+    """Collect batches of memory and embedding tasks."""
+    memory_batch = []
+    embedding_batch = []
+
+    while bg_state.memory_extraction_queue and len(memory_batch) < bg_state.batch_size:
+        memory_batch.append(bg_state.memory_extraction_queue.popleft())
+
+    while bg_state.embedding_queue and len(embedding_batch) < bg_state.batch_size:
+        embedding_batch.append(bg_state.embedding_queue.popleft())
+
+    return memory_batch, embedding_batch
+
+
+async def _handle_processor_error(e: Exception):
+    """Handle different types of processor errors."""
+    if isinstance(e, OSError):
+        await _handle_os_error(e)
+    elif isinstance(e, RuntimeError):
+        await _handle_runtime_error(e)
+    elif isinstance(e, MemoryError):
+        await _handle_memory_error(e)
+    else:
+        logger.error(f"Background processor unexpected error: {type(e).__name__}: {e}", exc_info=True)
+        await asyncio.sleep(5)
+
+
+async def _handle_os_error(e: OSError):
+    """Handle OS errors in background processor."""
+    logger.exception("Background processor I/O error")
+    if e.errno == ENOSPC_ERROR_CODE:
+        logger.critical("Disk full - pausing background processing")
+        await asyncio.sleep(300)
+
+
+async def _handle_runtime_error(e: RuntimeError):
+    """Handle runtime errors in background processor."""
+    logger.exception("Background processor runtime error")
+    if "cannot schedule new futures" in str(e):
+        logger.critical("Event loop closed - stopping processor")
+        return
+
+
+async def _handle_memory_error(e: MemoryError):
+    """Handle memory errors in background processor."""
+    logger.critical(f"Out of memory in background processor: {e}")
+    bg_state.memory_extraction_queue.clear()
+    bg_state.embedding_queue.clear()
+
+
 async def process_memory_batch(batch: list[MemoryExtractionTask]):
     """Process a batch of memory extraction tasks efficiently.
+
     Uses 100% GPU resources for optimal throughput.
     """
     if not batch:
@@ -432,7 +482,7 @@ async def process_memory_batch(batch: list[MemoryExtractionTask]):
     for task in batch:
         try:
             # CRASH PROTECTION: Skip processing very long responses
-            if len(task.assistant_response) > 8000:
+            if len(task.assistant_response) > MAX_RESPONSE_LENGTH:
                 logger.warning(
                     f"CRASH PROTECTION: Skipping memory processing for very long response "
                     f"({len(task.assistant_response)} chars)"
@@ -458,25 +508,27 @@ async def process_memory_batch(batch: list[MemoryExtractionTask]):
 
                         logger.debug(f"Memories stored for session {task.session_id}")
                     except TimeoutError:
-                        logger.error(f"DEADLOCK PROTECTION: Memory extraction timed out for {task.user_id}")
+                        logger.exception(
+                            f"DEADLOCK PROTECTION: Memory extraction timed out for {task.user_id}"
+                        )
                         # Continue processing other tasks even if one times out
                         continue
                     except MemoryError as e:
                         logger.critical(f"Out of memory during extraction for {task.user_id}: {e}")
                         # Skip remaining tasks to prevent further memory issues
                         break
-                    except ValueError as e:
-                        logger.error(f"Invalid data for {task.user_id}: {e}")
+                    except ValueError:
+                        logger.exception(f"Invalid data for {task.user_id}")
                         continue
                     except Exception as memory_error:
-                        logger.error(
+                        logger.exception(
                             f"CRASH PROTECTION: Memory extraction failed for {task.user_id}: "
-                            f"{type(memory_error).__name__}: {memory_error}"
+                            f"{type(memory_error).__name__}"
                         )
                         # Continue processing other tasks even if one fails
                         continue
-        except Exception as task_error:
-            logger.error(f"CRASH PROTECTION: Task processing failed: {task_error}")
+        except Exception:
+            logger.exception("CRASH PROTECTION: Task processing failed")
             # Continue with next task
 
 
@@ -492,13 +544,10 @@ async def process_embedding_batch(batch):
             # Process embedding task here
             # Implementation depends on specific embedding requirements
             logger.debug(f"Processing embedding for user {task.user_id}")
-        except (ValueError, TypeError) as e:
-            logger.error(f"Invalid embedding data for {task.user_id}: {e}")
+        except (ValueError, TypeError):
+            logger.exception(f"Invalid embedding data for {task.user_id}")
         except MemoryError as e:
             logger.critical(f"Out of memory processing embedding for {task.user_id}: {e}")
             break  # Stop processing to prevent further issues
         except Exception as e:
-            logger.error(
-                f"Embedding processing failed for {task.user_id}: "
-                f"{type(e).__name__}: {e}"
-            )
+            logger.exception(f"Embedding processing failed for {task.user_id}: {type(e).__name__}")

@@ -1,4 +1,5 @@
-"""Embedding Service
+"""Embedding Service.
+
 =================
 
 GPU-accelerated embedding generation with Redis integration.
@@ -26,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 
 class EmbeddingService:
-    """Service for generating and managing embeddings"""
+    """Service for generating and managing embeddings."""
 
     def __init__(
         self,
@@ -34,7 +35,7 @@ class EmbeddingService:
         executor: ThreadPoolExecutor | None = None,
         config_path: str = "config/models.yaml",
     ):
-        """Initialize embedding service
+        """Initialize embedding service.
 
         Args:
             redis_client: Async Redis client
@@ -69,12 +70,12 @@ class EmbeddingService:
         self.ltm_index = "idx:ltm_vectors"
 
     def _load_config(self, config_path: str) -> dict:
-        """Load model configuration"""
-        with open(Path(__file__).parent.parent / config_path) as f:
-            return yaml.safe_load(f)
+        """Load model configuration."""
+        config_file = Path(__file__).parent.parent / config_path
+        return yaml.safe_load(config_file.read_text())
 
     async def initialize(self):
-        """Initialize the embedding service"""
+        """Initialize the embedding service."""
         # Load model
         await self._ensure_model_loaded()
 
@@ -85,13 +86,13 @@ class EmbeddingService:
         try:
             await self.redis.xgroup_create(self.stream_key, self.consumer_group, id="0")
         except Exception:
-            # Group already exists
-            pass
+            # Group already exists - this is expected and safe to ignore
+            logger.debug("Consumer group already exists")
 
         logger.info("Embedding service initialized")
 
     async def _ensure_model_loaded(self):
-        """Ensure embedding model is loaded"""
+        """Ensure embedding model is loaded."""
         async with self._model_lock:
             if self.model is None:
                 loop = asyncio.get_event_loop()
@@ -105,7 +106,7 @@ class EmbeddingService:
                 logger.info(f"Loaded embedding model with dimension {self.vector_dimension}")
 
     async def _create_vector_indices(self):
-        """Create vector search indices in Redis"""
+        """Create vector search indices in Redis."""
         await self._ensure_model_loaded()
 
         # STM Index
@@ -147,7 +148,7 @@ class EmbeddingService:
         )
 
     async def _create_index(self, index_name: str, prefix: str, schema: list):
-        """Create a single index with error handling"""
+        """Create a single index with error handling."""
         try:
             # Check if index exists
             await self.redis.ft(index_name).info()
@@ -159,11 +160,11 @@ class EmbeddingService:
                     schema, definition=IndexDefinition(prefix=[prefix], index_type=IndexType.JSON)
                 )
                 logger.info(f"Created vector index: {index_name}")
-            except Exception as e:
-                logger.error(f"Failed to create index {index_name}: {e}")
+            except Exception:
+                logger.exception(f"Failed to create index {index_name}")
 
     async def generate_embedding(self, text: str) -> list[float]:
-        """Generate embedding for a single text"""
+        """Generate embedding for a single text."""
         # Check cache first
         if self.cache and text in self.cache:
             self.metrics.increment_counter("cache_hits")
@@ -182,7 +183,7 @@ class EmbeddingService:
             return embedding
 
     async def _generate_single_embedding(self, text: str) -> list[float]:
-        """Generate embedding using the model"""
+        """Generate embedding using the model."""
         await self._ensure_model_loaded()
 
         loop = asyncio.get_event_loop()
@@ -202,7 +203,7 @@ class EmbeddingService:
         return embedding.astype(np.float32).tolist()
 
     async def generate_embeddings_batch(self, texts: list[str]) -> list[list[float]]:
-        """Generate embeddings for multiple texts efficiently"""
+        """Generate embeddings for multiple texts efficiently."""
         if not texts:
             return []
 
@@ -250,11 +251,11 @@ class EmbeddingService:
             return results
 
     async def queue_for_embedding(self, memory_id: str, content: str):
-        """Queue a memory for batch embedding processing"""
+        """Queue a memory for batch embedding processing."""
         await self.redis.xadd(self.stream_key, {"memory_id": memory_id, "content": content})
 
     async def process_embedding_queue(self):
-        """Process queued embeddings in batches"""
+        """Process queued embeddings in batches."""
         batch_size = self.config["embedding"]["primary"]["batch_size"]
 
         while True:
@@ -308,8 +309,8 @@ class EmbeddingService:
 
                 logger.info(f"Processed batch of {len(batch_items)} embeddings")
 
-            except Exception as e:
-                logger.error(f"Error processing embedding queue: {e}")
+            except Exception:
+                logger.exception("Error processing embedding queue")
                 await asyncio.sleep(5)  # Back off on error
 
     async def vector_search(
@@ -319,7 +320,7 @@ class EmbeddingService:
         limit: int = 10,
         filters: dict[str, Any] | None = None,
     ) -> list[dict]:
-        """Perform vector similarity search
+        """Perform vector similarity search.
 
         Args:
             query_embedding: Query vector
@@ -377,7 +378,7 @@ class EmbeddingService:
         return formatted_results
 
     async def reindex_memories(self, memory_type: str = "all"):
-        """Reindex memories with new embeddings (for model updates)"""
+        """Reindex memories with new embeddings (for model updates)."""
         logger.info(f"Starting reindexing for {memory_type} memories")
 
         patterns = []
@@ -405,22 +406,22 @@ class EmbeddingService:
                         if total_reindexed % 100 == 0:
                             logger.info(f"Reindexed {total_reindexed} memories")
 
-                except Exception as e:
-                    logger.error(f"Failed to reindex {key}: {e}")
+                except Exception:
+                    logger.exception(f"Failed to reindex {key}")
 
         logger.info(f"Reindexing complete. Total: {total_reindexed}")
 
         return total_reindexed
 
     async def shutdown(self):
-        """Cleanup resources"""
+        """Cleanup resources."""
         self.executor.shutdown(wait=True)
         logger.info("Embedding service shutdown complete")
 
 
 # Factory function
 async def create_embedding_service(redis_url: str = "redis://localhost:6379") -> EmbeddingService:
-    """Create and initialize embedding service"""
+    """Create and initialize embedding service."""
     redis_client = await redis.from_url(redis_url)
     service = EmbeddingService(redis_client)
     await service.initialize()

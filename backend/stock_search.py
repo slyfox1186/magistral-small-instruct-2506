@@ -21,7 +21,7 @@ Author: Claude Code
 import asyncio
 import logging
 from dataclasses import asdict, dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import numpy as np
@@ -33,8 +33,7 @@ from colored_logging import ColorCodes
 
 # Configure logging with better format
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -45,10 +44,16 @@ DEFAULT_INTERVAL = "1d"
 MAX_RETRIES = 3
 RETRY_DELAY = 1  # seconds
 
+# Market cap thresholds
+TRILLION_THRESHOLD = 1e12
+BILLION_THRESHOLD = 1e9
+MILLION_THRESHOLD = 1e6
+
 
 @dataclass
 class StockQuote:
     """Enhanced data class for stock quote information."""
+
     symbol: str
     name: str
     price: float
@@ -75,6 +80,7 @@ class StockQuote:
 @dataclass
 class FinancialSummary:
     """Summary of key financial metrics."""
+
     revenue: float | None = None
     revenue_growth: float | None = None
     gross_margin: float | None = None
@@ -107,7 +113,7 @@ class EnhancedStockSearch:
         """Get data from cache if not expired."""
         if key in self._cache:
             data, timestamp = self._cache[key]
-            if datetime.now() - timestamp < self.cache_duration:
+            if datetime.now(UTC) - timestamp < self.cache_duration:
                 return data
             else:
                 del self._cache[key]
@@ -115,13 +121,13 @@ class EnhancedStockSearch:
 
     def _set_cache(self, key: str, data: Any) -> None:
         """Set data in cache with timestamp."""
-        self._cache[key] = (data, datetime.now())
+        self._cache[key] = (data, datetime.now(UTC))
 
     def clear_cache(self, symbol: str | None = None) -> None:
         """Clear cache for specific symbol or all."""
         if symbol:
             symbol = symbol.upper()
-            keys_to_delete = [k for k in self._cache.keys() if symbol in k]
+            keys_to_delete = [k for k in self._cache if symbol in k]
             for key in keys_to_delete:
                 del self._cache[key]
             if symbol in self._tickers_cache:
@@ -137,11 +143,11 @@ class EnhancedStockSearch:
 
     def get_stock_quote(self, symbol: str, use_fast_info: bool = True) -> StockQuote | None:
         """Get current stock quote with improved error handling and caching.
-        
+
         Args:
             symbol: Stock ticker symbol
             use_fast_info: Use fast_info for quicker access (when available)
-            
+
         Returns:
             StockQuote object or None if error
         """
@@ -166,17 +172,23 @@ class EnhancedStockSearch:
                         name=symbol,  # fast_info doesn't have name
                         price=fast.get("lastPrice", 0),
                         change=fast.get("lastPrice", 0) - fast.get("previousClose", 0),
-                        change_percent=((fast.get("lastPrice", 0) - fast.get("previousClose", 0)) /
-                                      fast.get("previousClose", 1) * 100),
+                        change_percent=(
+                            (fast.get("lastPrice", 0) - fast.get("previousClose", 0))
+                            / fast.get("previousClose", 1)
+                            * 100
+                        ),
                         volume=fast.get("lastVolume", 0),
                         market_cap=fast.get("marketCap"),
-                        last_updated=datetime.now()
+                        last_updated=datetime.now(UTC),
                     )
                     self._set_cache(cache_key, quote)
                     logger.info(f"Retrieved fast quote for {symbol}: ${quote.price:.2f}")
-                    return quote
                 except Exception as e:
-                    logger.warning(f"Fast info failed for {symbol}, falling back to regular info: {e}")
+                    logger.warning(
+                        f"Fast info failed for {symbol}, falling back to regular info: {e}"
+                    )
+                else:
+                    return quote
 
             # Fall back to regular info
             info = ticker.info
@@ -211,23 +223,24 @@ class EnhancedStockSearch:
                 day_low=info.get("dayLow"),
                 fifty_two_week_high=info.get("fiftyTwoWeekHigh"),
                 fifty_two_week_low=info.get("fiftyTwoWeekLow"),
-                last_updated=datetime.now()
+                last_updated=datetime.now(UTC),
             )
 
             self._set_cache(cache_key, quote)
             logger.info(f"Retrieved quote for {symbol}: ${current_price:.2f}")
-            return quote
 
-        except Exception as e:
-            logger.error(f"Error retrieving quote for {symbol}: {e!s}")
+        except Exception:
+            logger.exception(f"Error retrieving quote for {symbol}")
             return None
+        else:
+            return quote
 
     def get_multiple_quotes(self, symbols: list[str]) -> dict[str, StockQuote]:
         """Get quotes for multiple symbols efficiently using Tickers class.
-        
+
         Args:
             symbols: List of stock ticker symbols
-            
+
         Returns:
             Dictionary mapping symbols to StockQuote objects
         """
@@ -238,17 +251,18 @@ class EnhancedStockSearch:
 
             for symbol in symbols:
                 if symbol in tickers.tickers:
-                    ticker = tickers.tickers[symbol]
+                    tickers.tickers[symbol]
                     quote = self.get_stock_quote(symbol)
                     if quote:
                         quotes[symbol] = quote
 
             logger.info(f"Retrieved quotes for {len(quotes)} out of {len(symbols)} symbols")
-            return quotes
 
-        except Exception as e:
-            logger.error(f"Error retrieving multiple quotes: {e!s}")
+        except Exception:
+            logger.exception("Error retrieving multiple quotes")
             return {}
+        else:
+            return quotes
 
     def download_historical_data(
         self,
@@ -261,12 +275,12 @@ class EnhancedStockSearch:
         auto_adjust: bool = True,
         prepost: bool = False,
         threads: bool = True,
-        progress: bool = False
+        progress: bool = False,
     ) -> pd.DataFrame | None:
         """Download historical data for one or more symbols using yf.download.
-        
+
         This is more efficient than individual ticker.history() calls for multiple symbols.
-        
+
         Args:
             symbols: Single symbol or list of symbols
             start: Start date (YYYY-MM-DD)
@@ -278,7 +292,7 @@ class EnhancedStockSearch:
             prepost: Include pre and post market data
             threads: Use threads for mass downloading
             progress: Show progress bar
-            
+
         Returns:
             DataFrame with historical data or None if error
         """
@@ -304,7 +318,7 @@ class EnhancedStockSearch:
                 auto_adjust=auto_adjust,
                 prepost=prepost,
                 threads=threads,
-                progress=progress
+                progress=progress,
             )
 
             if data.empty:
@@ -317,11 +331,11 @@ class EnhancedStockSearch:
 
             self._set_cache(cache_key, data)
             logger.info(f"Downloaded {len(data)} records for {symbols}")
-            return data
-
-        except Exception as e:
-            logger.error(f"Error downloading historical data: {e!s}")
+        except Exception:
+            logger.exception("Error downloading historical data")
             return None
+        else:
+            return data
 
     def _add_technical_indicators(self, data: pd.DataFrame, symbols: list[str]) -> pd.DataFrame:
         """Add technical indicators to historical data."""
@@ -354,10 +368,10 @@ class EnhancedStockSearch:
 
     def get_financial_summary(self, symbol: str) -> FinancialSummary:
         """Get summarized financial metrics for easy consumption.
-        
+
         Args:
             symbol: Stock ticker symbol
-            
+
         Returns:
             FinancialSummary object with key metrics
         """
@@ -375,22 +389,22 @@ class EnhancedStockSearch:
                 roe=info.get("returnOnEquity"),
                 debt_to_equity=info.get("debtToEquity"),
                 current_ratio=info.get("currentRatio"),
-                quick_ratio=info.get("quickRatio")
+                quick_ratio=info.get("quickRatio"),
             )
 
+        except Exception:
+            logger.exception(f"Error retrieving financial summary for {symbol}")
+            return FinancialSummary()
+        else:
             logger.info(f"Retrieved financial summary for {symbol}")
             return summary
 
-        except Exception as e:
-            logger.error(f"Error retrieving financial summary for {symbol}: {e!s}")
-            return FinancialSummary()
-
     def get_earnings_calendar(self, symbol: str) -> pd.DataFrame | None:
         """Get earnings calendar and estimates.
-        
+
         Args:
             symbol: Stock ticker symbol
-            
+
         Returns:
             DataFrame with earnings dates and estimates
         """
@@ -404,19 +418,21 @@ class EnhancedStockSearch:
                 logger.info(f"Retrieved {len(earnings_dates)} earnings dates for {symbol}")
                 return earnings_dates
 
+        except Exception:
+            logger.exception(f"Error retrieving earnings calendar for {symbol}")
+            return None
+        else:
             return None
 
-        except Exception as e:
-            logger.error(f"Error retrieving earnings calendar for {symbol}: {e!s}")
-            return None
-
-    def get_options_chain(self, symbol: str, date: str | None = None) -> tuple[pd.DataFrame, pd.DataFrame] | None:
+    def get_options_chain(
+        self, symbol: str, date: str | None = None
+    ) -> tuple[pd.DataFrame, pd.DataFrame] | None:
         """Get options chain data.
-        
+
         Args:
             symbol: Stock ticker symbol
             date: Specific expiration date (optional)
-            
+
         Returns:
             Tuple of (calls, puts) DataFrames or None
         """
@@ -436,19 +452,19 @@ class EnhancedStockSearch:
             # Get options chain
             opt = ticker.option_chain(exp_date)
 
+        except Exception:
+            logger.exception(f"Error retrieving options chain for {symbol}")
+            return None
+        else:
             logger.info(f"Retrieved options chain for {symbol} expiring {exp_date}")
             return (opt.calls, opt.puts)
 
-        except Exception as e:
-            logger.error(f"Error retrieving options chain for {symbol}: {e!s}")
-            return None
-
     def get_institutional_holders(self, symbol: str) -> pd.DataFrame | None:
         """Get institutional holders with proper error handling.
-        
+
         Args:
             symbol: Stock ticker symbol
-            
+
         Returns:
             DataFrame with institutional holders or None
         """
@@ -468,19 +484,19 @@ class EnhancedStockSearch:
                 logger.info(f"Retrieved {len(inst_holders)} institutional holders for {symbol}")
                 return inst_holders
 
+        except Exception:
+            logger.exception(f"Error retrieving institutional holders for {symbol}")
             return None
-
-        except Exception as e:
-            logger.error(f"Error retrieving institutional holders for {symbol}: {e!s}")
+        else:
             return None
 
     def search_symbols(self, query: str, first: int = 10) -> list[dict[str, Any]]:
         """Search for symbols using direct validation - no regex patterns or truncation.
-        
+
         Args:
             query: Search query (should be exact ticker symbol from LLM)
             first: Maximum number of results
-            
+
         Returns:
             List of matching symbols with basic info
         """
@@ -495,14 +511,18 @@ class EnhancedStockSearch:
                 info = ticker_obj.info
 
                 # Check if we got valid data
-                if info and 'symbol' in info:
-                    results.append({
-                        "symbol": info.get('symbol', query),
-                        "name": info.get('longName', info.get('shortName', query)),
-                        "type": "stock",
-                        "exchange": info.get('exchange', 'Unknown')
-                    })
-                    logger.info(f"✅ Found valid symbol: {query} - {info.get('longName', 'Unknown')}")
+                if info and "symbol" in info:
+                    results.append(
+                        {
+                            "symbol": info.get("symbol", query),
+                            "name": info.get("longName", info.get("shortName", query)),
+                            "type": "stock",
+                            "exchange": info.get("exchange", "Unknown"),
+                        }
+                    )
+                    logger.info(
+                        f"✅ Found valid symbol: {query} - {info.get('longName', 'Unknown')}"
+                    )
                 else:
                     logger.warning(f"❌ Symbol {query} returned no valid data")
 
@@ -514,10 +534,10 @@ class EnhancedStockSearch:
 
     def validate_symbols(self, symbols: list[str]) -> dict[str, bool]:
         """Validate if symbols exist and have data.
-        
+
         Args:
             symbols: List of symbols to validate
-            
+
         Returns:
             Dictionary mapping symbols to validity status
         """
@@ -531,11 +551,13 @@ class EnhancedStockSearch:
                 info = ticker.info
 
                 # Check if we got valid data
-                is_valid = bool(info and len(info) > 1 and 'symbol' in info)
+                is_valid = bool(info and len(info) > 1 and "symbol" in info)
                 results[symbol] = is_valid
 
                 if is_valid:
-                    logger.info(f"✅ Symbol {symbol_upper} is valid: {info.get('longName', info.get('shortName', 'Unknown'))}")
+                    logger.info(
+                        f"✅ Symbol {symbol_upper} is valid: {info.get('longName', info.get('shortName', 'Unknown'))}"
+                    )
                 else:
                     logger.warning(f"❌ Symbol {symbol_upper} returned no valid data")
 
@@ -547,150 +569,166 @@ class EnhancedStockSearch:
         logger.info(f"Validated {valid_count} out of {len(symbols)} symbols: {results}")
         return results
 
-    def format_stock_data_with_sources(self, symbols: list[str]) -> tuple[str, list[dict[str, str]]]:
+    def _format_change_strings(self, quote) -> tuple[str, str]:
+        """Format change and percentage change strings with color."""
+        if quote.change > 0:
+            change_str = f"{ColorCodes.GREEN}+${quote.change:.2f}{ColorCodes.RESET}"
+            pct_str = f"{ColorCodes.GREEN}+{quote.change_percent:.2f}%{ColorCodes.RESET}"
+        elif quote.change < 0:
+            change_str = f"{ColorCodes.RED}${quote.change:.2f}{ColorCodes.RESET}"
+            pct_str = f"{ColorCodes.RED}{quote.change_percent:.2f}%{ColorCodes.RESET}"
+        else:
+            change_str = f"{ColorCodes.BRIGHT_BLACK}$0.00{ColorCodes.RESET}"
+            pct_str = f"{ColorCodes.BRIGHT_BLACK}0.00%{ColorCodes.RESET}"
+        return change_str, pct_str
+
+    def _format_market_cap(self, market_cap) -> str:
+        """Format market cap with appropriate units and color."""
+        if not market_cap:
+            return f"{ColorCodes.BRIGHT_BLACK}N/A{ColorCodes.RESET}"
+
+        if market_cap >= TRILLION_THRESHOLD:
+            return f"{ColorCodes.MAGENTA}${market_cap / TRILLION_THRESHOLD:.2f} Trillion{ColorCodes.RESET}"
+        elif market_cap >= BILLION_THRESHOLD:
+            return f"{ColorCodes.MAGENTA}${market_cap / BILLION_THRESHOLD:.2f} Billion{ColorCodes.RESET}"
+        elif market_cap >= MILLION_THRESHOLD:
+            return f"{ColorCodes.MAGENTA}${market_cap / MILLION_THRESHOLD:.2f} Million{ColorCodes.RESET}"
+        else:
+            return f"{ColorCodes.MAGENTA}${market_cap:,.0f}{ColorCodes.RESET}"
+
+    def _format_table_row(self, symbol: str, quote) -> str:
+        """Format a single table row for stock data."""
+        colored_symbol = f"{ColorCodes.BRIGHT_YELLOW}{symbol}{ColorCodes.RESET}"
+        price_str = f"{ColorCodes.BOLD}{ColorCodes.WHITE}${quote.price:.2f}{ColorCodes.RESET}"
+        change_str, pct_str = self._format_change_strings(quote)
+
+        volume_str = (
+            f"{ColorCodes.CYAN}{quote.volume:,}{ColorCodes.RESET}"
+            if quote.volume
+            else f"{ColorCodes.BRIGHT_BLACK}N/A{ColorCodes.RESET}"
+        )
+
+        mcap_str = self._format_market_cap(quote.market_cap)
+
+        return (
+            f"| {colored_symbol}     | {quote.name[:30]} | {price_str} | "
+            f"{change_str}   | {pct_str}     | {volume_str}    | {mcap_str}|"
+        )
+
+    def _create_source_entry(self, symbol: str, quote) -> dict[str, str]:
+        """Create a source entry for a stock quote."""
+        return {
+            "symbol": symbol,
+            "name": quote.name,
+            "url": f"https://finance.yahoo.com/quote/{symbol}",
+            "title": f"{quote.name} ({symbol}) Stock Quote",
+            "source": "Yahoo Finance",
+        }
+
+    def _add_summary_statistics(self, formatted_data: str, quotes: dict) -> str:
+        """Add colorized summary statistics if multiple quotes."""
+        if len(quotes) <= 1:
+            return formatted_data
+
+        avg_change = sum(q.change_percent for q in quotes.values() if q) / len(quotes)
+
+        if avg_change > 0:
+            avg_color, avg_prefix = ColorCodes.GREEN, "+"
+        elif avg_change < 0:
+            avg_color, avg_prefix = ColorCodes.RED, ""
+        else:
+            avg_color, avg_prefix = ColorCodes.BRIGHT_BLACK, ""
+
+        return (
+            f"{formatted_data}\n\n**Average Change**: "
+            f"{avg_color}{avg_prefix}{avg_change:.2f}%{ColorCodes.RESET}"
+        )
+
+    def format_stock_data_with_sources(
+        self, symbols: list[str]
+    ) -> tuple[str, list[dict[str, str]]]:
         """Format stock data as a colorized markdown table with sources.
-        
+
         Args:
             symbols: List of stock ticker symbols
-            
+
         Returns:
             Tuple of (formatted_markdown_table, sources_list)
         """
         try:
             logger.info(f"📊 Formatting stock data for symbols: {symbols}")
-
-            # Get quotes for all symbols
             quotes = self.get_multiple_quotes(symbols)
-
             logger.info(f"📊 Retrieved quotes for {len(quotes)} symbols: {list(quotes.keys())}")
 
             if not quotes:
                 return "No stock data available for the requested symbols.", []
 
-            # Build colorized markdown table with headers
+            # Build table headers
             table_lines = [
                 f"| {ColorCodes.BOLD}{ColorCodes.BLUE}Symbol{ColorCodes.RESET} | {ColorCodes.BOLD}{ColorCodes.BLUE}Name{ColorCodes.RESET} | {ColorCodes.BOLD}{ColorCodes.BLUE}Price{ColorCodes.RESET} | {ColorCodes.BOLD}{ColorCodes.BLUE}Change{ColorCodes.RESET} | {ColorCodes.BOLD}{ColorCodes.BLUE}% Change{ColorCodes.RESET} | {ColorCodes.BOLD}{ColorCodes.BLUE}Volume{ColorCodes.RESET} | {ColorCodes.BOLD}{ColorCodes.BLUE}Market Cap{ColorCodes.RESET} |",
-                "|:---------|:---------------|:------------|:-----------|:-------------|:----------------|:---------------|"
+                "|:---------|:---------------|:------------|:-----------|:-------------|:----------------|:---------------|",
             ]
 
             sources = []
-
             for symbol, quote in quotes.items():
                 if quote:
-                    # Color symbol in bright yellow
-                    colored_symbol = f"{ColorCodes.BRIGHT_YELLOW}{symbol}{ColorCodes.RESET}"
-
-                    # Color price in bold white
-                    price_str = f"{ColorCodes.BOLD}{ColorCodes.WHITE}${quote.price:.2f}{ColorCodes.RESET}"
-
-                    # Color change based on positive/negative
-                    if quote.change > 0:
-                        change_str = f"{ColorCodes.GREEN}+${quote.change:.2f}{ColorCodes.RESET}"
-                        pct_str = f"{ColorCodes.GREEN}+{quote.change_percent:.2f}%{ColorCodes.RESET}"
-                    elif quote.change < 0:
-                        change_str = f"{ColorCodes.RED}${quote.change:.2f}{ColorCodes.RESET}"
-                        pct_str = f"{ColorCodes.RED}{quote.change_percent:.2f}%{ColorCodes.RESET}"
-                    else:
-                        change_str = f"{ColorCodes.BRIGHT_BLACK}$0.00{ColorCodes.RESET}"
-                        pct_str = f"{ColorCodes.BRIGHT_BLACK}0.00%{ColorCodes.RESET}"
-
-                    # Color volume in cyan
-                    if quote.volume:
-                        volume_str = f"{ColorCodes.CYAN}{quote.volume:,}{ColorCodes.RESET}"
-                    else:
-                        volume_str = f"{ColorCodes.BRIGHT_BLACK}N/A{ColorCodes.RESET}"
-
-                    # Format and color market cap in magenta
-                    if quote.market_cap:
-                        if quote.market_cap >= 1e12:
-                            mcap_str = f"{ColorCodes.MAGENTA}${quote.market_cap/1e12:.2f} Trillion{ColorCodes.RESET}"
-                        elif quote.market_cap >= 1e9:
-                            mcap_str = f"{ColorCodes.MAGENTA}${quote.market_cap/1e9:.2f} Billion{ColorCodes.RESET}"
-                        elif quote.market_cap >= 1e6:
-                            mcap_str = f"{ColorCodes.MAGENTA}${quote.market_cap/1e6:.2f} Million{ColorCodes.RESET}"
-                        else:
-                            mcap_str = f"{ColorCodes.MAGENTA}${quote.market_cap:,.0f}{ColorCodes.RESET}"
-                    else:
-                        mcap_str = f"{ColorCodes.BRIGHT_BLACK}N/A{ColorCodes.RESET}"
-
-                    # Add table row with proper alignment
-                    table_lines.append(
-                        f"| {colored_symbol}     | {quote.name[:30]} | {price_str} | "
-                        f"{change_str}   | {pct_str}     | {volume_str}    | {mcap_str}|"
-                    )
-
-                    # Add source
-                    sources.append({
-                        "symbol": symbol,
-                        "name": quote.name,
-                        "url": f"https://finance.yahoo.com/quote/{symbol}",
-                        "title": f"{quote.name} ({symbol}) Stock Quote",
-                        "source": "Yahoo Finance"
-                    })
+                    table_lines.append(self._format_table_row(symbol, quote))
+                    sources.append(self._create_source_entry(symbol, quote))
 
             formatted_data = "\n".join(table_lines)
-
-            # Add colorized summary statistics
-            if len(quotes) > 1:
-                avg_change = sum(q.change_percent for q in quotes.values() if q) / len(quotes)
-                if avg_change > 0:
-                    avg_color = ColorCodes.GREEN
-                    avg_prefix = "+"
-                elif avg_change < 0:
-                    avg_color = ColorCodes.RED
-                    avg_prefix = ""
-                else:
-                    avg_color = ColorCodes.BRIGHT_BLACK
-                    avg_prefix = ""
-
-                formatted_data += f"\n\n**Average Change**: {avg_color}{avg_prefix}{avg_change:.2f}%{ColorCodes.RESET}"
-
-            return formatted_data, sources
+            formatted_data = self._add_summary_statistics(formatted_data, quotes)
 
         except Exception as e:
-            logger.error(f"Error formatting stock data: {e}")
+            logger.exception("Error formatting stock data")
             return f"Error formatting stock data: {e!s}", []
+        else:
+            return formatted_data, sources
 
 
 # Singleton instance for easy import
 stock_search = EnhancedStockSearch()
+
 
 # Convenience functions using the singleton
 def get_quote(symbol: str) -> StockQuote | None:
     """Get stock quote using singleton instance."""
     return stock_search.get_stock_quote(symbol)
 
+
 def get_quotes(symbols: list[str]) -> dict[str, StockQuote]:
     """Get multiple stock quotes efficiently."""
     return stock_search.get_multiple_quotes(symbols)
 
+
 def download_data(
-    symbols: str | list[str],
-    period: str = "1mo",
-    interval: str = "1d"
+    symbols: str | list[str], period: str = "1mo", interval: str = "1d"
 ) -> pd.DataFrame | None:
     """Download historical data for symbols."""
     return stock_search.download_historical_data(symbols, period=period, interval=interval)
+
 
 def get_financials(symbol: str) -> FinancialSummary:
     """Get financial summary for a symbol."""
     return stock_search.get_financial_summary(symbol)
 
+
 def search_stocks(query: str) -> list[dict[str, Any]]:
     """Search for stock symbols."""
     return stock_search.search_symbols(query)
+
 
 def validate_symbol(symbol: str) -> bool:
     """Check if a symbol is valid."""
     result = stock_search.validate_symbols([symbol])
     return result.get(symbol, False)
 
+
 def format_stock_data_with_sources(symbols: list[str]) -> tuple[str, list[dict[str, str]]]:
     """Format stock data with colorized sources for API responses.
-    
+
     Args:
         symbols: List of stock ticker symbols
-        
+
     Returns:
         Tuple of (colorized_formatted_data_string, sources_list)
     """
@@ -700,30 +738,30 @@ def format_stock_data_with_sources(symbols: list[str]) -> tuple[str, list[dict[s
 # Example usage
 if __name__ == "__main__":
     # Test the enhanced functionality
-    print("=== Enhanced Stock Search Test ===\n")
+    logger.info("=== Enhanced Stock Search Test ===")
 
     # Test single quote
     quote = get_quote("AAPL")
     if quote:
-        print(f"Apple Quote: ${quote.price:.2f} ({quote.change_percent:+.2f}%)")
-        print(f"Last Updated: {quote.last_updated}\n")
+        logger.info(f"Apple Quote: ${quote.price:.2f} ({quote.change_percent:+.2f}%)")
+        logger.info(f"Last Updated: {quote.last_updated}")
 
     # Test multiple quotes
     symbols = ["MSFT", "GOOGL", "TSLA"]
     quotes = get_quotes(symbols)
-    print(f"Multiple Quotes ({len(quotes)} results):")
+    logger.info(f"Multiple Quotes ({len(quotes)} results):")
     for symbol, quote in quotes.items():
-        print(f"  {symbol}: ${quote.price:.2f}")
+        logger.info(f"  {symbol}: ${quote.price:.2f}")
 
     # Test bulk download
-    print("\n=== Testing Bulk Download ===")
+    logger.info("=== Testing Bulk Download ===")
     data = download_data(["AAPL", "MSFT"], period="1mo", interval="1d")
     if data is not None:
-        print(f"Downloaded data shape: {data.shape}")
-        print(f"Columns: {list(data.columns[:5])}...")
+        logger.info(f"Downloaded data shape: {data.shape}")
+        logger.info(f"Columns: {list(data.columns[:5])}...")
 
     # Test search
-    print("\n=== Testing Search ===")
+    logger.info("=== Testing Search ===")
     results = search_stocks("apple")
     for result in results[:3]:
-        print(f"  {result['symbol']}: {result['name']}")
+        logger.info(f"  {result['symbol']}: {result['name']}")

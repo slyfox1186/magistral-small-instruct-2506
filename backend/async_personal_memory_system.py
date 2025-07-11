@@ -1,4 +1,5 @@
 """Optimized async memory system for personal AI assistant.
+
 Uses aiosqlite for non-blocking database operations and connection pooling.
 """
 
@@ -8,7 +9,7 @@ import json
 import logging
 from contextlib import asynccontextmanager
 from dataclasses import asdict, dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import aiosqlite
@@ -56,6 +57,7 @@ class AsyncPersonalMemorySystem:
     """
 
     def __init__(self, db_path: str = "memories.db", embedding_model=None, pool_size: int = 5):
+        """Initialize the async personal memory system."""
         self.db_path = db_path
         self.embedding_model = embedding_model
         self.pool_size = pool_size
@@ -122,20 +124,121 @@ class AsyncPersonalMemorySystem:
             """
             )
 
-            # Core memories table for persistent facts about the user
-            await conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS core_memories (
-                    key TEXT PRIMARY KEY,
-                    value TEXT NOT NULL,
-                    created_at DATETIME NOT NULL,
-                    updated_at DATETIME NOT NULL,
-                    category TEXT DEFAULT 'general'
-                )
-            """
-            )
+            # Handle core memories table creation and migration
+            await self._init_core_memories_table(conn)
 
             await conn.commit()
+
+    async def _init_core_memories_table(self, conn):
+        """Initialize or migrate core_memories table with proper schema (async version)."""
+        try:
+            # Check if table exists
+            cursor = await conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='core_memories'"
+            )
+            row = await cursor.fetchone()
+            table_exists = row is not None
+            
+            if table_exists:
+                # Check current schema
+                cursor = await conn.execute("PRAGMA table_info(core_memories)")
+                rows = await cursor.fetchall()
+                columns = [row[1] for row in rows]
+                
+                # If conversation_id column doesn't exist, we need to migrate
+                if "conversation_id" not in columns:
+                    logger.info("🔄 Migrating core_memories table to add conversation_id column...")
+                    
+                    # Get existing data
+                    try:
+                        cursor = await conn.execute("SELECT key, value, created_at, updated_at, category FROM core_memories")
+                        existing_data = await cursor.fetchall()
+                        logger.info(f"Found {len(existing_data)} existing core memories to migrate")
+                    except Exception:
+                        # If we can't read existing data, assume table is corrupted
+                        existing_data = []
+                        logger.warning("Could not read existing core memories, proceeding with empty migration")
+                    
+                    # Drop the old table
+                    await conn.execute("DROP TABLE core_memories")
+                    logger.info("Dropped old core_memories table")
+                    
+                    # Create new table with updated schema
+                    await conn.execute(
+                        """
+                        CREATE TABLE core_memories (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            key TEXT NOT NULL,
+                            value TEXT NOT NULL,
+                            conversation_id TEXT NOT NULL,
+                            created_at DATETIME NOT NULL,
+                            updated_at DATETIME NOT NULL,
+                            category TEXT DEFAULT 'general',
+                            UNIQUE(key, conversation_id)
+                        )
+                        """
+                    )
+                    logger.info("Created new core_memories table with conversation_id support")
+                    
+                    # Migrate existing data to "global" conversation
+                    if existing_data:
+                        for row in existing_data:
+                            key, value, created_at, updated_at, category = row
+                            await conn.execute(
+                                """
+                                INSERT INTO core_memories (key, value, conversation_id, created_at, updated_at, category)
+                                VALUES (?, ?, ?, ?, ?, ?)
+                                """,
+                                (key, value, "global", created_at, updated_at, category or "general")
+                            )
+                        logger.info(f"✅ Migrated {len(existing_data)} core memories to 'global' conversation")
+                else:
+                    logger.debug("✅ Core memories table already has correct schema")
+            else:
+                # Create new table
+                logger.info("Creating new core_memories table...")
+                await conn.execute(
+                    """
+                    CREATE TABLE core_memories (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        key TEXT NOT NULL,
+                        value TEXT NOT NULL,
+                        conversation_id TEXT NOT NULL,
+                        created_at DATETIME NOT NULL,
+                        updated_at DATETIME NOT NULL,
+                        category TEXT DEFAULT 'general',
+                        UNIQUE(key, conversation_id)
+                    )
+                    """
+                )
+                logger.info("✅ Created core_memories table with conversation_id support")
+            
+            # Create index for core memories conversation queries
+            await conn.execute("CREATE INDEX IF NOT EXISTS idx_core_memories_conversation ON core_memories(conversation_id)")
+            logger.debug("Created index for core_memories conversation queries")
+                
+        except Exception as e:
+            logger.error(f"❌ Error during core_memories table initialization: {e}")
+            # If everything fails, create a basic table
+            try:
+                await conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS core_memories (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        key TEXT NOT NULL,
+                        value TEXT NOT NULL,
+                        conversation_id TEXT NOT NULL DEFAULT 'global',
+                        created_at DATETIME NOT NULL,
+                        updated_at DATETIME NOT NULL,
+                        category TEXT DEFAULT 'general',
+                        UNIQUE(key, conversation_id)
+                    )
+                    """
+                )
+                logger.warning("Created fallback core_memories table")
+            except Exception as fallback_error:
+                logger.error(f"❌ Even fallback table creation failed: {fallback_error}")
+                raise
 
     @asynccontextmanager
     async def _get_connection(self):
@@ -187,7 +290,7 @@ class AsyncPersonalMemorySystem:
         if not self._initialized:
             await self.initialize()
 
-        timestamp = datetime.now()
+        timestamp = datetime.now(UTC)
         memory_id = self._generate_id(content, timestamp)
 
         # VERBOSE LOGGING: Log all memory additions
@@ -239,8 +342,10 @@ class AsyncPersonalMemorySystem:
             logger.info(f"🧠 MEMORY ADD:   SQL columns: {columns}")
             logger.info(f"🧠 MEMORY ADD:   Data values (first 5): {list(data.values())[:5]}")
 
+            # Safe because data.keys() comes from a controlled dataclass, not user input
             await conn.execute(
-                f"INSERT INTO memories ({columns}) VALUES ({placeholders})", list(data.values())
+                f"INSERT INTO memories ({columns}) VALUES ({placeholders})",  # noqa: S608
+                list(data.values()),
             )
             await conn.commit()
 
@@ -285,7 +390,7 @@ class AsyncPersonalMemorySystem:
 
             # Time window filter
             if time_window_hours:
-                cutoff = datetime.now() - timedelta(hours=time_window_hours)
+                cutoff = datetime.now(UTC) - timedelta(hours=time_window_hours)
                 base_query += " AND timestamp > ?"
                 params.append(cutoff.isoformat())
 
@@ -316,12 +421,14 @@ class AsyncPersonalMemorySystem:
                 memories.append(memory)
                 memory_ids_to_update.append(memory.id)
 
-                logger.info(f"🧠 MEMORY RETRIEVAL DB: Row {i+1}:")
+                logger.info(f"🧠 MEMORY RETRIEVAL DB: Row {i + 1}:")
                 logger.info(f"🧠 MEMORY RETRIEVAL DB:   ID: {memory.id}")
                 logger.info(f"🧠 MEMORY RETRIEVAL DB:   Conversation ID: {memory.conversation_id}")
                 logger.info(f"🧠 MEMORY RETRIEVAL DB:   Importance: {memory.importance}")
                 logger.info(f"🧠 MEMORY RETRIEVAL DB:   Timestamp: {memory.timestamp}")
-                logger.info(f"🧠 MEMORY RETRIEVAL DB:   Content (first 200 chars): '{memory.content[:200]}...'")
+                logger.info(
+                    f"🧠 MEMORY RETRIEVAL DB:   Content (first 200 chars): '{memory.content[:200]}...'"
+                )
 
                 # Track high importance memories
                 if memory.importance >= HIGH_IMPORTANCE_THRESHOLD:
@@ -330,7 +437,7 @@ class AsyncPersonalMemorySystem:
 
             # Batch update access counts
             if memory_ids_to_update:
-                now = datetime.now().isoformat()
+                now = datetime.now(UTC).isoformat()
                 for memory_id in memory_ids_to_update:
                     await conn.execute(
                         "UPDATE memories SET access_count = access_count + 1, last_accessed = ? WHERE id = ?",
@@ -346,7 +453,9 @@ class AsyncPersonalMemorySystem:
         # Update access patterns for retrieved memories asynchronously
         if memories:
             # Don't await - let it run in background
-            asyncio.create_task(self._update_memories_on_access(memory_ids_to_update))
+            self._access_update_task = asyncio.create_task(
+                self._update_memories_on_access(memory_ids_to_update)
+            )
 
         return memories
 
@@ -354,7 +463,7 @@ class AsyncPersonalMemorySystem:
         """Update importance scores for accessed memories (runs in background)."""
         try:
             async with self._get_connection() as conn:
-                now = datetime.now()
+                now = datetime.now(UTC)
                 for memory_id in memory_ids:
                     # Fetch current importance
                     cursor = await conn.execute(
@@ -369,20 +478,25 @@ class AsyncPersonalMemorySystem:
 
                         # Update importance and access stats
                         await conn.execute(
-                            """UPDATE memories 
-                               SET importance = ?, 
-                                   access_count = access_count + 1, 
-                                   last_accessed = ? 
+                            """UPDATE memories
+                               SET importance = ?,
+                                   access_count = access_count + 1,
+                                   last_accessed = ?
                                WHERE id = ?""",
                             (new_importance, now.isoformat(), memory_id),
                         )
 
-                        if new_importance >= HIGH_IMPORTANCE_THRESHOLD and current_importance < HIGH_IMPORTANCE_THRESHOLD:
-                            logger.info(f"Memory {memory_id} promoted to high importance through access pattern")
+                        if (
+                            new_importance >= HIGH_IMPORTANCE_THRESHOLD
+                            and current_importance < HIGH_IMPORTANCE_THRESHOLD
+                        ):
+                            logger.info(
+                                f"Memory {memory_id} promoted to high importance through access pattern"
+                            )
 
                 await conn.commit()
-        except Exception as e:
-            logger.error(f"Error updating memories on access: {e}")
+        except Exception:
+            logger.exception("Error updating memories on access")
 
     async def get_conversation_context(
         self, conversation_id: str, max_messages: int = 50
@@ -403,22 +517,21 @@ class AsyncPersonalMemorySystem:
             )
             rows = await cursor.fetchall()
 
-            memories = []
-            for row in rows:
-                memories.append(self._row_to_memory(dict(row)))
+            memories = [self._row_to_memory(dict(row)) for row in rows]
 
             # Return in chronological order
             return list(reversed(memories))
 
     async def consolidate_old_memories(self):
         """Consolidate old memories to save space and improve retrieval.
+
         - Summarize conversations older than short_term_hours
         - Remove detailed memories older than long_term_days (keeping summaries)
         """
         if not self._initialized:
             await self.initialize()
 
-        now = datetime.now()
+        now = datetime.now(UTC)
 
         async with self._get_connection() as conn:
             # Find conversations that need summarization
@@ -461,44 +574,50 @@ class AsyncPersonalMemorySystem:
         # For now, just log
         logger.debug(f"Would summarize conversation {conversation_id}")
 
-    async def set_core_memory(self, key: str, value: str, category: str = "general"):
+    async def set_core_memory(self, key: str, value: str, conversation_id: str, category: str = "general"):
         """Set a core memory (persistent fact about the user)."""
         if not self._initialized:
             await self.initialize()
 
-        now = datetime.now()
+        now = datetime.now(UTC)
         async with self._get_connection() as conn:
             await conn.execute(
                 """
-                INSERT INTO core_memories (key, value, created_at, updated_at, category)
-                VALUES (?, ?, ?, ?, ?)
-                ON CONFLICT(key) DO UPDATE SET
+                INSERT INTO core_memories (key, value, conversation_id, created_at, updated_at, category)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(key, conversation_id) DO UPDATE SET
                     value = excluded.value,
                     updated_at = excluded.updated_at,
                     category = excluded.category
                 """,
-                (key, value, now.isoformat(), now.isoformat(), category),
+                (key, value, conversation_id, now.isoformat(), now.isoformat(), category),
             )
             await conn.commit()
-        logger.debug(f"Set core memory: {key} = {value[:50]}...")
+        logger.debug(f"Set core memory for conversation {conversation_id}: {key} = {value[:50]}...")
 
-    async def get_core_memory(self, key: str) -> str | None:
-        """Get a core memory value."""
+    async def get_core_memory(self, key: str, conversation_id: str) -> str | None:
+        """Get a core memory value for a specific conversation."""
         if not self._initialized:
             await self.initialize()
 
         async with self._get_connection() as conn:
-            cursor = await conn.execute("SELECT value FROM core_memories WHERE key = ?", (key,))
+            cursor = await conn.execute(
+                "SELECT value FROM core_memories WHERE key = ? AND conversation_id = ?", 
+                (key, conversation_id)
+            )
             row = await cursor.fetchone()
             return row[0] if row else None
 
-    async def get_all_core_memories(self) -> dict[str, str]:
-        """Get all core memories."""
+    async def get_all_core_memories(self, conversation_id: str) -> dict[str, str]:
+        """Get all core memories for a specific conversation."""
         if not self._initialized:
             await self.initialize()
 
         async with self._get_connection() as conn:
-            cursor = await conn.execute("SELECT key, value FROM core_memories ORDER BY key")
+            cursor = await conn.execute(
+                "SELECT key, value FROM core_memories WHERE conversation_id = ? ORDER BY key", 
+                (conversation_id,)
+            )
             rows = await cursor.fetchall()
             return {row[0]: row[1] for row in rows}
 
@@ -523,9 +642,10 @@ class AsyncPersonalMemorySystem:
                     return embeddings[0].tolist()
                 else:
                     return list(embeddings[0])
+        except Exception:
+            logger.exception("Failed to generate embedding")
             return None
-        except Exception as e:
-            logger.error(f"Failed to generate embedding: {e}")
+        else:
             return None
 
     def _row_to_memory(self, row: dict) -> Memory:
@@ -573,7 +693,7 @@ class AsyncPersonalMemorySystem:
             high_importance_count = (await cursor.fetchone())[0]
 
             # Recent memories (last 24h)
-            cutoff = datetime.now() - timedelta(hours=24)
+            cutoff = datetime.now(UTC) - timedelta(hours=24)
             cursor = await conn.execute(
                 "SELECT COUNT(*) FROM memories WHERE timestamp > ?", (cutoff.isoformat(),)
             )

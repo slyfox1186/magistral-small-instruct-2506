@@ -27,7 +27,9 @@ def setup_trading_routes(app: FastAPI):
     async def get_crypto_quotes(request: CryptoQuoteRequest) -> CryptoDataResponse:
         """Get cryptocurrency quotes for specified coin IDs."""
         if not app_state.crypto_trader:
-            raise HTTPException(status_code=503, detail="Cryptocurrency trading service not available")
+            raise HTTPException(
+                status_code=503, detail="Cryptocurrency trading service not available"
+            )
 
         try:
             # Get cryptocurrency data with sources
@@ -63,7 +65,9 @@ def setup_trading_routes(app: FastAPI):
     async def get_trending_cryptos() -> CryptoDataResponse:
         """Get trending cryptocurrencies."""
         if not app_state.crypto_trader:
-            raise HTTPException(status_code=503, detail="Cryptocurrency trading service not available")
+            raise HTTPException(
+                status_code=503, detail="Cryptocurrency trading service not available"
+            )
 
         try:
             trending_coins = await asyncio.to_thread(app_state.crypto_trader.get_trending_coins)
@@ -79,9 +83,7 @@ def setup_trading_routes(app: FastAPI):
 
             sources = []
             for i, coin in enumerate(trending_coins[:10], 1):
-                table += (
-                    f"| {i} | {coin.symbol} | {coin.name} | #{coin.market_cap_rank} | {coin.score} |\n"
-                )
+                table += f"| {i} | {coin.symbol} | {coin.name} | #{coin.market_cap_rank} | {coin.score} |\n"
                 sources.append(
                     {
                         "id": coin.id,
@@ -104,14 +106,18 @@ def setup_trading_routes(app: FastAPI):
     async def get_global_crypto_market() -> CryptoDataResponse:
         """Get global cryptocurrency market data."""
         if not app_state.crypto_trader:
-            raise HTTPException(status_code=503, detail="Cryptocurrency trading service not available")
+            raise HTTPException(
+                status_code=503, detail="Cryptocurrency trading service not available"
+            )
 
         try:
             global_stats = await asyncio.to_thread(app_state.crypto_trader.get_global_market_data)
 
             if not global_stats:
                 return CryptoDataResponse(
-                    success=True, data="Global cryptocurrency market data not available.", sources=[]
+                    success=True,
+                    data="Global cryptocurrency market data not available.",
+                    sources=[],
                 )
 
             # Format global market data

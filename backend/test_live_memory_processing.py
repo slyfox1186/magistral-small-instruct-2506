@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-"""Test the lightweight_memory_processing function directly with animal soul conversations
-"""
+"""Test the lightweight_memory_processing function directly with animal soul conversations."""
 
 import asyncio
 import logging
 
 # Setup logging
-logging.basicConfig(level=logging.DEBUG, format='%(levelname)s: %(message)s')
+logging.basicConfig(level=logging.DEBUG, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
+
 async def test_memory_processing_directly():
-    """Test the lightweight_memory_processing function directly"""
+    """Test the lightweight_memory_processing function directly."""
     try:
         # Initialize memory system
         from memory_provider import MemoryConfig, get_memory_system
@@ -31,9 +31,9 @@ async def test_memory_processing_directly():
 
         session_id = "test_animals_souls_direct"
 
-        logger.info(f"\n{'='*60}")
+        logger.info(f"\n{'=' * 60}")
         logger.info("TESTING DIRECT MEMORY PROCESSING")
-        logger.info(f"{'='*60}")
+        logger.info(f"{'=' * 60}")
         logger.info(f"User: {user_prompt}")
         logger.info(f"Assistant: {assistant_response[:100]}...")
         logger.info(f"Session: {session_id}")
@@ -53,19 +53,29 @@ async def test_memory_processing_directly():
 
         # Search for specific content
         logger.info("\n🔍 Searching for animal/soul related memories...")
-        animal_memories = await app_state.personal_memory.get_relevant_memories("animals souls philosophical", limit=10)
+        animal_memories = await app_state.personal_memory.get_relevant_memories(
+            "animals souls philosophical", limit=10
+        )
         logger.info(f"🐾 Found {len(animal_memories)} animal/soul memories:")
 
         for i, memory in enumerate(animal_memories):
-            content_preview = memory.content[:150] + "..." if len(memory.content) > 150 else memory.content
-            logger.info(f"  {i+1}. [{memory.importance:.2f}] {content_preview}")
+            # Constants for content preview
+            content_preview_length = 150
+            content_preview = (
+                memory.content[:content_preview_length] + "..."
+                if len(memory.content) > content_preview_length
+                else memory.content
+            )
+            logger.info(f"  {i + 1}. [{memory.importance:.2f}] {content_preview}")
 
         # Test another variation
-        logger.info(f"\n{'='*60}")
+        logger.info(f"\n{'=' * 60}")
         logger.info("TESTING WITH PERSONAL BELIEF")
-        logger.info(f"{'='*60}")
+        logger.info(f"{'=' * 60}")
 
-        user_prompt_2 = "I believe animals do have souls. My dog seems to understand my emotions deeply."
+        user_prompt_2 = (
+            "I believe animals do have souls. My dog seems to understand my emotions deeply."
+        )
         assistant_response_2 = """Your observation about your dog's emotional understanding resonates with many pet owners and animal behaviorists. Dogs have co-evolved with humans for thousands of years, developing remarkable abilities to read our facial expressions, body language, and even emotional states. Whether we call this a 'soul' or advanced emotional intelligence, it's clear that many animals form deep bonds and demonstrate consciousness that goes beyond simple instinct. Your belief reflects a compassionate view that many philosophical and spiritual traditions would support."""
 
         session_id_2 = "test_animals_souls_belief"
@@ -81,15 +91,24 @@ async def test_memory_processing_directly():
         logger.info(f"📊 Final memory count: {len(memories_final)}")
 
         # Search again
-        animal_memories_final = await app_state.personal_memory.get_relevant_memories("animals souls dog belief philosophical", limit=10)
+        animal_memories_final = await app_state.personal_memory.get_relevant_memories(
+            "animals souls dog belief philosophical", limit=10
+        )
         logger.info(f"🐾 Final animal/soul memories: {len(animal_memories_final)}")
 
         for i, memory in enumerate(animal_memories_final):
-            content_preview = memory.content[:150] + "..." if len(memory.content) > 150 else memory.content
-            logger.info(f"  {i+1}. [{memory.importance:.2f}] {content_preview}")
+            # Constants for content preview
+            content_preview_length = 150
+            content_preview = (
+                memory.content[:content_preview_length] + "..."
+                if len(memory.content) > content_preview_length
+                else memory.content
+            )
+            logger.info(f"  {i + 1}. [{memory.importance:.2f}] {content_preview}")
 
     except Exception as e:
         logger.error(f"Error in direct memory processing test: {e}", exc_info=True)
+
 
 if __name__ == "__main__":
     asyncio.run(test_memory_processing_directly())
