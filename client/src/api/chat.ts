@@ -100,13 +100,18 @@ export async function streamChatResponse(
   logger.debug('Sending request to backend:', requestBody);
 
   try {
+    // Add connection keep-alive and timeout headers
     const response = await fetch(`${BACKEND_URL}/api/chat-stream`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Accept: 'text/event-stream', // Important for SSE
+        Accept: 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
       },
       body: JSON.stringify(requestBody),
+      // Add keepalive to prevent connection drops
+      keepalive: true,
     });
 
     logger.debug('Received response status:', response.status);
@@ -127,48 +132,75 @@ export async function streamChatResponse(
     const decoder = new TextDecoder('utf-8');
     let buffer = '';
 
-    // Process the stream data
+    // Process the stream data with timeout protection
     let isStreamActive = true;
+    const STREAM_TIMEOUT_MS = 10000; // 10 second timeout per chunk for LLM generation
+    
     while (isStreamActive) {
-      const { done, value } = await reader.read();
-      if (done) {
-        logger.debug('Stream finished.');
-        isStreamActive = false;
-        break;
-      }
-
-      // Decode the chunk and add it to the buffer
-      const chunkText = decoder.decode(value, { stream: true });
-      buffer += chunkText;
-
-      // Process buffer line by line for SSE messages
-      let eolIndex;
-      while ((eolIndex = buffer.indexOf('\n\n')) >= 0) {
-        const message = buffer.slice(0, eolIndex).trim();
-        buffer = buffer.slice(eolIndex + 2); // Skip the \n\n
-
-        if (message.startsWith('data: ')) {
-          const dataContent = message.substring(6).trim(); // Get content after "data: "
-
-          if (dataContent === '[DONE]') {
-            logger.debug('Received [DONE] signal.');
-            onChunk({ done: true });
-            isStreamActive = false;
-            // Optionally break here if [DONE] truly signifies the absolute end
-            break; // Break out of the inner loop
-          } else {
-            try {
-              const jsonData = JSON.parse(dataContent) as ChatStreamChunk;
-              logger.debug('Parsed SSE data:', jsonData); // Log parsed data
-              onChunk(jsonData);
-            } catch (parseError) {
-              logger.error('Failed to parse SSE data chunk:', dataContent, parseError);
-            }
-          }
-        } else if (message) {
-          // Ignore empty lines or lines not starting with 'data: '
-          logger.debug('Ignoring non-data SSE line:', message);
+      try {
+        // Add timeout to prevent hanging on stalled streams
+        const readResult = await Promise.race([
+          reader.read(),
+          new Promise<{ done: true; value?: undefined }>((_, reject) =>
+            setTimeout(() => reject(new Error('Stream read timeout')), STREAM_TIMEOUT_MS)
+          ),
+        ]);
+        
+        const { done, value } = readResult;
+        if (done) {
+          logger.debug('Stream finished.');
+          isStreamActive = false;
+          break;
         }
+        
+        // Validate that we have data
+        if (!value || value.length === 0) {
+          continue; // Skip empty chunks
+        }
+        
+        logger.debug(`Received ${value.length} bytes from stream`);
+
+        // Decode the chunk and add it to the buffer
+        const chunkText = decoder.decode(value, { stream: true });
+        buffer += chunkText;
+
+        // Process buffer line by line for SSE messages
+        let eolIndex;
+        while ((eolIndex = buffer.indexOf('\n\n')) >= 0) {
+          const message = buffer.slice(0, eolIndex).trim();
+          buffer = buffer.slice(eolIndex + 2); // Skip the \n\n
+
+          if (message.startsWith('data: ')) {
+            const dataContent = message.substring(6).trim(); // Get content after "data: "
+
+            if (dataContent === '[DONE]') {
+              logger.debug('Received [DONE] signal.');
+              onChunk({ done: true });
+              isStreamActive = false;
+              // Optionally break here if [DONE] truly signifies the absolute end
+              break; // Break out of the inner loop
+            } else {
+              try {
+                const jsonData = JSON.parse(dataContent) as ChatStreamChunk;
+                logger.debug('Parsed SSE data:', jsonData); // Log parsed data
+                onChunk(jsonData);
+              } catch (parseError) {
+                logger.error('Failed to parse SSE data chunk:', dataContent, parseError);
+              }
+            }
+          } else if (message) {
+            // Ignore empty lines or lines not starting with 'data: '
+            logger.debug('Ignoring non-data SSE line:', message);
+          }
+        }
+      } catch (error) {
+        if (error instanceof Error && error.message === 'Stream read timeout') {
+          logger.error('Stream timed out waiting for data');
+          onError(new Error('Stream connection timeout - no data received within 10 seconds'));
+          isStreamActive = false;
+          break;
+        }
+        throw error; // Re-throw other errors
       }
     }
 

@@ -23,7 +23,6 @@ interface ImportMetaEnv {
 
   // Stream settings
   readonly VITE_MIN_RESPONSE_LENGTH: string;
-  readonly VITE_SAFETY_TIMEOUT_MS: string;
   readonly VITE_COMPLETION_DEBOUNCE_MS: string;
 
   // UI settings

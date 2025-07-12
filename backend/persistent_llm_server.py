@@ -41,6 +41,40 @@ class LLMRequest:
 
             self.request_id = str(uuid.uuid4())[:8]
 
+    def __lt__(self, other):
+        """Compare requests for priority queue ordering."""
+        if not isinstance(other, LLMRequest):
+            return NotImplemented
+        # Primary sort by priority (lower number = higher priority)
+        if self.priority != other.priority:
+            return self.priority < other.priority
+        # Secondary sort by request_id for consistent ordering
+        return self.request_id < other.request_id
+
+    def __le__(self, other):
+        """Less than or equal comparison."""
+        if not isinstance(other, LLMRequest):
+            return NotImplemented
+        return self < other or self == other
+
+    def __gt__(self, other):
+        """Greater than comparison."""
+        if not isinstance(other, LLMRequest):
+            return NotImplemented
+        return not self <= other
+
+    def __ge__(self, other):
+        """Greater than or equal comparison."""
+        if not isinstance(other, LLMRequest):
+            return NotImplemented
+        return not self < other
+
+    def __eq__(self, other):
+        """Equality comparison."""
+        if not isinstance(other, LLMRequest):
+            return NotImplemented
+        return self.request_id == other.request_id
+
 
 class PersistentLLMServer:
     """State-of-the-art LLM server optimized for serial processing.
@@ -193,6 +227,10 @@ class PersistentLLMServer:
 
             # Cache the response
             await self._cache_response(cache_key, response)
+        except asyncio.CancelledError:
+            logger.warning(f"[🆔 {request.request_id}] Request was cancelled")
+            # Don't re-raise CancelledError - convert to a cleaner error
+            raise RuntimeError("Request was cancelled due to timeout")
         except Exception:
             logger.exception("❌ Generation failed")
             raise
@@ -426,22 +464,46 @@ async def get_llm_server() -> PersistentLLMServer:
     """Get or create the global LLM server instance with proper locking."""
     global llm_server  # noqa: PLW0603
 
-    # Fast path: if already initialized, return immediately
+    # Fast path: if already initialized and running, return immediately
     if llm_server is not None and llm_server.is_running:
         return llm_server
 
     # Slow path: need to initialize with lock
     async with _llm_server_lock:
-        # Double-check pattern: another task might have initialized while we waited
+        # Double-check pattern: verify state again after acquiring lock
         if llm_server is not None and llm_server.is_running:
             return llm_server
+
+        # Check if partially initialized but not running
+        if llm_server is not None and not llm_server.is_running:
+            logger.warning("Found non-running LLM server, cleaning up...")
+            try:
+                await llm_server.shutdown()
+            except Exception as e:
+                logger.warning(f"Error during cleanup: {e}")
+            llm_server = None
 
         # Initialize the server
         logger.info("🔒 Initializing LLM server (locked)...")
         from config import MODEL_PATH
 
-        llm_server = PersistentLLMServer(MODEL_PATH)
-        await llm_server.start()
-        logger.info("✅ LLM server initialized successfully")
+        try:
+            llm_server = PersistentLLMServer(MODEL_PATH)
+            await llm_server.start()
+            
+            # Verify initialization succeeded before releasing lock
+            if not llm_server.is_running:
+                raise RuntimeError("LLM server failed to start properly")
+                
+            logger.info("✅ LLM server initialized successfully")
+        except Exception:
+            # Clean up on failure
+            if llm_server is not None:
+                try:
+                    await llm_server.shutdown()
+                except Exception as cleanup_err:
+                    logger.warning(f"Error during failed init cleanup: {cleanup_err}")
+            llm_server = None
+            raise
 
     return llm_server

@@ -1,0 +1,64 @@
+{
+  "blocked_globs": [
+    "*.facebook.com*",
+    "*fb.com*",
+    "*twitter.com*",
+    "*x.com*",
+    "*instagram.com*",
+    "*linkedin.com*",
+    "*tiktok.com*",
+    "*reddit.com*",
+    "*pinterest.com*",
+    "*snapchat.com*",
+    "*.khou.com*",
+    "*.cnn.com*",
+    "*.aaaai.org*"
+  ],
+  "blocked_patterns": [
+    "*/login*",
+    "*/auth*",
+    "*/privacy*",
+    "*/terms*",
+    "*/sharer*",
+    "*/share?*"
+  ],
+  "reason": "Social media platforms and auth-protected content typically require authentication and have anti-scraping measures",
+  "last_updated": "2025-07-12T15:24:05.052990",
+  "version": "2.3000000000000003",
+  "metadata": {
+    "created_timestamp_ms": 1720742400000,
+    "last_updated_timestamp_ms": 1752348245052
+  },
+  "learning_history": [
+    {
+      "timestamp": "2025-07-12T13:40:20.694728",
+      "timestamp_ms": 1752342020694,
+      "failed_urls_count": 1,
+      "new_globs": [
+        "*.khou.com*"
+      ],
+      "new_patterns": [],
+      "reasoning": "The failed URL is from khou.com, which is not covered by any existing blocks. Since this is a news site and not a social media platform, it's likely that the failure is due to a temporary issue or a paywall/auth requirement. Blocking khou.com might be necessary to prevent future scraping attempts from wasting resources."
+    },
+    {
+      "timestamp": "2025-07-12T14:54:59.083984",
+      "timestamp_ms": 1752346499083,
+      "failed_urls_count": 1,
+      "new_globs": [
+        "*.cnn.com*"
+      ],
+      "new_patterns": [],
+      "reasoning": "The failed URL is from cnn.com, which is not covered by any existing blocks. Since this is a news site and not a social media platform, it's likely that the failure is due to a temporary issue or a paywall/auth requirement. Blocking cnn.com might be necessary to prevent future scraping attempts from wasting resources."
+    },
+    {
+      "timestamp": "2025-07-12T15:24:05.052990",
+      "timestamp_ms": 1752348245052,
+      "failed_urls_count": 1,
+      "new_globs": [
+        "*.aaaai.org*"
+      ],
+      "new_patterns": [],
+      "reasoning": "The failed URL from aaaai.org is not covered by any existing blocks. Since the error is a 404, it suggests that the page might have been moved or removed, which is a systematic issue. Blocking aaaai.org will prevent future scraping attempts from wasting resources on this domain."
+    }
+  ]
+}

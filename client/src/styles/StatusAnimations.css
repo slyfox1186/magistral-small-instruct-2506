@@ -34,6 +34,11 @@
   align-items: center;
   justify-content: center;
   user-select: none;
+  /* Enhanced rendering for smooth animations */
+  will-change: transform;
+  transform: translateZ(0);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* Size variants */
@@ -47,6 +52,11 @@
   z-index: 2;
   filter: drop-shadow(0 0 8px currentColor);
   transition: filter 0.3s var(--transition-curve-apple);
+  /* Enhanced rendering quality */
+  will-change: filter;
+  backface-visibility: hidden;
+  -webkit-font-smoothing: antialiased;
+  shape-rendering: geometricPrecision;
 }
 
 /* The morphing path */
@@ -60,23 +70,57 @@
 
 /* Status-specific animations */
 
-/* Thinking - Pulsing circle with dots */
+/* Thinking - Enhanced floating dots with smooth bloom */
 .status-thinking .status-svg {
-  animation: subtle-pulse 2s ease-in-out infinite;
+  animation: thinking-pulse 2.5s ease-in-out infinite;
+  filter: drop-shadow(0 0 12px currentColor) drop-shadow(0 0 24px currentColor);
 }
 
 .status-thinking .thinking-dots circle {
-  animation: dot-fade 1.5s ease-in-out infinite;
+  animation: enhanced-dot-float 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   opacity: 0;
+  filter: blur(0);
+  transform-origin: center;
 }
 
 .status-thinking .thinking-dots circle:nth-child(1) { animation-delay: 0s; }
-.status-thinking .thinking-dots circle:nth-child(2) { animation-delay: 0.2s; }
-.status-thinking .thinking-dots circle:nth-child(3) { animation-delay: 0.4s; }
+.status-thinking .thinking-dots circle:nth-child(2) { animation-delay: 0.3s; }
+.status-thinking .thinking-dots circle:nth-child(3) { animation-delay: 0.6s; }
 
-@keyframes dot-fade {
-  0%, 60%, 100% { opacity: 0; transform: scale(0.8); }
-  30% { opacity: 1; transform: scale(1.2); }
+@keyframes thinking-pulse {
+  0%, 100% { 
+    opacity: 0.7; 
+    transform: scale(1);
+    filter: drop-shadow(0 0 8px currentColor) drop-shadow(0 0 16px currentColor);
+  }
+  50% { 
+    opacity: 1; 
+    transform: scale(1.02);
+    filter: drop-shadow(0 0 16px currentColor) drop-shadow(0 0 32px currentColor);
+  }
+}
+
+@keyframes enhanced-dot-float {
+  0%, 70%, 100% { 
+    opacity: 0; 
+    transform: scale(0.6) translateY(0px);
+    filter: blur(0.5px);
+  }
+  15% { 
+    opacity: 0.8; 
+    transform: scale(1.4) translateY(-2px);
+    filter: blur(0);
+  }
+  35% { 
+    opacity: 1; 
+    transform: scale(1.6) translateY(-4px);
+    filter: blur(0);
+  }
+  50% { 
+    opacity: 0.9; 
+    transform: scale(1.3) translateY(-2px);
+    filter: blur(0);
+  }
 }
 
 /* Streaming - Wave animation */

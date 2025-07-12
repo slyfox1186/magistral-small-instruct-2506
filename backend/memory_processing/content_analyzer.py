@@ -248,8 +248,8 @@ Provide your analysis as a JSON object:"""
                         self.logger.warning("Failed to find JSON in LLM response")
                         return await self._create_fallback_analysis(content)
 
-            except TimeoutError:
-                self.logger.warning(f"LLM analysis timed out after {self.config.llm_timeout}s")
+            except (TimeoutError, asyncio.CancelledError):
+                self.logger.warning(f"LLM analysis timed out or was cancelled after {self.config.llm_timeout}s")
                 return await self._create_fallback_analysis(content)
 
         except Exception:

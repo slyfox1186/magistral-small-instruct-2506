@@ -16,9 +16,9 @@ class MemoryProcessingConfig:
     """Configuration for memory processing system."""
 
     # Timeout settings (seconds)
-    max_processing_time: int = 30
-    llm_timeout: int = 20
-    analysis_timeout: int = 10
+    max_processing_time: int = 120
+    llm_timeout: int = 45
+    analysis_timeout: int = 60
 
     # Confidence thresholds
     min_confidence_threshold: float = 0.3
@@ -66,8 +66,8 @@ class MemoryProcessingConfig:
 # Predefined configuration profiles
 CONFIGS = {
     "default": MemoryProcessingConfig(
-        max_processing_time=30,
-        llm_timeout=20,
+        max_processing_time=90,
+        llm_timeout=40,
         min_confidence_threshold=0.3,
         high_confidence_threshold=0.7,
         similarity_threshold=0.85,
@@ -75,8 +75,8 @@ CONFIGS = {
         enable_detailed_logging=False,
     ),
     "production": MemoryProcessingConfig(
-        max_processing_time=20,
-        llm_timeout=15,
+        max_processing_time=60,
+        llm_timeout=30,
         min_confidence_threshold=0.4,
         high_confidence_threshold=0.8,
         similarity_threshold=0.9,
@@ -86,8 +86,8 @@ CONFIGS = {
         importance_multiplier=1.2,
     ),
     "development": MemoryProcessingConfig(
-        max_processing_time=60,
-        llm_timeout=30,
+        max_processing_time=120,
+        llm_timeout=50,
         min_confidence_threshold=0.2,
         high_confidence_threshold=0.6,
         similarity_threshold=0.8,
@@ -97,8 +97,8 @@ CONFIGS = {
         enable_metrics=True,
     ),
     "fast": MemoryProcessingConfig(
-        max_processing_time=10,
-        llm_timeout=8,
+        max_processing_time=20,
+        llm_timeout=15,
         min_confidence_threshold=0.5,
         high_confidence_threshold=0.8,
         similarity_threshold=0.9,

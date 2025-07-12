@@ -52,6 +52,7 @@ class GPULock:
         self._acquisition_time: float | None = None
         self._counter = 0
         self._max_hold_time = 90.0  # Maximum lock hold time in seconds
+        self._background_tasks: set[asyncio.Task] = set()
 
     def locked(self) -> bool:
         """Check if lock is currently held."""
@@ -132,8 +133,9 @@ class GPULock:
         self._lock.release()
 
         # Wake up next highest priority waiter
-        asyncio.create_task(self._wake_next_waiter())  # noqa: RUF006
-        # Don't await, let it run in background
+        task = asyncio.create_task(self._wake_next_waiter())
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
 
     async def _wake_next_waiter(self):
         """Wake up the next highest priority waiter."""
@@ -184,6 +186,14 @@ class GPULock:
             yield
         finally:
             self.release()
+
+    async def cleanup(self):
+        """Cancel all background tasks."""
+        for task in self._background_tasks:
+            task.cancel()
+        if self._background_tasks:
+            await asyncio.gather(*self._background_tasks, return_exceptions=True)
+        self._background_tasks.clear()
 
 
 # Global instance for backward compatibility

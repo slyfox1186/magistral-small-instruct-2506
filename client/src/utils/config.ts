@@ -55,7 +55,6 @@ export const API_URL = parseStringEnv(
 
 // Stream settings
 export const MIN_RESPONSE_LENGTH = parseNumericEnv(import.meta.env.VITE_MIN_RESPONSE_LENGTH, 10);
-export const SAFETY_TIMEOUT_MS = parseNumericEnv(import.meta.env.VITE_SAFETY_TIMEOUT_MS, 15000);
 export const COMPLETION_DEBOUNCE_MS = parseNumericEnv(
   import.meta.env.VITE_COMPLETION_DEBOUNCE_MS,
   500
@@ -168,7 +167,6 @@ export default {
 
   // Stream settings
   MIN_RESPONSE_LENGTH,
-  SAFETY_TIMEOUT_MS,
   COMPLETION_DEBOUNCE_MS,
 
   // UI settings

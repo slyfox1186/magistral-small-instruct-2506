@@ -157,14 +157,26 @@ function App() {
   });
   const [inputMessage, setInputMessage] = useState('');
   // This state now holds the raw Markdown being streamed
+  // CORRECTED: Atomic state machine - single source of truth
+  type ChatState = 
+    | { status: 'idle' }
+    | { status: 'thinking' }  
+    | { status: 'streaming'; accumulatedContent: string }
+    | { status: 'completing'; accumulatedContent: string }
+    | { status: 'error'; error: string };
+
+  const [chatState, setChatState] = useState<ChatState>({ status: 'idle' });
+  
+  // Legacy state for compatibility - will be removed
   const [currentResponseRaw, setCurrentResponseRaw] = useState('');
-  // Separate state for thinking content and final response
   const [currentThinking, setCurrentThinking] = useState('');
   const [currentFinalResponse, setCurrentFinalResponse] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [streamingComplete, setStreamingComplete] = useState(false);
   const [currentMessageStatus, setCurrentMessageStatus] = useState<Status>('thinking');
+  
+  // Derived state - computed, never set directly
+  const isLoading = chatState.status !== 'idle' && chatState.status !== 'error';
+  const streamingComplete = chatState.status === 'completing';
   
   // File attachment state
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
@@ -178,7 +190,6 @@ function App() {
   // Store the accumulated response for final message creation
   const accumulatedResponseRef = useRef<string>('');
 
-  const safetyTimerRef = useRef<TimeoutType | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   // Ref for current abort controller
@@ -192,13 +203,7 @@ function App() {
   // Refs for streaming UI elements - simplified as we render Markdown directly
   const streamingRef = useRef<HTMLDivElement>(null);
 
-  // CRITICAL FIX: Add a stream debounce mechanism to prevent false completions
-  const streamingCompleteRef = useRef(false);
-  const streamCompletionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // At the top of the component, right after the state declarations
-  // Add a flag to track if we're actively accumulating a message
-  const isAccumulatingMessageRef = useRef<boolean>(false);
+  // REMOVED: Complex ref flags replaced by atomic state machine
 
   // State for copy feedback
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
@@ -437,7 +442,7 @@ function App() {
     setCurrentThinking('');
     setCurrentFinalResponse('');
     accumulatedResponseRef.current = '';
-    setStreamingComplete(false);
+    setChatState({ status: 'idle' });
     setError(null);
 
     // DO NOT generate new session ID - keep using the fixed session ID
@@ -515,7 +520,7 @@ function App() {
         role: msg.role,
         content: msg.content,
         timestamp: new Date(msg.created_at).toLocaleTimeString(),
-        status: 'sent' as const,
+        status: 'success' as const,
       }));
       
       // Update the chat state with loaded messages
@@ -535,7 +540,7 @@ function App() {
       
     } catch (error) {
       logger.error('Failed to load conversation messages:', error);
-      alert.show('Failed to load conversation messages', 'error');
+      alert.error('Failed to load conversation messages');
       setChatIntegrationState('initialized'); // Reset to stable state
     } finally {
       setLoadingConversation(false);
@@ -550,8 +555,7 @@ function App() {
     setInterfaceMode('chat');
   }, [loadConversationMessages]);
 
-  // Add flag to track if we have a confirmed final completion from backend
-  const isFinalCompletionRef = useRef<boolean>(false);
+  // Removed isFinalCompletionRef - replaced with atomic state machine
 
   // Refs for direct DOM manipulation for streaming
   const streamingContentRef = useRef<HTMLDivElement | null>(null);
@@ -619,104 +623,42 @@ function App() {
     initializeChatIntegration();
   }, [messages, apiSessionId, chatIntegrationState]); // Explicit state dependency
 
-  // Simplified effect to handle stream completion
+  // CORRECTED: Simple atomic completion effect
   useEffect(() => {
-    if (streamingComplete && streamingCompleteRef.current === false) {
-      // Set flag to prevent duplicate processing
-      streamingCompleteRef.current = true;
+    if (chatState.status === 'completing') {
+      logger.warn('VERBOSE: Processing completion - creating final message');
+      
+      if (chatState.accumulatedContent && chatState.accumulatedContent.length > 0) {
+        // Create final assistant message
+        const newMessage = createAssistantMessage(chatState.accumulatedContent);
+        setMessages((prevMessages) => [...prevMessages, newMessage]);
 
-      // Clear any existing timer
-      if (streamCompletionTimerRef.current) {
-        clearTimeout(streamCompletionTimerRef.current);
-      }
-
-      // Set a short debounce timeout
-      streamCompletionTimerRef.current = setTimeout(() => {
-        // Only finalize and reset if this is a confirmed final completion
-        // or if there's been enough time with no new tokens
-        if (isFinalCompletionRef.current || Date.now() - lastTokenTimestampRef.current > 2000) {
-          // Process the complete message
-          if (accumulatedResponseRef.current && accumulatedResponseRef.current.length > 0) {
-            // Finished accumulating this message
-            isAccumulatingMessageRef.current = false;
-
-            // Create a new assistant message with the COMPLETE accumulated response
-            const newMessage = createAssistantMessage(accumulatedResponseRef.current);
-
-            // Add the complete message without flushSync to prevent layout shifts
-            setMessages((prevMessages) => [...prevMessages, newMessage]);
-
-            // Save assistant message to CRUD database
-            (async () => {
-              try {
-                await chatIntegration.saveMessage(newMessage);
-                // Auto-update conversation title after first exchange
-                setMessages((currentMessages) => {
-                  if (currentMessages.length === 2) { // First user + first assistant message
-                    chatIntegration.autoUpdateTitle(currentMessages).catch((error) => {
-                      logger.error('Failed to auto-update conversation title:', error);
-                    });
-                  }
-                  return currentMessages; // Return unchanged since we already added the message
-                });
-              } catch (error) {
-                logger.error('Failed to save assistant message to CRUD database:', error);
-                // Don't block the chat flow if CRUD saving fails
+        // Save to database asynchronously
+        (async () => {
+          try {
+            await chatIntegration.saveMessage(newMessage);
+            setMessages((currentMessages) => {
+              if (currentMessages.length === 2) {
+                chatIntegration.autoUpdateTitle(currentMessages).catch(console.error);
               }
-            })();
-
-            // Show success status briefly
-            setCurrentMessageStatus('success');
-
-            // Use requestAnimationFrame to ensure DOM has updated before resetting state
-            requestAnimationFrame(() => {
-              setIsLoading(false);
-              setCurrentResponseRaw('');
-              setStreamingComplete(false);
-              streamingCompleteRef.current = false;
-              isFinalCompletionRef.current = false;
+              return currentMessages;
             });
-
-            // Clean up after DOM is guaranteed to be updated
-            accumulatedResponseRef.current = '';
-
-            // Reset the markdown token buffer when completing a message
-            resetTokenBuffer();
-
-            // Clear safety timer
-            if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current);
-            safetyTimerRef.current = null;
-          } else {
-            // No content - just clean up
-            setIsLoading(false);
-            setCurrentResponseRaw('');
-            setStreamingComplete(false);
-            streamingCompleteRef.current = false;
-            isFinalCompletionRef.current = false;
-
-            accumulatedResponseRef.current = '';
-
-            // Reset the markdown token buffer even when there's no content
-            resetTokenBuffer();
-
-            if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current);
-            safetyTimerRef.current = null;
+          } catch (error) {
+            logger.error('Failed to save message:', error);
           }
-        } else {
-          // This might be a temporary pause - don't reset accumulated content
-          // Allow streaming to continue if more tokens arrive
-          streamingCompleteRef.current = false;
-          setStreamingComplete(false);
-        }
-      }, 50); // Short delay is sufficient
-    }
+        })();
 
-    return () => {
-      if (streamCompletionTimerRef.current) {
-        clearTimeout(streamCompletionTimerRef.current);
+        // Reset markdown buffer
+        resetTokenBuffer();
       }
-    };
-  }, [streamingComplete]);
+
+      // Atomic transition back to idle - unlocks input immediately
+      logger.warn('VERBOSE: Transitioning to idle - input should unlock now');
+      setChatState({ status: 'idle' });
+      setCurrentResponseRaw('');
+      setCurrentMessageStatus('success');
+    }
+  }, [chatState.status]);
 
   // --- 🚀 ULTRATHINK FIXED SCROLL HANDLER ---
   // Detect user scroll interaction with streaming-aware autoscroll logic
@@ -866,33 +808,6 @@ function App() {
     }
   }, [isLoading, focusInput, resetTextareaHeight]);
 
-  useEffect(() => {
-    if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current);
-    safetyTimerRef.current = null;
-
-    if (isLoading) {
-      logger.debug('(Safety Timer) Setting safety timeout');
-      safetyTimerRef.current = setTimeout(() => {
-        logger.debug('(Safety Timer) Safety timeout triggered: Forcing reset');
-
-        // Check if there's content but streaming got stuck
-        if (accumulatedResponseRef.current.length > 0) {
-          logger.debug('(Safety Timer) Content exists but streaming stuck. Completing response.');
-          setStreamingComplete(true);
-        } else {
-          setIsLoading(false);
-          setStreamingComplete(false);
-          setCurrentResponseRaw('');
-          accumulatedResponseRef.current = '';
-        }
-
-        logger.debug('(Safety Timer) UI state reset');
-      }, config.SAFETY_TIMEOUT_MS);
-    }
-    return () => {
-      if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current);
-    };
-  }, [isLoading]);
 
   // Save messages to localStorage whenever they change
   useEffect(() => {
@@ -927,14 +842,7 @@ function App() {
         clearTimeout(checkBottomTimeoutRef.current);
         checkBottomTimeoutRef.current = null;
       }
-      if (safetyTimerRef.current) {
-        clearTimeout(safetyTimerRef.current);
-        safetyTimerRef.current = null;
-      }
-      if (streamCompletionTimerRef.current) {
-        clearTimeout(streamCompletionTimerRef.current);
-        streamCompletionTimerRef.current = null;
-      }
+      // Removed streamCompletionTimerRef - no longer needed with state machine
       if (inactivityTimerRef.current) {
         clearInterval(inactivityTimerRef.current);
         inactivityTimerRef.current = null;
@@ -1047,14 +955,13 @@ function App() {
 
     performanceMonitor.startMark('messageSendTotal');
     setError(null); // Clear previous errors
-    setIsLoading(true);
+    setChatState({ status: 'thinking' });
     setCurrentMessageStatus('thinking'); // Start with thinking status
-    isAccumulatingMessageRef.current = false; // Reset accumulation flag
-    isFinalCompletionRef.current = false; // Reset final completion flag
+    // Removed isAccumulatingMessageRef and isFinalCompletionRef - no longer needed with state machine
     resetTokenBuffer(); // Reset token buffer for new message
     setCurrentResponseRaw(''); // Clear any stale raw response
     accumulatedResponseRef.current = ''; // Clear accumulated response
-    streamingCompleteRef.current = false; // Reset streaming complete flag
+    // Removed streamingCompleteRef - no longer needed with state machine
 
     // CRITICAL: Enable auto-scroll when starting a new message
     setAutoScrollEnabled(true);
@@ -1092,7 +999,7 @@ function App() {
         logger.error('Error reading attached files:', error);
         setError(errorMsg);
         alert.error(errorMsg, 5000);
-        setIsLoading(false);
+        setChatState({ status: 'error', error: errorMsg });
         return;
       }
     }
@@ -1105,7 +1012,7 @@ function App() {
     setCurrentThinking('');
     setCurrentFinalResponse('');
     setError(null);
-    setStreamingComplete(false);
+    setChatState({ status: 'thinking' });
     accumulatedResponseRef.current = ''; // Reset accumulator at the start
 
     // Reset the markdown token buffer when starting a new chat
@@ -1130,7 +1037,7 @@ function App() {
       inputRef.current.style.overflowY = 'hidden';
     }
 
-    setIsLoading(true);
+    setChatState({ status: 'streaming', accumulatedContent: '' });
 
     // Reset textarea height multiple times to ensure it sticks
     setTimeout(() => {
@@ -1145,8 +1052,7 @@ function App() {
       }
     }, 10);
 
-    // Set the accumulating flag to true
-    isAccumulatingMessageRef.current = true;
+    // Removed isAccumulatingMessageRef - no longer needed with state machine
 
     let controller: AbortController | null = null;
 
@@ -1190,7 +1096,11 @@ function App() {
 
       // Token counting removed - no longer needed
       let lastActivityTime = Date.now();
-      const MAX_INACTIVITY_MS = 10000; // 10 seconds max without activity
+      const MAX_INACTIVITY_MS = 30000; // 30 seconds max without activity for LLM generation
+      
+      // Main stream processing loop variable - defined outside timer for access
+      let isProcessing = true;
+      logger.warn('VERBOSE: Starting stream processing loop');
 
       // Safety check timer - store in ref for proper cleanup
       inactivityTimerRef.current = setInterval(() => {
@@ -1203,32 +1113,42 @@ function App() {
             clearInterval(inactivityTimerRef.current);
             inactivityTimerRef.current = null;
           }
-          if (!streamingComplete) {
-            setStreamingComplete(true);
-          }
+          // Force break the stream loop instead of setting completed
+          isProcessing = false;
         }
+        
       }, 2000);
 
       try {
         // Main stream processing loop
-        let isProcessing = true;
         while (isProcessing) {
           let text = '';
           try {
-            const { done, value } = await reader.read();
+            // Add timeout protection to prevent hanging on stalled streams
+            const READER_TIMEOUT_MS = 10000; // 10 second timeout for LLM generation
+            const readResult = await Promise.race([
+              reader.read(),
+              new Promise<{ done: true; value?: undefined }>((_, reject) =>
+                setTimeout(() => reject(new Error('Reader timeout')), READER_TIMEOUT_MS)
+              ),
+            ]);
+            
+            const { done, value } = readResult;
 
             // Update activity timestamp on any data or done signal
             lastActivityTime = Date.now();
+            
+            if (value && value.length > 0) {
+              logger.debug(`App.tsx: Received ${value.length} bytes from reader`);
+            }
 
             if (done) {
               if (inactivityTimerRef.current) {
                 clearInterval(inactivityTimerRef.current);
                 inactivityTimerRef.current = null;
               }
-              if (!streamingComplete) {
-                logger.debug('Stream ended naturally (reader done).');
-                setStreamingComplete(true);
-              }
+              logger.debug('Stream ended naturally (reader done).');
+              // Don't set completed here - let the loop finish and set it at the end
               break;
             }
 
@@ -1244,8 +1164,8 @@ function App() {
               clearInterval(inactivityTimerRef.current);
               inactivityTimerRef.current = null;
             }
-            if (!streamingComplete) {
-              setStreamingComplete(true);
+            if (chatState.status !== 'error') {
+              setChatState({ status: 'error', error: 'Error reading stream data.' });
               setError('Error reading stream data.'); // Set specific error
             }
             break; // Exit the loop on read error
@@ -1259,10 +1179,9 @@ function App() {
 
               // CRITICAL FIX: Only accept exact [DONE] message, not partial matches
               if (jsonStr === '[DONE]') {
-                isFinalCompletionRef.current = true; // Mark as confirmed final completion
-                setStreamingComplete(true);
-                logger.debug('(handleSend) Received [DONE] signal.');
-                // Break inner loop once DONE is received
+                // CORRECTED: Atomic state transition to completing
+                logger.warn('COMPLETION: Received [DONE] string signal - transitioning to completing');
+                setChatState({ status: 'completing', accumulatedContent: accumulatedResponseRef.current });
                 isProcessing = false;
                 break;
               }
@@ -1284,9 +1203,13 @@ function App() {
 
                 // Check if this is the completion signal
                 if (isDoneChunk(data)) {
-                  isFinalCompletionRef.current = true;
-                  setStreamingComplete(true);
-                  logger.debug('(handleSend) Received JSON done signal.');
+                  // CORRECTED: Atomic state transition to completing
+                  logger.warn('VERBOSE: JSON done signal detected!', JSON.stringify(data));
+                  logger.warn('VERBOSE: Original jsonStr was:', jsonStr);
+                  logger.warn('VERBOSE: Transitioning chatState to completing');
+                  setChatState({ status: 'completing', accumulatedContent: accumulatedResponseRef.current });
+                  logger.warn('VERBOSE: Breaking stream processing loop');
+                  isProcessing = false;
                   break;
                 }
 
@@ -1304,6 +1227,7 @@ function App() {
                     `[${Date.now()}] App.tsx: Received token:`,
                     JSON.stringify(data.token.text)
                   );
+                  logger.warn('VERBOSE: Processing token chunk:', data.token.text.substring(0, 50));
                   let tokenText = data.token.text;
 
                   // Fix potential backtick issues
@@ -1349,12 +1273,12 @@ function App() {
               } // End of else if (jsonStr)
             } // End of if (line.startsWith('data:'))
 
-            // If streamingComplete was set by [DONE] in the inner loop, break the outer loop too
-            if (streamingComplete) break;
+            // If isProcessing was set to false, break the outer loop too
+            if (!isProcessing) break;
           } // End of for...of lines loop
 
-          // If streamingComplete was set by [DONE], break the outer while loop
-          if (streamingComplete) break;
+          // If isProcessing was set to false, break the outer while loop
+          if (!isProcessing) break;
         } // End of while loop
       } catch (streamProcessingError) {
         logger.error(`Error during stream processing loop: ${streamProcessingError}`);
@@ -1362,22 +1286,24 @@ function App() {
           clearInterval(inactivityTimerRef.current);
           inactivityTimerRef.current = null;
         }
-        if (!streamingComplete) {
-          setStreamingComplete(true);
+        if (chatState.status !== 'error') {
+          setChatState({ status: 'error', error: 'Error processing stream.' });
           setError('Error processing stream.');
         }
       }
 
       // CRITICAL: Ensure final state update after loop completes
       setCurrentResponseRaw(accumulatedResponseRef.current);
+      
+      // State transition now happens inside the loop when done signal is received
+      logger.warn(`VERBOSE: Stream loop ended - current chatState: ${chatState.status}`);
     } catch (err) {
       // Handle aborted requests
       if (controller && controller.signal.aborted) {
         // Just clean up, don't show error for intentional abort
-        setIsLoading(false);
+        setChatState({ status: 'idle' });
         setCurrentResponseRaw('');
         accumulatedResponseRef.current = '';
-        setStreamingComplete(false);
         return;
       }
 
@@ -1390,7 +1316,6 @@ function App() {
       alert.error(`Chat error: ${errorMsg}`, 5000);
 
       // Clean up timers
-      if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current);
       if (inactivityTimerRef.current) {
         clearInterval(inactivityTimerRef.current);
         inactivityTimerRef.current = null;
@@ -1403,10 +1328,9 @@ function App() {
       const errorMessage = createErrorMessage(errorMsg);
 
       // Clean up state
-      setIsLoading(false);
+      setChatState({ status: 'error', error: errorMsg });
       setCurrentResponseRaw('');
       accumulatedResponseRef.current = '';
-      setStreamingComplete(false);
 
       // Add error message to chat - ensuring it's added even on network error
       setMessages((prev) => {
@@ -1431,9 +1355,9 @@ function App() {
         clearInterval(inactivityTimerRef.current);
         inactivityTimerRef.current = null;
       }
-      // Ensure the loading state is reset even if errors occur before reader setup
-      if (isLoading) {
-        setIsLoading(false);
+      // Ensure the stream state is reset even if errors occur before reader setup
+      if ((chatState as ChatState).status === 'thinking' || (chatState as ChatState).status === 'streaming') {
+        setChatState({ status: 'idle' });
       }
       // Reset abort controller ref if it belongs to this request
       if (currentAbortControllerRef.current === controller) {
@@ -1512,10 +1436,7 @@ function App() {
         clearTimeout(pasteTimeoutRef.current);
         pasteTimeoutRef.current = null;
       }
-      if (streamCompletionTimerRef.current) {
-        clearTimeout(streamCompletionTimerRef.current);
-        streamCompletionTimerRef.current = null;
-      }
+      // Removed streamCompletionTimerRef - no longer needed with state machine
       // Cancel any active requests
       if (currentAbortControllerRef.current) {
         currentAbortControllerRef.current.abort();

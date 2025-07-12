@@ -67,14 +67,21 @@ class ConsolidationWorker:
         self.last_activity_time = time.time()
         self.last_consolidation_time = time.time()
         self.is_running = False
+        self._background_tasks: set[asyncio.Task] = set()
 
     async def start(self):
         """Start the consolidation worker."""
         self.is_running = True
 
         # Start background tasks
-        self._activity_task = asyncio.create_task(self._activity_monitor())
-        self._consolidation_task = asyncio.create_task(self._periodic_consolidation())
+        activity_task = asyncio.create_task(self._activity_monitor())
+        consolidation_task = asyncio.create_task(self._periodic_consolidation())
+        
+        self._background_tasks.add(activity_task)
+        self._background_tasks.add(consolidation_task)
+        
+        activity_task.add_done_callback(self._background_tasks.discard)
+        consolidation_task.add_done_callback(self._background_tasks.discard)
 
         logger.info("Consolidation worker started")
 
@@ -82,11 +89,14 @@ class ConsolidationWorker:
         """Stop the consolidation worker."""
         self.is_running = False
 
-        # Cancel background tasks
-        if hasattr(self, "_activity_task"):
-            self._activity_task.cancel()
-        if hasattr(self, "_consolidation_task"):
-            self._consolidation_task.cancel()
+        # Cancel all background tasks
+        for task in self._background_tasks:
+            task.cancel()
+        
+        if self._background_tasks:
+            await asyncio.gather(*self._background_tasks, return_exceptions=True)
+        
+        self._background_tasks.clear()
 
         logger.info("Consolidation worker stopped")
 

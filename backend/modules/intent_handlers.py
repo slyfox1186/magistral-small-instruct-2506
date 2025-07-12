@@ -4,6 +4,10 @@
 import asyncio
 import json
 import logging
+import os
+import time
+from datetime import datetime
+from fnmatch import fnmatch
 
 import utils
 
@@ -11,6 +15,311 @@ from .chat_helpers import lightweight_memory_processing
 from .globals import app_state
 
 logger = logging.getLogger(__name__)
+
+# Load URL exclusion config once at module level
+try:
+    _config_path = os.path.join(os.path.dirname(__file__), '..', 'url_exclude_list.json')
+    with open(_config_path, 'r') as f:
+        _url_config = json.load(f)
+    BLOCKED_GLOBS = _url_config.get('blocked_globs', [])
+    BLOCKED_PATTERNS = _url_config.get('blocked_patterns', [])
+    logger.info(f"Loaded {len(BLOCKED_GLOBS)} URL globs and {len(BLOCKED_PATTERNS)} patterns from config")
+except Exception as e:
+    logger.error(f"CRITICAL: Failed to load URL exclude list: {e}")
+    logger.error(f"Config file should be at: {_config_path}")
+    raise RuntimeError("URL exclusion config required but not found")
+
+# Track failed URLs during scraping sessions for learning
+_FAILED_URLS = []
+
+# Track session state for web search/scraping decisions
+# Key: session_id, Value: {'web_search_performed': bool, 'last_search_timestamp': float}
+_SESSION_WEB_STATE = {}
+
+
+def is_blocked_url(url: str) -> bool:
+    """Efficient glob and pattern matching for URL blocking."""
+    url_lower = url.lower()
+    return (any(fnmatch(url_lower, glob.lower()) for glob in BLOCKED_GLOBS) or
+            any(pattern in url_lower for pattern in BLOCKED_PATTERNS))
+
+
+def track_failed_url(url: str, error_reason: str):
+    """Track a URL that failed to scrape for learning purposes."""
+    _FAILED_URLS.append({
+        'url': url,
+        'error': error_reason,
+        'timestamp_ms': int(time.time() * 1000)  # Millisecond precision for ordering
+    })
+    logger.info(f"📝 LEARNING: Tracked failed URL: {url} - {error_reason}")
+
+
+def mark_web_search_performed(session_id: str):
+    """Mark that a web search has been performed for this session."""
+    _SESSION_WEB_STATE[session_id] = {
+        'web_search_performed': True,
+        'last_search_timestamp': time.time()
+    }
+    logger.info(f"🔍 STATE: Marked web search performed for session {session_id}")
+    
+    # Cleanup old sessions to prevent memory leaks (keep only last 1000 sessions)
+    if len(_SESSION_WEB_STATE) > 1000:
+        # Remove oldest sessions based on timestamp
+        current_time = time.time()
+        sessions_to_remove = []
+        for sid, state in _SESSION_WEB_STATE.items():
+            timestamp = state.get('last_search_timestamp', 0)
+            if not isinstance(timestamp, (int, float)) or current_time - timestamp > 7200:  # 2 hours
+                sessions_to_remove.append(sid)
+        
+        for sid in sessions_to_remove:
+            _SESSION_WEB_STATE.pop(sid, None)
+        
+        if sessions_to_remove:
+            logger.info(f"🔍 STATE: Cleaned up {len(sessions_to_remove)} old session states")
+
+
+def check_web_search_performed(session_id: str) -> bool:
+    """Check if a web search has been performed for this session recently."""
+    try:
+        session_state = _SESSION_WEB_STATE.get(session_id, {})
+        performed = session_state.get('web_search_performed', False)
+        
+        # Clear state if it's too old (more than 1 hour)
+        if performed:
+            last_search = session_state.get('last_search_timestamp', 0)
+            # Handle corrupted timestamp data
+            if not isinstance(last_search, (int, float)):
+                logger.warning(f"🔍 STATE: Invalid timestamp for session {session_id}, clearing state")
+                _SESSION_WEB_STATE.pop(session_id, None)
+                return False
+                
+            if time.time() - last_search > 3600:  # 1 hour
+                logger.info(f"🔍 STATE: Clearing old web search state for session {session_id}")
+                _SESSION_WEB_STATE.pop(session_id, None)
+                return False
+        
+        logger.info(f"🔍 STATE: Web search performed for session {session_id}: {performed}")
+        return performed
+    except Exception as e:
+        logger.warning(f"🔍 STATE: Error checking web search state for session {session_id}: {e}")
+        return False
+
+
+def clear_web_search_state(session_id: str):
+    """Clear web search state after scraping is completed."""
+    if session_id in _SESSION_WEB_STATE:
+        _SESSION_WEB_STATE.pop(session_id)
+        logger.info(f"🔍 STATE: Cleared web search state for session {session_id}")
+
+
+def reset_web_search_state(session_id: str):
+    """Reset web search state to allow new search cycles."""
+    clear_web_search_state(session_id)
+    logger.info(f"🔍 STATE: Reset web search state for session {session_id}")
+
+
+async def _update_block_list_from_failures():
+    """Use LLM to analyze failed URLs and update the block list intelligently."""
+    global BLOCKED_GLOBS, BLOCKED_PATTERNS
+    
+    if not _FAILED_URLS:
+        return
+    
+    logger.info(f"🧠 LEARNING: Analyzing {len(_FAILED_URLS)} failed URLs for block list updates")
+    
+    try:
+        from persistent_llm_server import get_llm_server
+        
+        # Step 1: Load and provide COMPLETE existing block configuration
+        with open(_config_path, 'r') as f:
+            complete_config = json.load(f)
+        
+        # Step 2: Analyze failure patterns and prepare intelligent summary
+        from urllib.parse import urlparse
+        from collections import defaultdict
+        
+        # Group failures by domain to identify patterns
+        domain_failures = defaultdict(list)
+        for fail in _FAILED_URLS:
+            try:
+                domain = urlparse(fail['url']).netloc
+                domain_failures[domain].append(fail)
+            except Exception:
+                # Handle malformed URLs
+                domain_failures['unknown'].append(fail)
+        
+        # Build intelligent failure summary with pattern analysis
+        failure_parts = []
+        for domain, failures in domain_failures.items():
+            failure_count = len(failures)
+            error_types = [f['error'] for f in failures]
+            
+            if failure_count > 1:
+                failure_parts.append(f"- DOMAIN: {domain} ({failure_count} failures)")
+                failure_parts.append(f"  Errors: {', '.join(error_types[:3])}{'...' if len(error_types) > 3 else ''}")
+            else:
+                failure_parts.append(f"- SINGLE FAILURE: {failures[0]['url']} (Error: {failures[0]['error']})")
+        
+        failure_summary = "\n".join(failure_parts)
+        
+        # Step 3: Comprehensive analysis with full context
+        analysis_prompt = f"""COMPREHENSIVE URL BLOCKING ANALYSIS
+
+You must analyze the COMPLETE context before making any decisions:
+
+STEP 1 - EXISTING BLOCK CONFIGURATION (FULL FILE):
+{json.dumps(complete_config, indent=2)}
+
+STEP 2 - INTELLIGENT FAILURE PATTERN ANALYSIS:
+{failure_summary}
+
+PATTERN RECOGNITION NOTES:
+- Domains with multiple failures may indicate systematic issues
+- Single failures are likely temporary and should NOT be blocked
+- Consider error types: auth errors vs 404s vs server errors
+
+STEP 3 - INTELLIGENT DECISION MAKING:
+Using the COMPLETE existing block configuration AND the recent scraping results:
+
+1. **DO NOT BLOCK** for temporary errors:
+   - HTTP 404 (page not found) - content may have moved
+   - HTTP 500/502/503 (server errors) - temporary issues
+   - Timeout errors - network/performance issues
+   - Single occurrence failures
+
+2. **CONSIDER BLOCKING** only for systematic issues:
+   - Authentication/login required (401/403 + auth content)
+   - Paywall/subscription content
+   - Multiple failures from same domain over time
+   - Content explicitly stating access restrictions
+
+3. **ANALYSIS REQUIREMENTS**:
+   - Check if failed URLs are already covered by existing patterns
+   - Only suggest new blocks for persistent systematic issues
+   - Avoid blocking entire domains for isolated failures
+
+4. **REMOVAL AUTHORITY**:
+   You have FULL PERMISSION to remove incorrectly blocked patterns:
+   - Remove blocks that were added for temporary issues (404s, server errors)
+   - Remove overly broad blocks that prevent legitimate scraping
+   - Remove outdated blocks that no longer apply
+   - Clean up duplicate or redundant patterns
+
+CRITICAL: Be conservative with blocking. Only block when there's clear evidence of systematic access restrictions, not temporary failures.
+
+Return ONLY a JSON object:
+{{
+    "analysis_summary": "Brief analysis of the complete context",
+    "existing_coverage": "What current patterns already cover",
+    "new_globs": ["*.example.com*"],
+    "new_patterns": ["/login*", "/paywall*"],
+    "remove_globs": ["*.unnecessarily-blocked.com*"],
+    "remove_patterns": ["/outdated-pattern*"],
+    "reasoning": "Detailed explanation of changes needed"
+}}
+
+If no changes are needed, return: {{"analysis_summary": "...", "existing_coverage": "...", "new_globs": [], "new_patterns": [], "remove_globs": [], "remove_patterns": [], "reasoning": "No changes needed - current configuration is optimal"}}"""
+
+        llm_server = await get_llm_server()
+        response = await llm_server.generate(
+            prompt=utils.format_prompt("You are a web scraping optimization assistant. Analyze failed URLs to improve blocking patterns.", analysis_prompt),
+            max_tokens=25000,  # Full learning analysis capability
+            temperature=0.2,
+            session_id="url_learning",
+        )
+        
+        logger.info(f"🧠 LEARNING: LLM analysis response: {response}")
+        
+        # Parse LLM comprehensive analysis
+        start_idx = response.find("{")
+        end_idx = response.rfind("}")
+        if start_idx != -1 and end_idx != -1:
+            analysis = json.loads(response[start_idx:end_idx + 1])
+            
+            analysis_summary = analysis.get('analysis_summary', 'No analysis provided')
+            existing_coverage = analysis.get('existing_coverage', 'No coverage analysis')
+            new_globs = analysis.get('new_globs', [])
+            new_patterns = analysis.get('new_patterns', [])
+            remove_globs = analysis.get('remove_globs', [])
+            remove_patterns = analysis.get('remove_patterns', [])
+            reasoning = analysis.get('reasoning', 'No reasoning provided')
+            
+            logger.info(f"🧠 LEARNING: Analysis Summary: {analysis_summary}")
+            logger.info(f"🧠 LEARNING: Existing Coverage: {existing_coverage}")
+            
+            if new_globs or new_patterns or remove_globs or remove_patterns:
+                # Update the config file with comprehensive data
+                current_time_ms = int(time.time() * 1000)
+                current_datetime = datetime.now().isoformat()
+                
+                config_data = complete_config.copy()
+                
+                # Add new patterns
+                config_data['blocked_globs'].extend(new_globs)
+                config_data['blocked_patterns'].extend(new_patterns)
+                
+                # Remove patterns as suggested by LLM
+                for pattern in remove_globs:
+                    if pattern in config_data['blocked_globs']:
+                        config_data['blocked_globs'].remove(pattern)
+                        logger.info(f"🧠 LEARNING: Removed glob pattern: {pattern}")
+                
+                for pattern in remove_patterns:
+                    if pattern in config_data['blocked_patterns']:
+                        config_data['blocked_patterns'].remove(pattern)
+                        logger.info(f"🧠 LEARNING: Removed pattern: {pattern}")
+                
+                config_data['last_updated'] = current_datetime
+                config_data['version'] = str(float(config_data.get('version', '1.0')) + 0.1)
+                
+                # Update metadata timestamps
+                if 'metadata' not in config_data:
+                    config_data['metadata'] = {}
+                config_data['metadata']['last_updated_timestamp_ms'] = current_time_ms
+                
+                # Add learning metadata
+                if 'learning_history' not in config_data:
+                    config_data['learning_history'] = []
+                config_data['learning_history'].append({
+                    'timestamp': current_datetime,
+                    'timestamp_ms': current_time_ms,
+                    'failed_urls_count': len(_FAILED_URLS),
+                    'new_globs': new_globs,
+                    'new_patterns': new_patterns,
+                    'removed_globs': remove_globs,
+                    'removed_patterns': remove_patterns,
+                    'reasoning': reasoning
+                })
+                
+                # Write updated config
+                with open(_config_path, 'w') as f:
+                    json.dump(config_data, f, indent=2)
+                
+                # Update module-level variables
+                BLOCKED_GLOBS.extend(new_globs)
+                BLOCKED_PATTERNS.extend(new_patterns)
+                
+                # Remove patterns from module-level variables
+                for pattern in remove_globs:
+                    if pattern in BLOCKED_GLOBS:
+                        BLOCKED_GLOBS.remove(pattern)
+                        
+                for pattern in remove_patterns:
+                    if pattern in BLOCKED_PATTERNS:
+                        BLOCKED_PATTERNS.remove(pattern)
+                
+                logger.info(f"🧠 LEARNING: Updated block list - Added {len(new_globs)} globs, {len(new_patterns)} patterns, Removed {len(remove_globs)} globs, {len(remove_patterns)} patterns")
+                logger.info(f"🧠 LEARNING: Configuration saved to {_config_path}")
+                logger.info(f"🧠 LEARNING: Detailed Reasoning: {reasoning}")
+            else:
+                logger.info(f"🧠 LEARNING: No new blocks needed - {reasoning}")
+        
+        # Clear the failed URLs list after processing
+        _FAILED_URLS.clear()
+        
+    except Exception as e:
+        logger.error(f"🧠 LEARNING: Failed to update block list: {e}", exc_info=True)
 
 
 async def calculate_message_importance(
@@ -88,11 +397,15 @@ async def get_memory_context(user_prompt: str, session_id: str) -> str:
                 memory_parts.append(file_context)
                 logger.info(f"📎 MEMORY DEBUG: Added {len(file_attachments)} file attachment references")
 
-            # Add regular memories
+            # Add recent conversation memories (prioritize most recent)
             if memories:
-                regular_memories = [m.content for m in memories[:3]]
-                memory_parts.extend(regular_memories)
-                logger.info(f"🧠 MEMORY DEBUG: Added {len(regular_memories)} regular memories")
+                # Get the most recent memories to understand conversation flow
+                recent_memories = [m.content for m in memories[:5]]  # Increased from 3 to 5
+                
+                # Add a recent conversation context header
+                if recent_memories:
+                    memory_parts.append("Recent Conversation Context:\n" + "\n\n".join(recent_memories))
+                    logger.info(f"🧠 MEMORY DEBUG: Added {len(recent_memories)} recent conversation memories")
 
             if memory_parts:
                 memory_context = "\n\n".join(memory_parts)
@@ -120,7 +433,12 @@ async def handle_conversation_intent(user_prompt: str, session_id: str):
 
 🚨 CRITICAL: You are NEVER allowed to use [REF] tags in ANY form ([REF]1[/REF], [REF]2[/REF], [REF]anything[/REF]) and must ONLY use proper markdown links: [Text Here](URL)
 
-🧠 MEMORY INSTRUCTION: If I provide User Information below, you MUST use that information to answer questions about the user. This information comes from our previous conversations and is completely accurate."""
+🧠 MEMORY INSTRUCTION: If I provide User Information below, you MUST use that information to answer questions about the user. This information comes from our previous conversations and is completely accurate.
+
+🔄 CONVERSATION FLOW: 
+- If the user gives a one-word answer or short phrase after you asked for clarification, they are answering your clarification question
+- Look at the "Recent Conversation Context" to understand what specific topic they're choosing when they clarify
+- When they clarify a topic, continue with that specific topic instead of starting a general conversation about it"""
 
     # Add memory context if available
     if memory_context:
@@ -180,8 +498,22 @@ async def _handle_direct_scraping(urls_to_scrape: list, user_prompt: str, sessio
         # Import web scraping functionality
         from web_scraper import scrape_website
         
-        # Limit to reasonable number of URLs
-        urls_to_process = urls_to_scrape[:5]
+        # Single-pass filter with limit using module-level config
+        urls_to_process = [
+            url for url in urls_to_scrape[:5] 
+            if url and url.strip() and not is_blocked_url(url)
+        ]
+        
+        blocked_count = len(urls_to_scrape[:5]) - len(urls_to_process)
+        
+        if blocked_count > 0:
+            logger.info(f"🚫 SCRAPING: Filtered {blocked_count} blocked URLs")
+            yield f"data: {json.dumps({'token': {'text': f'🚫 Filtered {blocked_count} Facebook URLs (not scrapeable)\n\n'}})}\n\n"
+        
+        if not urls_to_process:
+            yield f"data: {json.dumps({'token': {'text': '❌ No scrapeable URLs available\n\n'}})}\n\n"
+            yield f"data: {json.dumps({'done': True})}\n\n"
+            return
         
         yield f"data: {json.dumps({'token': {'text': f'\n\n🎯 Scraping {len(urls_to_process)} URLs:\n\n'}})}\n\n"
         
@@ -202,24 +534,65 @@ async def _handle_direct_scraping(urls_to_scrape: list, user_prompt: str, sessio
                 content = await scrape_website(url, timeout_seconds=8, max_retries=2)
                 logger.info(f"🕷️ SCRAPING: Got content length: {len(content) if content else 0} for {url}")
                 
-                if content and len(content.strip()) > 100:
-                    # Truncate very long content
-                    if len(content) > 3000:
-                        content = content[:3000] + "\n\n[Content truncated for brevity...]"
-                    
-                    scraped_contents.append({
-                        'url': url,
-                        'content': content.strip()
-                    })
-                    success_count += 1
-                    yield f"data: {json.dumps({'token': {'text': f'✅ Successfully scraped content ({len(content)} chars)\n\n'}})}\n\n"
-                    
-                    # Process content through LLM instead of raw dumping
-                    yield f"data: {json.dumps({'token': {'text': f'🤖 Processing content through AI...\n\n'}})}\n\n"
+                # Use LLM to classify if this is an authentication message
+                is_auth_message = False
+                if content and len(content.strip()) > 10:
+                    try:
+                        # Get LLM server for classification
+                        from persistent_llm_server import get_llm_server
+                        llm_server = await get_llm_server()
+                        
+                        classification_prompt = f"""Analyze this web page content and determine if it indicates authentication is required.
+
+Content to analyze:
+{content[:500]}
+
+Respond with only "AUTH_REQUIRED" if this content indicates authentication/login is needed, or "CONTENT_AVAILABLE" if this appears to be accessible content."""
+
+                        classification_response = await llm_server.generate(
+                            prompt=classification_prompt,
+                            max_tokens=100,
+                            temperature=0.1,
+                            session_id="auth_classification"
+                        )
+                        
+                        is_auth_message = "AUTH_REQUIRED" in classification_response.upper()
+                        logger.info(f"🤖 LLM CLASSIFICATION: {url[:40]}... -> {'AUTH_REQUIRED' if is_auth_message else 'CONTENT_AVAILABLE'}")
+                        
+                    except Exception as classification_error:
+                        logger.warning(f"🤖 LLM CLASSIFICATION: Failed for {url[:40]}... -> {classification_error}")
+                        # Fallback: treat very short content as potentially auth-related
+                        is_auth_message = len(content.strip()) < 100
+                
+                if content and (len(content.strip()) > 100 or is_auth_message):
+                    if is_auth_message:
+                        # Handle authentication messages specifically
+                        yield f"data: {json.dumps({'token': {'text': f'🔒 {url[:60]}... requires authentication/login\n\n'}})}\n\n"
+                        track_failed_url(url, f"Authentication required: {content[:50]}")
+                    else:
+                        # Regular successful content
+                        # Truncate very long content
+                        if len(content) > 3000:
+                            content = content[:3000] + "\n\n[Content truncated for brevity...]"
+                        
+                        scraped_contents.append({
+                            'url': url,
+                            'content': content.strip()
+                        })
+                        success_count += 1
+                        yield f"data: {json.dumps({'token': {'text': f'✅ Successfully scraped content ({len(content)} chars)\n\n'}})}\n\n"
+                        
+                        # Process content through LLM instead of raw dumping
+                        yield f"data: {json.dumps({'token': {'text': f'🤖 Processing content through AI...\n\n'}})}\n\n"
                 else:
-                    yield f"data: {json.dumps({'token': {'text': f'❌ No content found or access denied\n\n'}})}\n\n"
+                    # Track failed URL for learning
+                    content_preview = content[:50] if content else "No content returned"
+                    track_failed_url(url, f"Insufficient content: {content_preview}")
+                    yield f"data: {json.dumps({'token': {'text': f'❌ Insufficient content from {url[:40]}...\n\n'}})}\n\n"
                     
             except Exception as scrape_error:
+                # Track failed URL for learning
+                track_failed_url(url, str(scrape_error))
                 logger.warning(f"🕷️ SCRAPING: Error scraping {url}: {scrape_error}")
                 yield f"data: {json.dumps({'token': {'text': f'❌ Error: {str(scrape_error)[:100]}\n\n'}})}\n\n"
         
@@ -294,6 +667,12 @@ CRITICAL: Use ONLY [Specific Website Name](URL) format for links, NEVER use [REF
         logger.error(f"🕷️ SCRAPING: ❌ {error_msg}", exc_info=True)
         yield f"data: {json.dumps({'token': {'text': f'\n\n❌ {error_msg}\n\n'}})}\n\n"
     
+    # Learn from scraping failures and update block list
+    await _update_block_list_from_failures()
+    
+    # Clear web search state since scraping is now complete
+    clear_web_search_state(session_id)
+    
     yield f"data: {json.dumps({'done': True})}\n\n"
 
 
@@ -312,64 +691,134 @@ async def handle_web_search_intent(user_prompt: str, session_id: str, request):
         system_prompt = """You are an intelligent web assistant. Analyze the user's request and conversation context to determine the best action.
 
 DECISION RULES:
-1. If the user wants to search for NEW information, choose "SEARCH"
-2. If the user wants to scrape/read more from URLs mentioned in the conversation context, choose "SCRAPE"
-3. Consider the intent behind the user's words
+1. If the user wants to search for NEW information not covered in the conversation context, choose "SEARCH"
+2. If the user wants to learn more about topics already discussed AND there are URLs in the conversation context, choose "SCRAPE"
+3. Look for URLs in the conversation context - if the user's request relates to existing topics with URLs, prioritize SCRAPE
+
+CRITICAL: When choosing SCRAPE, you MUST extract ALL relevant URLs from the conversation context.
 
 Return ONLY a JSON object:
 {
     "action": "SEARCH" | "SCRAPE",
     "reasoning": "brief explanation",
-    "urls_to_scrape": ["url1", "url2"] // Only if action is SCRAPE, extract URLs from context
+    "urls_to_scrape": ["url1", "url2", "url3"] // REQUIRED if action is SCRAPE - extract ALL URLs from context that relate to the user's request
 }"""
 
         user_content = f"""User Request: {user_prompt}
 
 Conversation Context (contains any previous search results with URLs):
-{memory_context[:2000]}
+{memory_context}
 
-What should I do: search for new information or scrape existing URLs from our conversation?"""
+TASK: Analyze if the user's request relates to topics already discussed. If there are relevant URLs in the context above, extract them for scraping. If not, choose to search for new information."""
 
         formatted_prompt = utils.format_prompt(system_prompt, user_content)
         llm_server = await get_llm_server()
         
         decision_response = await llm_server.generate(
             prompt=formatted_prompt,
-            max_tokens=300,
+            max_tokens=8000,
             temperature=0.2,
             session_id=f"{session_id}_web_decision",
         )
         
         logger.info(f"🤖 LLM web decision: {decision_response.strip()}")
         
-        # Parse the LLM decision
+        # Parse the LLM decision with robust error handling
         import json
         try:
-            # Extract JSON from response
+            # Extract JSON from response with multiple fallback strategies
             start_idx = decision_response.find("{")
             end_idx = decision_response.rfind("}")
-            if start_idx != -1 and end_idx != -1:
-                decision_json = json.loads(decision_response[start_idx:end_idx + 1])
-                action = decision_json.get("action", "SEARCH")
-                reasoning = decision_json.get("reasoning", "")
+            
+            if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+                json_text = decision_response[start_idx:end_idx + 1]
+                logger.debug(f"🔍 PARSING DEBUG: Extracted JSON: {json_text[:200]}...")
+                decision_json = json.loads(json_text)
+            else:
+                # Fallback: try to find incomplete JSON and fix it
+                logger.warning(f"🔍 PARSING DEBUG: Malformed JSON detected, attempting repair...")
+                logger.warning(f"🔍 PARSING DEBUG: Raw response: {decision_response}")
                 
-                if action == "SCRAPE":
-                    urls_to_scrape = decision_json.get("urls_to_scrape", [])
-                    yield f"data: {json.dumps({'token': {'text': f'🕷️ Scraping URLs from conversation ({reasoning})...'}})}\n\n"
+                # Use LLM to extract URLs from malformed response
+                logger.info("🔍 PARSING DEBUG: Using LLM to extract URLs from malformed JSON")
+                
+                url_extraction_prompt = f"""The following LLM response was truncated and contains malformed JSON. Please extract any valid URLs from this text and return them as a clean JSON array.
+
+Malformed Response:
+{decision_response}
+
+Memory Context for Reference:
+{memory_context}
+
+Return ONLY a JSON array of URLs like: ["url1", "url2", "url3"]
+If no URLs found, return: []"""
+
+                try:
+                    url_extraction_response = await llm_server.generate(
+                        prompt=utils.format_prompt("You are a URL extraction assistant. Extract only valid URLs from malformed text.", url_extraction_prompt),
+                        max_tokens=500,
+                        temperature=0.1,
+                        session_id=f"{session_id}_url_extraction",
+                    )
+                    
+                    logger.info(f"🔍 LLM URL extraction response: {url_extraction_response}")
+                    
+                    # Parse the LLM's URL extraction
+                    start_bracket = url_extraction_response.find("[")
+                    end_bracket = url_extraction_response.rfind("]")
+                    if start_bracket != -1 and end_bracket != -1:
+                        urls_json = url_extraction_response[start_bracket:end_bracket + 1]
+                        urls = json.loads(urls_json)
+                        
+                        if urls:
+                            logger.info(f"🔍 PARSING DEBUG: LLM extracted {len(urls)} URLs")
+                            for idx, url in enumerate(urls):
+                                logger.info(f"🕷️ SCRAPING DEBUG: URL {idx + 1}: {url}")
+                            
+                            yield f"data: {json.dumps({'token': {'text': f'🕷️ Scraping {len(urls)} URLs from conversation (LLM extracted from truncated response)...'}})}\n\n"
+                            async for chunk in _handle_direct_scraping(urls, user_prompt, session_id):
+                                yield chunk
+                            return
+                
+                except Exception as extract_error:
+                    logger.warning(f"🔍 LLM URL extraction failed: {extract_error}")
+                
+                # Complete fallback - create default decision
+                decision_json = {"action": "SEARCH", "reasoning": "JSON parsing failed"}
+            
+            action = decision_json.get("action", "SEARCH")
+            reasoning = decision_json.get("reasoning", "")
+            
+            if action == "SCRAPE":
+                urls_to_scrape = decision_json.get("urls_to_scrape", [])
+                logger.info(f"🕷️ SCRAPING DEBUG: LLM provided {len(urls_to_scrape)} URLs to scrape")
+                for idx, url in enumerate(urls_to_scrape):
+                    logger.info(f"🕷️ SCRAPING DEBUG: URL {idx + 1}: {url}")
+                
+                if urls_to_scrape:
+                    yield f"data: {json.dumps({'token': {'text': f'🕷️ Scraping {len(urls_to_scrape)} URLs from conversation ({reasoning})...'}})}\n\n"
                     async for chunk in _handle_direct_scraping(urls_to_scrape, user_prompt, session_id):
                         yield chunk
                     return
+                else:
+                    logger.warning("🕷️ SCRAPING DEBUG: No URLs found in LLM decision, falling back to search")
                         
-        except json.JSONDecodeError:
-            logger.warning(f"Failed to parse LLM decision: {decision_response}")
+        except json.JSONDecodeError as e:
+            logger.warning(f"🔍 PARSING DEBUG: JSON decode failed: {e}")
+            logger.warning(f"🔍 PARSING DEBUG: Failed to parse LLM decision: {decision_response[:500]}...")
         except Exception as e:
-            logger.warning(f"LLM decision error: {e}")
+            logger.warning(f"🔍 PARSING DEBUG: LLM decision error: {e}", exc_info=True)
             
-        # Default to search
+        # Only reach here if SCRAPE decision failed or wasn't made - perform search as fallback
+        logger.info("🔍 SEARCH FALLBACK: No valid URLs to scrape, performing web search")
+        
+        # Mark that we're performing a web search for this session
+        mark_web_search_performed(session_id)
+        
         yield f"data: {json.dumps({'token': {'text': '🔍 Searching the web...'}})}\n\n"
 
         from web_scraper import perform_web_search_async
-        search_results = await perform_web_search_async(query=user_prompt, num_results=8)
+        search_results = await perform_web_search_async(query=user_prompt, num_results=8, session_id=session_id)
 
         if search_results:
             yield f"data: {json.dumps({'token': {'text': '\n\n📊 Found information, generating comprehensive response...\n\n---\n\n'}})}\n\n"
@@ -454,6 +903,9 @@ ONLY USE: [Description](URL) format for ALL links
         error_msg = f"Search error: {search_error}"
         logger.error(f"🧠 MEMORY DEBUG: ❌ {error_msg}", exc_info=True)
         yield f"data: {json.dumps({'token': {'text': f'\n\n❌ {error_msg}\n\n'}})}\n\n"
+
+    # Learn from scraping failures and update block list
+    await _update_block_list_from_failures()
 
     yield f"data: {json.dumps({'done': True})}\n\n"
 
@@ -550,7 +1002,8 @@ async def handle_personal_info_recall_intent(user_prompt: str, session_id: str):
 
             # Build response with found information
             if memories or core_memories:
-                await _generate_memory_recall_response(memories, core_memories, user_prompt, session_id)
+                async for chunk in _generate_memory_recall_response(memories, core_memories, user_prompt, session_id):
+                    yield chunk
             else:
                 logger.info("🧠 MEMORY RECALL: No relevant memories found")
                 yield f"data: {json.dumps({'token': {'text': 'I do not have any information about that in my memory.'}})}\n\n"

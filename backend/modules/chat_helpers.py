@@ -317,7 +317,7 @@ async def _stream_llm_response(server, prompt: str):
     """Stream tokens from LLM server."""
     async for token in server.generate_stream(
         prompt=prompt,
-        max_tokens=1024,
+        max_tokens=30000,  # Full memory processing capability
         temperature=0.7,
         stop_strings=["User:", "Assistant:", "<|endoftext|>", "<|end|>"],
         top_p=0.9,

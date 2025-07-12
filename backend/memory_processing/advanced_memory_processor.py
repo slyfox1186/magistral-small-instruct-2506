@@ -210,9 +210,9 @@ class AdvancedMemoryProcessor:
             
             return result
 
-        except TimeoutError:
-            error_msg = f"Memory processing timed out after {self.config.max_processing_time}s"
-            self.logger.exception(f"{error_msg} for session {session_id}")
+        except (TimeoutError, asyncio.CancelledError):
+            error_msg = f"Memory processing timed out or was cancelled after {self.config.max_processing_time}s"
+            self.logger.error(f"{error_msg} for session {session_id}")
             self._update_processing_stats(time.time() - start_time, 0, False)
 
             return MemoryProcessingResult(

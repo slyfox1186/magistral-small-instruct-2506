@@ -38,6 +38,53 @@ from .models import ChatStreamRequest
 
 logger = logging.getLogger(__name__)
 
+# Configuration constants
+MAX_MESSAGE_LENGTH = 50000  # 50KB limit per message
+MAX_TOTAL_MESSAGES = 100    # Maximum number of messages in conversation
+MAX_SESSION_ID_LENGTH = 128 # Reasonable session ID length limit
+
+def validate_chat_input(content: str) -> str:
+    """Basic chat input validation - just length and empty check.
+    
+    Args:
+        content: Raw user input
+        
+    Returns:
+        Validated content
+        
+    Raises:
+        ValueError: If input is invalid
+    """
+    if not content or not content.strip():
+        raise ValueError("Message cannot be empty")
+    
+    if len(content) > MAX_MESSAGE_LENGTH:
+        raise ValueError(f"Message too long (max {MAX_MESSAGE_LENGTH} characters)")
+    
+    # No content sanitization - let the LLM handle content processing naturally
+    return content.strip()
+
+def validate_session_id(session_id: str) -> str:
+    """Basic session ID validation - just length and empty check.
+    
+    Args:
+        session_id: Session identifier
+        
+    Returns:
+        Validated session ID
+        
+    Raises:
+        ValueError: If session ID is invalid
+    """
+    if not session_id or not session_id.strip():
+        raise ValueError("Session ID cannot be empty")
+    
+    if len(session_id) > MAX_SESSION_ID_LENGTH:
+        raise ValueError(f"Session ID too long (max {MAX_SESSION_ID_LENGTH} characters)")
+    
+    # No regex validation - let the LLM handle content processing
+    return session_id.strip()
+
 
 
 async def get_memory_context(user_prompt: str, session_id: str) -> str:
@@ -166,22 +213,35 @@ def _create_chat_stream_route(app: FastAPI):
             )
             raise
 
-        session_id = request.session_id
+        # Validate session ID
+        try:
+            session_id = validate_session_id(request.session_id)
+        except ValueError as e:
+            logger.warning(f"Invalid session ID: {e}")
+            raise HTTPException(status_code=400, detail=str(e))
+        
+        # Validate messages count
+        if len(request.messages) > MAX_TOTAL_MESSAGES:
+            logger.warning(f"Too many messages: {len(request.messages)}")
+            raise HTTPException(status_code=400, detail=f"Too many messages (max {MAX_TOTAL_MESSAGES})")
         
         # Set conversation context for Redis compatibility layer
         if app_state.personal_memory and hasattr(app_state.personal_memory, 'set_conversation_context'):
             app_state.personal_memory.set_conversation_context(session_id)
             logger.info(f"🧠 MEMORY DEBUG: Set Redis compatibility conversation context to {session_id}")
         
-        user_prompt = request.messages[-1].content if request.messages else ""
+        # Validate and sanitize user prompt
+        raw_user_prompt = request.messages[-1].content if request.messages else ""
+        try:
+            user_prompt = validate_chat_input(raw_user_prompt)
+        except ValueError as e:
+            logger.warning(f"Invalid user input: {e}")
+            raise HTTPException(status_code=400, detail=str(e))
+            
         logger.info(
-            f"🧠 MEMORY DEBUG: Extracted user prompt: '{user_prompt[:100]}...' (length: {len(user_prompt)})"
+            f"🧠 MEMORY DEBUG: Validated user prompt: '{user_prompt[:100]}...' (length: {len(user_prompt)})"
         )
         logger.info(f"🧠 MEMORY DEBUG: Session ID: {session_id}")
-
-        if not user_prompt:
-            logger.warning("🧠 MEMORY DEBUG: Rejected empty prompt request")
-            raise HTTPException(status_code=400, detail="Empty prompt")
 
         #  PII REDACTION DISABLED - User wants AI to remember personal information
         # Add constant for prompt preview length

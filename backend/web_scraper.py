@@ -417,58 +417,6 @@ async def _try_aiohttp_scrape(
                 return None, False
 
 
-async def _try_curl_fallback(url: str) -> str | None:
-    """Try to scrape using curl as fallback."""
-    mobile_user_agent = (
-        "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) "
-        "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 "
-        "Mobile/15E148 Safari/604.1"
-    )
-    header_args = [
-        "-H", f"User-Agent: {mobile_user_agent}",
-        "-H", "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "-H", "Accept-Language: en-US,en;q=0.9",
-        "-H", "Referer: https://www.bing.com/search",
-        "-H", "Cookie: visited=true; session=temp",
-        "-H", "sec-ch-ua-mobile: ?1",
-        "-H", 'sec-ch-ua-platform: "iOS"',
-    ]
-
-    try:
-        safe_url = url_validator.sanitize_url_for_shell(url)
-    except ValueError as e:
-        logger.exception("URL validation failed")
-        return f"Error: Invalid or unsafe URL - {e!s}"
-
-    # Add cache busting parameter
-    safe_url = _add_cache_busting_params(safe_url)
-
-    process = await asyncio.create_subprocess_exec(
-        "curl", "-s", "-L", "-v", *header_args, safe_url,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    stdout, stderr = await process.communicate()
-
-    logger.debug(f"Curl debug info: {stderr.decode('utf-8', errors='ignore')[:500]}")
-
-    if process.returncode == 0 and stdout:
-        html_content = stdout.decode("utf-8", errors="ignore")
-        # Use lxml parser for better performance
-        try:
-            soup = BeautifulSoup(html_content, "lxml")
-        except:
-            soup = BeautifulSoup(html_content, "html.parser")
-
-        if _detect_authentication_required(soup, None):
-            return None
-
-        # Clean content
-        for script_or_style in soup(["script", "style"]):
-            script_or_style.decompose()
-        return soup.get_text(separator="\n", strip=True)
-
-    return None
 
 
 def _cache_and_return(url: str, content: str | None) -> str | None:
@@ -477,27 +425,6 @@ def _cache_and_return(url: str, content: str | None) -> str | None:
     return content
 
 
-async def _handle_403_error(url: str, retries: int, max_retries: int) -> str | None:
-    """Handle 403 Forbidden errors with curl fallback."""
-    if retries < max_retries - 1:
-        return None  # Continue retrying
-
-    logger.info(f"Trying curl fallback for {url} after 403 Forbidden")
-
-    try:
-        curl_content = await _try_curl_fallback(url)
-        if curl_content:
-            logger.info(f"Successfully scraped with curl fallback for {url}")
-            return curl_content
-    except Exception:
-        logger.exception(f"Curl fallback error for {url}")
-
-    logger.warning(f"Persistent 403 for {url}, stopping retries.")
-    return (
-        f"Unable to access content at {url}. The website is blocking automated "
-        f"access (403 Forbidden). This may be due to the site's terms of service "
-        f"or security measures."
-    )
 
 
 async def _scrape_website_internal(
@@ -545,19 +472,35 @@ async def _scrape_website_internal(
                 return _cache_and_return(url, content)
 
         except aiohttp.ClientResponseError as e:
-            logger.exception(f"HTTP error {e.status} occurred for {url}")
-
-            if e.status == HTTP_FORBIDDEN:
-                result = await _handle_403_error(url, retries, max_retries)
-                if result is not None:
-                    return _cache_and_return(url, result)
+            logger.error(f"HTTP error {e.status} occurred for {url} - discarding failed request")
+            
+            # Track failed URL for learning
+            try:
+                from modules.intent_handlers import track_failed_url
+                track_failed_url(url, f"HTTP {e.status} error")
+            except ImportError:
+                pass  # Avoid circular import issues
+            
+            # Immediately discard any failed HTTP requests (don't retry, don't use curl fallback)
+            logger.warning(f"Discarding {url} due to HTTP {e.status} error")
+            return _cache_and_return(url, None)
 
         except (aiohttp.ClientError, TimeoutError, Exception) as e:
             error_type = type(e).__name__
             if isinstance(e, TimeoutError):
-                logger.warning(f"Timeout occurred for {url} after {timeout_seconds} seconds")
+                logger.warning(f"Timeout occurred for {url} after {timeout_seconds} seconds - discarding")
             else:
-                logger.exception(f"{error_type} exception for {url}")
+                logger.error(f"{error_type} exception for {url} - discarding failed request")
+            
+            # Track failed URL for learning
+            try:
+                from modules.intent_handlers import track_failed_url
+                track_failed_url(url, f"{error_type}: {str(e)}")
+            except ImportError:
+                pass  # Avoid circular import issues
+            
+            # Immediately discard any failed requests due to errors
+            return _cache_and_return(url, None)
 
         retries += 1
         if retries < max_retries:
@@ -702,7 +645,7 @@ JSON Response:"""
 
     raw_llm_output = await llm_server.generate(
         prompt=decision_prompt,
-        max_tokens=200,
+        max_tokens=25000,  # Full detailed analysis capability
         temperature=0.3,
         session_id="web_scraper_decision",
     )
@@ -949,7 +892,7 @@ Please extract and format the relevant information using markdown."""
         # Extract the generated text response
         extracted_data = await llm_server.generate(
             prompt=formatted_prompt,
-            max_tokens=512,
+            max_tokens=25000,  # Full content summarization capability
             temperature=0.7,
             session_id="web_scraper_extraction",
         )
@@ -1197,37 +1140,34 @@ async def _check_for_url_in_query(query: str) -> str | None:
     return None
 
 
-async def _get_llm_search_decision(query: str, formatted_results: str) -> dict:
+async def _get_llm_search_decision(query: str, formatted_results: str, session_id: str = "default_session") -> dict:
     """Get LLM decision on whether snippets are sufficient."""
     system_prompt = """You are Jane, evaluating whether Google search snippets contain enough information to answer a user's query.
 
-🚨 CRITICAL LINK FORMATTING RULES - ABSOLUTE REQUIREMENTS 🚨
+🚨 CRITICAL: BE VERY CONSERVATIVE ABOUT SCRAPING 🚨
 
-**COMPLETELY FORBIDDEN - NEVER USE THESE:**
-- [REF]1[/REF] - FORBIDDEN
-- [REF]2[/REF] - FORBIDDEN
-- [REF]anything[/REF] - FORBIDDEN
-- [REF]source[/REF] - FORBIDDEN
-- [REF]url[/REF] - FORBIDDEN
-- ANY variation of [REF]...[/REF] - COMPLETELY FORBIDDEN
+IMPORTANT SCRAPING POLICY:
+- Google search snippets are usually SUFFICIENT for most queries
+- Only recommend scraping if the snippets are completely unhelpful or empty
+- General informational queries should be answered from search snippets alone
+- Status/news queries (like "Did they find...") should use snippets, not scraping
+- Only scrape for very specific technical details or when snippets are clearly inadequate
 
-**REQUIRED LINK FORMAT - ALWAYS USE THIS:**
-- [Website Title](URL) - REQUIRED
-- [CBS News](URL) - GOOD
-- [Wikipedia](URL) - GOOD
-- [White House](URL) - GOOD
+**WHEN TO SAY SUFFICIENT=TRUE (90% of cases):**
+- News/current events queries - snippets provide current info
+- General information requests - snippets give overview
+- Status updates - snippets show latest developments
+- Factual questions - snippets contain facts
+- "Did they find..." type queries - snippets have current status
 
-**LINK TEXT REQUIREMENTS:**
-- Use the website title or domain name as link text, NOT numbers
-- NEVER use numbers like "1", "2", "3" as link text
-- Use descriptive website titles like "CBS News", "Wikipedia", "White House", "CNN"
-- If title is too long, use shortened version like "CBS News article", "Wikipedia page"
-- NEVER use entire sentences or long phrases as link text
-- Examples: [CBS News](URL), [Wikipedia](URL), [White House](URL), [CNN article](URL)
+**WHEN TO SAY SUFFICIENT=FALSE (scraping scenarios):**
+1. **USER USES SCRAPING LANGUAGE**: User explicitly mentions "scrape", "scraping", or any variation
+2. **USER ASKS FOR MORE AFTER SEARCH**: User requests more information after a web search has been performed (most common scenario)
+3. **SNIPPETS ARE EMPTY**: Search snippets are completely empty or unhelpful
+4. **TECHNICAL DETAILS**: Very technical queries needing detailed procedures
+5. **FULL DOCUMENTS**: Legal/medical queries needing complete document text
 
-You must return your responses in proper markdown formatting and use markdown tables for structured data.
-
-Analyze if these search snippets contain sufficient information to fully answer the user's query.
+Analyze if these search snippets contain sufficient information to answer the user's query.
 Respond with a JSON object:
 {
     "sufficient": true/false,
@@ -1235,7 +1175,17 @@ Respond with a JSON object:
     "urls_to_scrape": ["url1", "url2"] // Only if sufficient=false, max 3 URLs that would be most helpful
 }"""
 
+    # Import and check session state
+    try:
+        from modules.intent_handlers import check_web_search_performed
+        web_search_was_performed = check_web_search_performed(session_id)
+        search_performed_text = "**IMPORTANT**: A web search was already performed for this session recently." if web_search_was_performed else ""
+    except ImportError:
+        search_performed_text = ""
+
     user_prompt = f"""User Query: {query}
+
+{search_performed_text}
 
 Search Results:
 {formatted_results}"""
@@ -1247,7 +1197,7 @@ Search Results:
 
     response_text = await llm_server.generate(
         prompt=formatted_prompt,
-        max_tokens=200,
+        max_tokens=30000,  # Use generous portion of available context window
         temperature=0.1,
         session_id="web_search_decision",
     )
@@ -1280,8 +1230,43 @@ Search Results:
 
     try:
         return json.loads(json_text)
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as e:
         logger.warning(f"Failed to parse JSON decision: {json_text}")
+        logger.warning(f"JSON parsing error: {e}")
+        
+        # If JSON is truncated, try to use LLM to complete/fix it
+        if len(json_text) > 50:  # Only attempt if we have substantial content
+            logger.info("Attempting LLM-based JSON completion for truncated response")
+            try:
+                from persistent_llm_server import get_llm_server
+                llm_server = await get_llm_server()
+                
+                fix_prompt = f"""The following JSON response was truncated. Please complete and fix it to make it valid JSON:
+
+{json_text}
+
+Return only the corrected, complete JSON without any additional text or explanation."""
+
+                fixed_response = await llm_server.generate(
+                    prompt=fix_prompt,
+                    max_tokens=20000,  # Full JSON completion capability
+                    temperature=0.0,
+                    session_id="json_fix",
+                )
+                
+                # Try to parse the fixed JSON
+                if fixed_response:
+                    # Extract JSON from the fixed response
+                    fixed_start = fixed_response.find("{")
+                    fixed_end = fixed_response.rfind("}")
+                    if fixed_start != -1 and fixed_end != -1 and fixed_end > fixed_start:
+                        fixed_json = fixed_response[fixed_start : fixed_end + 1]
+                        return json.loads(fixed_json)
+                        
+            except Exception as fix_error:
+                logger.warning(f"Failed to fix JSON with LLM: {fix_error}")
+        
+        # Final fallback
         return {"sufficient": True}
 
 
@@ -1385,6 +1370,7 @@ async def perform_web_search_async(
     num_results: int = 5,
     llm_client=None,
     model_lock=None,
+    session_id: str = "default_session",
 ) -> str | None:
     """Intelligent async web search that uses LLM to determine if deep scraping is needed.
 
@@ -1416,7 +1402,7 @@ async def perform_web_search_async(
 
         # Ask LLM if snippets are sufficient
         try:
-            decision = await _get_llm_search_decision(query, formatted_results)
+            decision = await _get_llm_search_decision(query, formatted_results, session_id)
 
             if decision.get("sufficient", True):
                 logger.info(
@@ -1436,6 +1422,13 @@ async def perform_web_search_async(
 
                 # Perform deep scraping on selected URLs
                 scraped_content = await _scrape_selected_urls(urls_to_scrape, results)
+                
+                # Clear web search state since scraping was attempted (regardless of success)
+                try:
+                    from modules.intent_handlers import clear_web_search_state
+                    clear_web_search_state(session_id)
+                except Exception as e:
+                    logger.warning(f"Failed to clear web search state: {e}")
 
                 if not scraped_content:
                     # If scraping failed, return snippets only
