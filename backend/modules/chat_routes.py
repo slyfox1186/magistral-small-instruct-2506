@@ -11,7 +11,6 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 
 import utils
-from memory.importance_scorer import get_importance_scorer
 
 from .chat_helpers import (
     check_service_availability,
@@ -23,6 +22,7 @@ from .globals import (
     bg_state,
 )
 from .intent_handlers import (
+    calculate_message_importance,
     handle_conversation_history_intent,
     handle_conversation_intent,
     handle_crypto_query_intent,
@@ -38,43 +38,6 @@ from .models import ChatStreamRequest
 
 logger = logging.getLogger(__name__)
 
-# Initialize importance scorer
-importance_scorer = get_importance_scorer()
-
-
-async def calculate_message_importance(
-    content: str, role: str, session_id: str, messages: list | None = None
-) -> float:
-    """Calculate importance score for a message using the sophisticated scorer."""
-    try:
-        # Build conversation history from recent messages if available
-        conversation_history = []
-        if messages:
-            for msg in messages[-10:]:  # Last 10 messages for context
-                # Handle both dict and Message objects
-                if hasattr(msg, "role") and hasattr(msg, "content"):
-                    # It's a Message object
-                    conversation_history.append({"role": msg.role, "content": msg.content})
-                elif isinstance(msg, dict):
-                    # It's already a dict
-                    conversation_history.append(
-                        {"role": msg.get("role", "user"), "content": msg.get("content", "")}
-                    )
-
-        # Calculate importance
-        importance = importance_scorer.calculate_importance(
-            text=content, role=role, conversation_history=conversation_history
-        )
-
-        logger.info(
-            f"🧠 IMPORTANCE SCORER: Calculated importance={importance:.3f} for {role} message in session {session_id}"
-        )
-    except Exception:
-        logger.exception("Error calculating importance")
-        # Fallback to default values
-        return 0.7 if role == "user" else 0.8
-    else:
-        return importance
 
 
 async def get_memory_context(user_prompt: str, session_id: str) -> str:
@@ -245,13 +208,13 @@ def _create_chat_stream_route(app: FastAPI):
             # Intent handler mapping
             intent_handlers = {
                 "conversation": handle_conversation_intent,
-                "web_search": handle_web_search_intent,
-                "personal_info_storage": handle_personal_info_storage_intent,
-                "personal_info_recall": handle_personal_info_recall_intent,
-                "conversation_history": handle_conversation_history_intent,
-                "stock_query": handle_stock_query_intent,
-                "weather_query": handle_weather_query_intent,
-                "crypto_query": handle_crypto_query_intent,
+                "perform_web_search": handle_web_search_intent,  # Fixed: was "web_search"
+                "store_personal_info": handle_personal_info_storage_intent,  # Fixed: was "personal_info_storage"
+                "recall_personal_info": handle_personal_info_recall_intent,  # Fixed: was "personal_info_recall"
+                "query_conversation_history": handle_conversation_history_intent,  # Fixed: was "conversation_history"
+                "query_stocks": handle_stock_query_intent,  # Fixed: was "stock_query"
+                "query_weather": handle_weather_query_intent,  # Fixed: was "weather_query"
+                "query_cryptocurrency": handle_crypto_query_intent,  # Fixed: was "crypto_query"
             }
 
             # Get appropriate handler or default to conversation
@@ -259,7 +222,7 @@ def _create_chat_stream_route(app: FastAPI):
 
             try:
                 # Some handlers need the request parameter
-                if intent in ["web_search", "stock_query", "weather_query", "crypto_query"]:
+                if intent in ["perform_web_search", "query_stocks", "query_weather", "query_cryptocurrency"]:
                     async for chunk in handler(user_prompt, session_id, request):
                         yield chunk
                 else:

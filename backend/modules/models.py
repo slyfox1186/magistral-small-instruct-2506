@@ -47,6 +47,7 @@ class ClearMemoriesResponse(BaseModel):
 
     success: bool
     message: str
+    deleted_count: int
 
 
 class ScrapedContent(BaseModel):

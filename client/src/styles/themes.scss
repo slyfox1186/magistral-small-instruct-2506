@@ -128,39 +128,39 @@ $theme-solaris-flare: (
 // =====================================================
 
 $theme-hunters-vision: (
-  // Base Background Colors
-  bg-primary: #1B1D1A,        // Deep charcoal with olive undertones
-  bg-secondary: #232621,      // Slightly lighter for secondary surfaces
-  bg-tertiary: #2C2F28,       // Interactive surface
-  bg-elevated: #35382F,       // Elevated modal backgrounds
-  bg-input-area: #191B18,     // Darker input contrast
-  bg-user-bubble: #282B25,    // User bubble background
+  // Base Background Colors - Subtle and balanced
+  bg-primary: #1a1e1b,        // Very dark charcoal with subtle green hint
+  bg-secondary: #232923,      // Slightly warmer dark background
+  bg-tertiary: #2d332e,       // Interactive surface with green undertone
+  bg-elevated: #373d38,       // Elevated modal backgrounds
+  bg-input-area: #2a312b,     // Lighter input area for better visibility
+  bg-user-bubble: #2d332e,    // User bubble background
 
-  // Text Colors
-  text-primary: #EAEAEA,      // Clean, crisp almost-white gray
-  text-secondary: #C5C5C5,    // Lighter gray for secondary text
-  text-tertiary: #A0A0A0,     // Muted gray for less important text
+  // Text Colors - Warm and readable
+  text-primary: #f8f6f0,      // Warm off-white (toned down cream)
+  text-secondary: #d4d0c4,    // Soft warm gray
+  text-tertiary: #a8a396,     // Muted warm gray
 
-  // Border Colors
-  border-color: #404340,
-  border-light: rgba(234, 234, 234, 0.1),
-  border-table: #363A33,
-  border-strong: #4A4D47,
+  // Border Colors - Subtle and natural
+  border-color: #4a5147,      // Muted green-gray
+  border-light: rgba(248, 246, 240, 0.08),
+  border-table: #3d4439,
+  border-strong: #565c53,
 
-  // Accent Colors
-  accent-primary: #00CC66,    // Muted HUD green (more comfortable)
-  accent-success: #00DD55,    // Slightly brighter success green
-  accent-danger: #FF3030,     // Bright danger red
-  accent-warning: #FFAA00,    // Amber warning
-  accent-info: #00AAFF,       // Cyan blue info
+  // Accent Colors - Color Hunt palette as accents
+  accent-primary: #819067,    // Medium sage from Color Hunt palette
+  accent-success: #22c55e,    // Bright success green
+  accent-danger: #ef4444,     // Standard danger red
+  accent-warning: #f59e0b,    // Standard warning amber
+  accent-info: #3b82f6,       // Standard info blue
 
   // Interactive Colors
-  interactive-normal: #2C2F28,
-  interactive-hover: rgba(0, 204, 102, 0.15),
-  interactive-active: rgba(0, 204, 102, 0.25),
+  interactive-normal: #2d332e,
+  interactive-hover: rgba(129, 144, 103, 0.12),
+  interactive-active: rgba(129, 144, 103, 0.2),
 
   // Overlay Colors
-  overlay-light: rgba(234, 234, 234, 0.1)
+  overlay-light: rgba(248, 246, 240, 0.06)
 );
 
 // =====================================================
@@ -409,26 +409,26 @@ $theme-cyberpunk-neon: (
 [data-theme='hunters-vision'] {
   @include apply-theme($theme-hunters-vision);
 
-  // Alpha variants using Hunter's Vision colors
-  --bg-primary-alpha-95: rgba(27, 29, 26, 0.95);
-  --bg-primary-alpha-60: rgba(27, 29, 26, 0.6);
-  --bg-secondary-alpha-01: rgba(35, 38, 33, 0.01);
-  --bg-secondary-alpha-03: rgba(35, 38, 33, 0.03);
-  --bg-secondary-alpha-90: rgba(35, 38, 33, 0.9);
-  --bg-tertiary-alpha-90: rgba(44, 47, 40, 0.9);
-  --bg-input-area-alpha-50: rgba(25, 27, 24, 0.5);
-  --accent-primary-faded: rgba(0, 204, 102, 0.12);
-  --accent-primary-glow: rgba(0, 204, 102, 0.2);
-  --accent-primary-alpha-80: rgba(0, 204, 102, 0.8);
-  --accent-success-faded: rgba(0, 221, 85, 0.15);
-  --accent-success-glow: rgba(0, 221, 85, 0.2);
-  --accent-danger-faded: rgba(255, 48, 48, 0.15);
-  --accent-danger-glow: rgba(255, 48, 48, 0.2);
-  --accent-warning-faded: rgba(255, 170, 0, 0.15);
-  --accent-warning-glow: rgba(255, 170, 0, 0.2);
-  --accent-info-faded: rgba(0, 170, 255, 0.15);
-  --accent-info-glow: rgba(0, 170, 255, 0.2);
-  --accent-info-alpha-0: rgba(0, 170, 255, 0);
+  // Alpha variants using recalibrated Hunter's Vision colors
+  --bg-primary-alpha-95: rgba(26, 30, 27, 0.95);      // #1a1e1b
+  --bg-primary-alpha-60: rgba(26, 30, 27, 0.6);       // #1a1e1b
+  --bg-secondary-alpha-01: rgba(35, 41, 35, 0.01);    // #232923
+  --bg-secondary-alpha-03: rgba(35, 41, 35, 0.03);    // #232923
+  --bg-secondary-alpha-90: rgba(35, 41, 35, 0.9);     // #232923
+  --bg-tertiary-alpha-90: rgba(45, 51, 46, 0.9);      // #2d332e
+  --bg-input-area-alpha-50: rgba(42, 49, 43, 0.5);    // #2a312b
+  --accent-primary-faded: rgba(129, 144, 103, 0.12);  // #819067
+  --accent-primary-glow: rgba(129, 144, 103, 0.2);    // #819067
+  --accent-primary-alpha-80: rgba(129, 144, 103, 0.8); // #819067
+  --accent-success-faded: rgba(34, 197, 94, 0.15);    // #22c55e
+  --accent-success-glow: rgba(34, 197, 94, 0.2);      // #22c55e
+  --accent-danger-faded: rgba(239, 68, 68, 0.15);     // #ef4444
+  --accent-danger-glow: rgba(239, 68, 68, 0.2);       // #ef4444
+  --accent-warning-faded: rgba(245, 158, 11, 0.15);   // #f59e0b
+  --accent-warning-glow: rgba(245, 158, 11, 0.2);     // #f59e0b
+  --accent-info-faded: rgba(59, 130, 246, 0.15);      // #3b82f6
+  --accent-info-glow: rgba(59, 130, 246, 0.2);        // #3b82f6
+  --accent-info-alpha-0: rgba(59, 130, 246, 0);       // #3b82f6
 }
 
 // Apply Nebula theme

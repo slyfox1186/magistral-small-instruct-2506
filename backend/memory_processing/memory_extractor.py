@@ -4,6 +4,8 @@ Extracts structured memories from analyzed content with confidence scoring
 and semantic validation.
 """
 
+import asyncio
+import json
 import logging
 import time
 from dataclasses import dataclass
@@ -12,6 +14,7 @@ from typing import Any
 from .config import MemoryProcessingConfig
 from .content_analyzer import ContentAnalysis
 from .utils import extract_personal_info_patterns, sanitize_content
+from utils import format_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -190,7 +193,9 @@ class MemoryExtractor:
                 memory = ExtractedMemory(
                     content=sanitize_content(fact),
                     category="personal_facts",
-                    importance_score=analysis.importance_score + 0.1,  # Boost for personal facts
+                    importance_score=await self._calculate_llm_importance_score(
+                        fact, "personal_facts", analysis.confidence
+                    ),
                     confidence=analysis.confidence,
                     entities=analysis.entities,
                     context_type=analysis.context_type,
@@ -221,7 +226,9 @@ class MemoryExtractor:
                 memory = ExtractedMemory(
                     content=sanitize_content(fact),
                     category="preferences",
-                    importance_score=analysis.importance_score,
+                    importance_score=await self._calculate_llm_importance_score(
+                        fact, "preferences", analysis.confidence
+                    ),
                     confidence=analysis.confidence,
                     entities=analysis.entities,
                     context_type=analysis.context_type,
@@ -253,7 +260,9 @@ class MemoryExtractor:
                 memory = ExtractedMemory(
                     content=sanitize_content(fact),
                     category="experiences",
-                    importance_score=analysis.importance_score,
+                    importance_score=await self._calculate_llm_importance_score(
+                        fact, "experiences", analysis.confidence
+                    ),
                     confidence=analysis.confidence,
                     entities=analysis.entities,
                     context_type=analysis.context_type,
@@ -291,7 +300,9 @@ class MemoryExtractor:
                 memory = ExtractedMemory(
                     content=sanitize_content(fact),
                     category="relationships",
-                    importance_score=analysis.importance_score + 0.1,  # Boost for relationships
+                    importance_score=await self._calculate_llm_importance_score(
+                        fact, "relationships", analysis.confidence
+                    ),
                     confidence=analysis.confidence,
                     entities=analysis.entities,
                     context_type=analysis.context_type,
@@ -316,19 +327,22 @@ class MemoryExtractor:
 
         # Create a knowledge memory from the conversation
         # FIXED: Include general_conversation for philosophical discussions
-        if analysis.context_type in [
+        # SECURITY: Filter out self-referential content about optimization
+        if (analysis.context_type in [
             "question_answer",
             "information_request",
             "problem_solving",
             "general_conversation",
-        ]:
+        ] and not self._is_self_referential_content(user_prompt, assistant_response)):
             # Combine user question and assistant response into a knowledge memory
             knowledge_content = f"Q: {user_prompt}\nA: {assistant_response[:500]}..."
 
             memory = ExtractedMemory(
                 content=sanitize_content(knowledge_content),
                 category="knowledge",
-                importance_score=analysis.importance_score,
+                importance_score=await self._calculate_llm_importance_score(
+                    knowledge_content, "knowledge", analysis.confidence
+                ),
                 confidence=analysis.confidence,
                 entities=analysis.entities,
                 context_type=analysis.context_type,
@@ -353,7 +367,9 @@ class MemoryExtractor:
                     memory = ExtractedMemory(
                         content=sanitize_content(fact),
                         category="knowledge",
-                        importance_score=analysis.importance_score,
+                        importance_score=await self._calculate_llm_importance_score(
+                            fact, "knowledge", analysis.confidence
+                        ),
                         confidence=analysis.confidence,
                         entities=analysis.entities,
                         context_type=analysis.context_type,
@@ -383,7 +399,9 @@ class MemoryExtractor:
                 memory = ExtractedMemory(
                     content=sanitize_content(fact),
                     category="goals",
-                    importance_score=analysis.importance_score,
+                    importance_score=await self._calculate_llm_importance_score(
+                        fact, "goals", analysis.confidence
+                    ),
                     confidence=analysis.confidence,
                     entities=analysis.entities,
                     context_type=analysis.context_type,
@@ -491,3 +509,133 @@ class MemoryExtractor:
             stats["avg_confidence"] = sum(m.confidence for m in memories) / len(memories)
 
         return stats
+
+    def _is_self_referential_content(self, user_prompt: str, assistant_response: str) -> bool:
+        """Check if content is self-referential (about optimization, system responses, etc.).
+        
+        Args:
+            user_prompt: User's message
+            assistant_response: Assistant's response
+            
+        Returns:
+            True if content should be filtered out
+        """
+        # Keywords that indicate self-referential or meta-conversation content
+        self_referential_keywords = [
+            "optimize", "optimized", "optimization",
+            "user information", "assistant's name", 
+            "base name", "system", "version",
+            "sure, here's", "optimized response"
+        ]
+        
+        combined_content = f"{user_prompt} {assistant_response}".lower()
+        
+        # Check for self-referential patterns
+        for keyword in self_referential_keywords:
+            if keyword in combined_content:
+                self.logger.debug(f"Filtering self-referential content containing: {keyword}")
+                return True
+                
+        # Check for optimization format patterns
+        if "user information:" in combined_content and "assistant's name:" in combined_content:
+            self.logger.debug("Filtering optimization format content")
+            return True
+            
+        return False
+    
+    async def _calculate_llm_importance_score(self, content: str, category: str, base_confidence: float) -> float:
+        """Use LLM to calculate importance score for memory content.
+        
+        Args:
+            content: Memory content to evaluate
+            category: Memory category (personal_facts, relationships, etc.)
+            base_confidence: Base confidence from content analysis
+            
+        Returns:
+            Importance score between 0.0 and 1.0
+        """
+        try:
+            system_prompt = """You are Jane, a memory importance analyst. Evaluate the importance of memory content for long-term storage.
+
+CRITICAL INSTRUCTIONS:
+1. Return ONLY a JSON object with your analysis
+2. Score memories based on their long-term value and uniqueness
+3. Personal facts and relationships should generally score higher
+4. Avoid inflation - most memories should score 0.3-0.7
+5. Only truly significant memories should score above 0.8
+
+Scoring Guidelines:
+- 0.9-1.0: Critical personal information (name, core relationships, major life events)
+- 0.7-0.8: Important preferences, significant experiences, key knowledge
+- 0.5-0.6: Useful information, moderate preferences, routine experiences
+- 0.3-0.4: Basic information, minor preferences, casual mentions
+- 0.1-0.2: Trivial information, temporary states, low-value content
+
+JSON Response Format:
+{
+    "importance_score": 0.0-1.0,
+    "reasoning": "brief explanation of scoring"
+}"""
+            
+            user_prompt = f"""Evaluate the importance of this {category} memory:
+
+Content: {content[:500]}...
+Category: {category}
+Base Confidence: {base_confidence}
+
+Provide importance score and reasoning."""
+            
+            formatted_prompt = format_prompt(system_prompt, user_prompt)
+            
+            # Get LLM server
+            from persistent_llm_server import get_llm_server
+            llm_server = await get_llm_server()
+            
+            response_text = await llm_server.generate(
+                prompt=formatted_prompt,
+                max_tokens=150,
+                temperature=0.3,  # Conservative for scoring
+                session_id="memory_importance_scoring",
+            )
+            
+            # Extract JSON from response
+            if not response_text:
+                self.logger.warning("Empty LLM response for importance scoring")
+                return min(base_confidence * 0.6, 0.7)  # Conservative fallback
+            
+            # Find JSON boundaries
+            start_idx = response_text.find("{")
+            end_idx = response_text.rfind("}")
+            
+            if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+                try:
+                    json_text = response_text[start_idx:end_idx + 1]
+                    result = json.loads(json_text)
+                    
+                    importance_score = result.get("importance_score", base_confidence * 0.6)
+                    reasoning = result.get("reasoning", "No reasoning provided")
+                    
+                    # Validate score range
+                    importance_score = max(0.0, min(1.0, float(importance_score)))
+                    
+                    if self.config.enable_detailed_logging:
+                        self.logger.debug(
+                            f"LLM importance scoring: {importance_score:.3f} - {reasoning}"
+                        )
+                    
+                    return importance_score
+                    
+                except (json.JSONDecodeError, ValueError) as e:
+                    self.logger.warning(f"Failed to parse LLM importance response: {e}")
+                    
+        except Exception as e:
+            self.logger.warning(f"LLM importance scoring failed: {e}")
+        
+        # Fallback: use base confidence with conservative scaling
+        fallback_score = min(base_confidence * 0.6, 0.7)
+        
+        # Boost core categories slightly
+        if category in ["personal_facts", "relationships"]:
+            fallback_score = min(fallback_score * 1.2, 0.8)
+            
+        return fallback_score

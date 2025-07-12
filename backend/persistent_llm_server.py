@@ -344,7 +344,7 @@ class PersistentLLMServer:
                         max_tokens=request.max_tokens,
                         temperature=request.temperature,
                         top_p=request.top_p,
-                        stop=["[/INST]", "[/SYSTEM_PROMPT]"],  # Magistral stop tokens
+                        stop=["[/INST]", "[/SYSTEM_PROMPT]"],  # Devstral stop tokens
                         echo=False,
                     ),
                 )

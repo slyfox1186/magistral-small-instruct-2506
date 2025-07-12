@@ -34,37 +34,80 @@ async def classify_query_with_llm(user_prompt: str) -> dict[str, any]:
     """Simple single-word route classification."""
     logger.debug(f"🎯 ROUTE CLASSIFIER: Analyzing '{user_prompt}'")
 
-    # Enhanced system prompt that handles STORE/RECALL intents
-    system_prompt = """You are an advanced intent classifier. Analyze the user's request and return EXACTLY ONE WORD.
+    # World-class enterprise-grade intent classification system (SYSTEM PROMPT ONLY)
+    system_prompt = """# [DIRECTIVE]
+You are a high-precision, automated Intent Routing System. Your SOLE function is to analyze the user's input and return a single, uppercase word representing its PRIMARY intent. Adhere strictly to the protocol below.
 
-Ignore any markdown formatting (##, -, *, etc.) and focus on the core intent:
+# [CLASSIFICATION PROTOCOL & EXAMPLES]
+Analyze the input against each category. Use the definitions, crucial tests, and examples to make an intelligent decision.
 
-STORE - user is providing personal information, facts about themselves, preferences, or telling you something to remember
-RECALL - user is asking you to recall previously stored information, asking "what is my", "who is my", "where do I", etc.
-WEATHER - for weather conditions, forecasts, temperature, climate queries ("what's the weather", "is it raining", "temperature in")
-WEB - for current events, recent news, real-time information (excluding weather), "latest" anything, OR when user provides a full URL (https://...) and asks to scan, parse, read, or analyze it
-CRYPTO - for cryptocurrency prices, Bitcoin, Ethereum, crypto market data
-STOCKS - for stock prices, company shares, market data (Apple, Tesla, etc.)
-MEMORY - ONLY when user asks about past conversation ("what did we discuss", "remember when")
-INTERNAL - for ALL other requests (code generation, explanations, tutorials, how-to, creative tasks)
+---
+**CATEGORY: STORE**
+- **Definition:** User is providing a fact, preference, or identity detail about themselves to be remembered.
+- **Crucial Test:** Is the user making a declarative statement about themselves?
+- **Example:** `User: "I prefer coffee over tea, and my favorite color is blue." -> STORE`
 
-Examples:
-"My name is Jeff and I live in Miami" → STORE
-"## My name is John, I work as a doctor" → STORE
-"I prefer dark chocolate over milk chocolate" → STORE
-"Who is my wife?" → RECALL
-"What is my name?" → RECALL
-"What is my address?" → RECALL
-"Create a bash function" → INTERNAL
-"Latest news about AI" → WEB
-"Bitcoin price" → CRYPTO
-"Apple stock" → STOCKS
-"What did we talk about?" → MEMORY
-"Hello" → INTERNAL
-"How to use Python" → INTERNAL
-"Write a script" → INTERNAL
+---
+**CATEGORY: RECALL**
+- **Definition:** User is requesting a specific piece of their own information that was previously stored.
+- **Crucial Test:** Is the user asking you to retrieve a stored personal fact about them?
+- **Example:** `User: "What's my favorite color again?" -> RECALL`
 
-Return ONLY the single word - nothing else."""
+---
+**CATEGORY: MEMORY**
+- **Definition:** User is asking about the immediate conversation history of the current session.
+- **Crucial Test:** Is the user asking about what was said or done in this specific chat session?
+- **Example:** `User: "What was the name of the function you just showed me?" -> MEMORY`
+- **Example:** `User: "Tell me more about the missing persons" -> MEMORY` (when missing persons was discussed in this conversation)
+
+---
+**CATEGORY: WEB**
+- **Definition:** User needs real-time, current, or recent information from the internet, OR wants to scrape/access specific websites, OR wants MORE details than what's in conversation memory.
+- **Crucial Test:** Does this require knowledge beyond your training cutoff, information that changes rapidly, web scraping, or deeper information than what's already available?
+- **Example:** `User: "What were the results of the F1 race today?" -> WEB`
+- **Example:** `User: "Did they find any of those poor girls that have not been found since the historic Texas flood?" -> WEB` (asking for current rescue status)
+- **Example:** `User: "Read more on those websites by scraping them" -> WEB` (explicit web scraping request)
+- **Example:** `User: "Scrape those links for more details" -> WEB` (follow-up scraping request)
+- **Example:** `User: "Learn more about the missing persons" -> WEB` (when user wants deeper info than summary in memory)
+
+---
+**CATEGORY: WEATHER**
+- **Definition:** User is asking about weather conditions or forecasts.
+- **Crucial Test:** Is the primary subject weather, temperature, or precipitation?
+- **Example:** `User: "What's the weather like in London tomorrow?" -> WEATHER`
+
+---
+**CATEGORY: CRYPTO**
+- **Definition:** User is asking for cryptocurrency data.
+- **Example:** `User: "Check the price of dogecoin." -> CRYPTO`
+
+---
+**CATEGORY: STOCKS**
+- **Definition:** User is asking for stock market data.
+- **Example:** `User: "How did the Nasdaq do today?" -> STOCKS`
+
+---
+**CATEGORY: INTERNAL**
+- **Definition:** A general-purpose command, a creative task, a question about the AI, or any conversational input that does not fit a more specific category. This is the final fallback.
+- **Crucial Test:** Is the user giving a command, asking a hypothetical, or making a generic statement?
+- **Example:** `User: "Generate a python function that sorts a list." -> INTERNAL`
+
+# [SELF-CORRECTION & HIERARCHY]
+1.  **Specificity is Key:** Always choose the most specific, non-`INTERNAL` category.
+2.  **Core Disambiguation: `STORE` vs. `INTERNAL`**
+    -   Statement about the *USER*: `I have an aggressive play style.` -> **STORE**
+    -   Question about the *AI*: `What is your play style?` -> **INTERNAL**
+3.  **Core Disambiguation: `RECALL` vs. `MEMORY`**
+    -   Question about the *USER'S PROFILE*: `What did I say my wife's name was?` -> **RECALL**
+    -   Question about the *CONVERSATION'S HISTORY*: `What was the last thing you said?` -> **MEMORY**
+4.  **Core Disambiguation: `MEMORY` vs. `WEB` vs. `INTERNAL`**
+    -   Simple clarification about CONVERSATION: `What did you just say about missing persons?` -> **MEMORY**
+    -   User wants MORE/DEEPER info than what's in conversation: `Learn more about the missing persons` -> **WEB**
+    -   New topic or general request: `Tell me about missing persons in general` -> **INTERNAL**
+    -   **Key Rule**: If user wants to expand beyond conversation summary, choose **WEB** for fresh information
+
+# [FINAL INSTRUCTION]
+Analyze the user query. Provide only the single uppercase classification word. NOTHING ELSE."""
 
     classification_prompt = utils.format_prompt(system_prompt, user_prompt)
 
@@ -106,6 +149,14 @@ Return ONLY the single word - nothing else."""
             intent = "conversation"
 
         intent_result = {"primary_intent": intent}
+        
+        # Enterprise-grade programmatic guardrail for quality assurance
+        if intent == "store_personal_info" and user_prompt.strip().endswith("?"):
+            logger.warning(f"🚨 CLASSIFICATION GUARDRAIL: Query '{user_prompt}' classified as STORE but ends with '?' - possible misclassification")
+            # Log for review but don't override - let the sophisticated prompt handle edge cases
+        
+        if intent == "recall_personal_info" and not any(word in user_prompt.lower() for word in ["my", "me", "i", "what did i", "who am i"]):
+            logger.warning(f"🚨 CLASSIFICATION GUARDRAIL: Query '{user_prompt}' classified as RECALL but lacks personal pronouns - possible misclassification")
 
     except Exception as e:
         logger.warning(f"Classification error for '{user_prompt}': {e}, defaulting to conversation")
@@ -437,8 +488,8 @@ async def lightweight_memory_processing(user_prompt: str, response: str, session
         # Import the advanced memory processing system
         from memory_processing import AdvancedMemoryProcessor, get_config
 
-        # Get production configuration
-        config = get_config("production")
+        # Get development configuration (more generous timeouts for local LLM)
+        config = get_config("development")
 
         # Create advanced memory processor instance
         processor = AdvancedMemoryProcessor(app_state.personal_memory, config)
@@ -453,6 +504,9 @@ async def lightweight_memory_processing(user_prompt: str, response: str, session
         except Exception:
             logger.exception("🧠 ADVANCED_MEMORY: Failed to get LLM server")
             return
+
+        # Extract and store file attachments if present
+        await _process_file_attachments(user_prompt, session_id)
 
         # Process the conversation through the advanced pipeline
         logger.info("🧠 ADVANCED_MEMORY: Processing conversation through 5-stage pipeline")
@@ -509,3 +563,77 @@ async def lightweight_memory_processing(user_prompt: str, response: str, session
 
     except Exception as e:
         logger.error(f"🧠 ADVANCED_MEMORY: ❌ Advanced memory processing error: {e}", exc_info=True)
+
+
+async def _process_file_attachments(user_prompt: str, session_id: str):
+    """Extract and store file attachments from user messages with proper memory persistence.
+    
+    This function identifies file attachments in user messages and stores them as separate
+    memory entries so they can be referenced in future conversations.
+    """
+    import re
+    from datetime import UTC, datetime
+    
+    logger.info(f"📎 FILE_MEMORY: Processing file attachments for session {session_id}")
+    
+    try:
+        # Look for file attachment patterns in the user prompt
+        # Pattern: **Attached File: filename.ext**\n```\ncontent\n```
+        file_pattern = r'\*\*Attached File: ([^*]+)\*\*\s*\n```\s*\n(.*?)\n```'
+        matches = re.findall(file_pattern, user_prompt, re.DOTALL)
+        
+        if not matches:
+            logger.debug("📎 FILE_MEMORY: No file attachments found in message")
+            return
+            
+        logger.info(f"📎 FILE_MEMORY: Found {len(matches)} file attachments")
+        
+        for filename, content in matches:
+            filename = filename.strip()
+            content = content.strip()
+            
+            if not filename or not content:
+                logger.warning(f"📎 FILE_MEMORY: Skipping empty file: '{filename}'")
+                continue
+                
+            logger.info(f"📎 FILE_MEMORY: Processing attachment: {filename}")
+            
+            # Create rich metadata for the file attachment
+            file_metadata = {
+                "type": "file_attachment",
+                "filename": filename,
+                "source": "user_upload",
+                "timestamp": datetime.now(UTC).isoformat(),
+                "session_id": session_id,
+                "content_preview": content[:200] + "..." if len(content) > 200 else content,
+                "content_length": len(content),
+                "file_extension": filename.split('.')[-1].lower() if '.' in filename else "unknown"
+            }
+            
+            # Store the file attachment as a high-importance memory
+            await app_state.personal_memory.add_memory(
+                content=f"User attached file '{filename}' with content:\n\n{content}",
+                conversation_id=session_id,
+                importance=0.95,  # High importance for file attachments
+                metadata=file_metadata
+            )
+            
+            # Also create a separate reference memory for easy lookup
+            reference_content = f"File attachment reference: User uploaded file '{filename}' ({len(content)} characters) in this conversation. The file contains: {content[:100]}{'...' if len(content) > 100 else ''}"
+            
+            await app_state.personal_memory.add_memory(
+                content=reference_content,
+                conversation_id=session_id,
+                importance=0.85,  # High importance for file references
+                metadata={
+                    "type": "file_reference",
+                    "filename": filename,
+                    "reference_type": "attachment_index",
+                    "session_id": session_id
+                }
+            )
+            
+            logger.info(f"📎 FILE_MEMORY: ✅ Stored attachment '{filename}' ({len(content)} chars) with metadata")
+            
+    except Exception as e:
+        logger.error(f"📎 FILE_MEMORY: ❌ Error processing file attachments: {e}", exc_info=True)

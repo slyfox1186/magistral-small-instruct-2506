@@ -2,7 +2,7 @@
 """Utility functions for consistent prompt formatting and other shared functionality.
 
 This module provides a single source of truth for how prompts should be formatted
-for the Mistral-Small-3.2-24B-Instruct-2506 LLM model. By centralizing the prompt format here, we ensure consistency
+for the Devstral-Small-2507 LLM model. By centralizing the prompt format here, we ensure consistency
 across all parts of the application and make it easier to update the prompt format
 if needed in the future.
 The prompt format follows the official Mistral instruction format:
@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 def format_prompt(system_prompt: str, user_prompt: str) -> str:
-    """Format system prompt and user prompt in the standardized format for Mistral-Small-3.2-24B-Instruct-2506 LLM.
+    """Format system prompt and user prompt in the standardized format for Devstral-Small-2507 LLM.
 
     This is the single source of truth for how prompts should be formatted
     for the Mistral model. Any changes to the prompt format should be made here
@@ -37,7 +37,7 @@ def format_prompt(system_prompt: str, user_prompt: str) -> str:
 def format_prompt_with_history(
     system_prompt: str, user_prompt: str, conversation_history: str = ""
 ) -> str:
-    """Format system prompt, conversation history, and user prompt in the standardized format for Mistral-Small-3.2-24B-Instruct-2506 LLM.
+    """Format system prompt, conversation history, and user prompt in the standardized format for Devstral-Small-2507 LLM.
 
     This variant includes conversation history in the prompt format. It ensures
     consistent formatting across the application when conversation history needs
@@ -374,7 +374,7 @@ CRITICAL INSTRUCTIONS:
 1. Analyze the user's question to understand what they really want to know
 2. Process the raw data intelligently - don't just display tables
 3. Provide insights, trends, comparisons, and context where relevant
-4. Use markdown formatting for maximum readability
+4. You must always return your responses using proper markdown formatting and must always use markdown tables to display structured data
 5. Include source attributions where provided
 6. Be conversational but informative
 7. If data shows interesting patterns, highlight them

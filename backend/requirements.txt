@@ -11,6 +11,7 @@ websockets==14.1
 httpx==0.28.1
 aiohttp==3.11.13
 beautifulsoup4==4.12.3
+lxml==5.3.0  # Fast XML/HTML parser for BeautifulSoup
 cachetools==5.5.0
 PyJWT==2.10.1
 # Optional dependencies for enhanced functionality

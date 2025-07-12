@@ -7,11 +7,11 @@ from pathlib import Path
 BASE_DIR = Path(__file__).parent
 MODELS_DIR = BASE_DIR / "models"
 
-# Model configuration - Magistral-Small-2506
-MAGISTRAL_MODEL_PATH = str(MODELS_DIR / "Mistral-Small-3.2-24B-Instruct-2506-UD-Q4_K_XL.gguf")
+# Model configuration - Devstral-Small-2507
+DEVSTRAL_MODEL_PATH = str(MODELS_DIR / "Devstral-Small-2507-UD-Q4_K_XL.gguf")
 
-# Default model selection (Magistral by default)
-MODEL_PATH = os.environ.get("MODEL_PATH", MAGISTRAL_MODEL_PATH)
+# Default model selection (Devstral by default)
+MODEL_PATH = os.environ.get("MODEL_PATH", DEVSTRAL_MODEL_PATH)
 
 # Model initialization parameters
 MODEL_CONFIG = {
@@ -27,16 +27,16 @@ MODEL_CONFIG = {
     "verbose": False,
 }
 
-# Model completion/generation parameters - Magistral-Small-2506
+# Model completion/generation parameters - Devstral-Small-2507
 GENERATION_CONFIG = {
-    "temperature": 0.7,  # Recommended for Magistral
+    "temperature": 0.7,  # Recommended for Devstral
     "max_tokens": 2048,
     "top_p": 0.95,
     "top_k": 64,
     "min_p": 0.0,
     "stream": True,
     "echo": False,
-    "stop": ["[/INST]", "[/SYSTEM_PROMPT]"],  # Magistral stop tokens
+    "stop": ["[/INST]", "[/SYSTEM_PROMPT]"],  # Devstral stop tokens
 }
 
 # Redis configuration

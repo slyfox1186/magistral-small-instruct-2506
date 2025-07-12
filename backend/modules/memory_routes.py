@@ -396,7 +396,7 @@ def _setup_optimization_routes(app: FastAPI):
             # Clear from personal memory system (SQLite)
             if app_state.personal_memory:
                 try:
-                    # Use the new conversation-specific clear method
+                    # Use the new conversation-specific clear method (synchronous)
                     deleted_count = app_state.personal_memory.clear_conversation_memories(conversation_id)
                     logger.info(f"🗑️ Cleared {deleted_count} memories for conversation {conversation_id}")
 

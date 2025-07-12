@@ -22,7 +22,7 @@ embedding:
     
 # LLM for consolidation
 consolidation_llm:
-  model_path: /home/jman/tmp/models-to-test/Magistral-Small-2506-1.0/backend/models/
+  model_path: /home/jman/tmp/models-to-test/Magistral-Small-2506-1.2/backend/models/
   context_size: 4096
   temperature: 0.7
   max_tokens: 512

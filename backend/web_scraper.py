@@ -284,7 +284,7 @@ def _detect_authentication_required(soup: BeautifulSoup, response: aiohttp.Clien
 
 
 def _extract_and_clean_content(soup: BeautifulSoup, url: str) -> str:
-    """Extract and clean text content from HTML.
+    """Extract and clean text content from HTML using smart CSS selectors.
 
     Args:
         soup: BeautifulSoup parsed HTML content
@@ -293,13 +293,69 @@ def _extract_and_clean_content(soup: BeautifulSoup, url: str) -> str:
     Returns:
         Cleaned text content with length limiting
     """
-    # Remove script and style elements for text extraction
-    for script_or_style in soup(["script", "style"]):
-        script_or_style.decompose()
+    # Remove unwanted elements before extraction
+    unwanted_tags = ["script", "style", "nav", "header", "footer", "aside", 
+                     "advertisement", "ads", "sidebar", "menu", "breadcrumb"]
+    for tag in unwanted_tags:
+        for element in soup.find_all(tag):
+            element.decompose()
+    
+    # Remove elements with advertising/navigation classes and IDs
+    unwanted_selectors = [
+        "[class*='nav']", "[class*='menu']", "[class*='header']", "[class*='footer']",
+        "[class*='sidebar']", "[class*='ad']", "[class*='advertisement']", 
+        "[class*='promo']", "[class*='banner']", "[class*='cookie']",
+        "[id*='nav']", "[id*='menu']", "[id*='header']", "[id*='footer']",
+        "[id*='sidebar']", "[id*='ad']", "[id*='advertisement']"
+    ]
+    
+    for selector in unwanted_selectors:
+        for element in soup.select(selector):
+            element.decompose()
 
-    # Get the main text content
-    content = soup.get_text(separator="\n", strip=True)
-
+    # Try to find main content using common content selectors (fallback strategy)
+    main_content_selectors = [
+        "main", "article", "[role='main']", ".main-content", "#main-content",
+        ".content", "#content", ".post-content", ".entry-content", 
+        ".article-content", ".page-content", "[class*='content']",
+        ".container .row", ".content-wrapper", "section"
+    ]
+    
+    extracted_content = ""
+    
+    # Try each selector in order of specificity
+    for selector in main_content_selectors:
+        try:
+            content_elements = soup.select(selector)
+            if content_elements:
+                # Take the first significant content block
+                for element in content_elements:
+                    text = element.get_text(separator="\n", strip=True)
+                    if len(text) > MIN_CONTENT_LENGTH:
+                        extracted_content = text
+                        logger.debug(f"Extracted content using selector '{selector}' for {url}")
+                        break
+                if extracted_content:
+                    break
+        except Exception as e:
+            logger.debug(f"Selector '{selector}' failed for {url}: {e}")
+            continue
+    
+    # Fallback to full body text if no specific content found
+    if not extracted_content or len(extracted_content) < MIN_CONTENT_LENGTH:
+        logger.debug(f"Falling back to full body text extraction for {url}")
+        extracted_content = soup.get_text(separator="\n", strip=True)
+    
+    # Clean up whitespace and empty lines
+    lines = extracted_content.split('\n')
+    cleaned_lines = []
+    for line in lines:
+        line = line.strip()
+        if line and len(line) > 2:  # Skip very short lines
+            cleaned_lines.append(line)
+    
+    content = '\n'.join(cleaned_lines)
+    
     # Limit content length to avoid overwhelming responses
     if len(content) > CONTENT_LENGTH_LIMIT:
         content = (
@@ -343,7 +399,12 @@ async def _try_aiohttp_scrape(
 
             if "html" in content_type:
                 html_content = await response.text()
-                soup = BeautifulSoup(html_content, "html.parser")
+                # Use lxml parser for up to 10x faster parsing
+                try:
+                    soup = BeautifulSoup(html_content, "lxml")
+                except:
+                    # Fallback to html.parser if lxml not available
+                    soup = BeautifulSoup(html_content, "html.parser")
 
                 if _detect_authentication_required(soup, response):
                     return None, True
@@ -393,7 +454,11 @@ async def _try_curl_fallback(url: str) -> str | None:
 
     if process.returncode == 0 and stdout:
         html_content = stdout.decode("utf-8", errors="ignore")
-        soup = BeautifulSoup(html_content, "html.parser")
+        # Use lxml parser for better performance
+        try:
+            soup = BeautifulSoup(html_content, "lxml")
+        except:
+            soup = BeautifulSoup(html_content, "html.parser")
 
         if _detect_authentication_required(soup, None):
             return None

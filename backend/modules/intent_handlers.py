@@ -35,8 +35,8 @@ async def calculate_message_importance(
                         {"role": msg.get("role", "user"), "content": msg.get("content", "")}
                     )
 
-        # Calculate importance
-        importance = importance_scorer.calculate_importance(
+        # Calculate importance using async method
+        importance = await importance_scorer.calculate_importance_async(
             text=content, role=role, conversation_history=conversation_history
         )
 
@@ -80,6 +80,13 @@ async def get_memory_context(user_prompt: str, session_id: str) -> str:
                 if core_facts:
                     memory_parts.append("User Facts:\n" + "\n".join(core_facts))
                     logger.info(f"🧠 MEMORY DEBUG: Added {len(core_facts)} core memory facts")
+
+            # Get file attachments for this conversation
+            file_attachments = await _get_file_attachments_for_conversation(session_id)
+            if file_attachments:
+                file_context = "Previously Attached Files:\n" + "\n".join(file_attachments)
+                memory_parts.append(file_context)
+                logger.info(f"📎 MEMORY DEBUG: Added {len(file_attachments)} file attachment references")
 
             # Add regular memories
             if memories:
@@ -159,15 +166,209 @@ async def handle_conversation_intent(user_prompt: str, session_id: str):
             logger.exception("🧠 MEMORY DEBUG: ❌ Failed to create memory processing task")
 
 
+async def _handle_direct_scraping(urls_to_scrape: list, user_prompt: str, session_id: str):
+    """Handle direct URL scraping using web_scraper functionality."""
+    import asyncio
+    logger.info(f"🕷️ SCRAPING: Processing {len(urls_to_scrape)} URLs for session {session_id}")
+    
+    try:
+        if not urls_to_scrape:
+            yield f"data: {json.dumps({'token': {'text': '\n\n❓ No URLs found to scrape. Please provide specific URLs.\n\n'}})}\n\n"
+            yield f"data: {json.dumps({'done': True})}\n\n"
+            return
+            
+        # Import web scraping functionality
+        from web_scraper import scrape_website
+        
+        # Limit to reasonable number of URLs
+        urls_to_process = urls_to_scrape[:5]
+        
+        yield f"data: {json.dumps({'token': {'text': f'\n\n🎯 Scraping {len(urls_to_process)} URLs:\n\n'}})}\n\n"
+        
+        # Display URLs
+        for i, url in enumerate(urls_to_process, 1):
+            yield f"data: {json.dumps({'token': {'text': f'{i}. {url}\n'}})}\n\n"
+            
+        yield f"data: {json.dumps({'token': {'text': '\n\n🕷️ Starting scraping process...\n\n---\n\n'}})}\n\n"
+        
+        scraped_contents = []
+        success_count = 0
+        
+        # Scrape each URL
+        for i, url in enumerate(urls_to_process, 1):
+            try:
+                yield f"data: {json.dumps({'token': {'text': f'**Scraping {i}/{len(urls_to_process)}:** {url[:60]}...\n\n'}})}\n\n"
+                
+                content = await scrape_website(url, timeout_seconds=8, max_retries=2)
+                logger.info(f"🕷️ SCRAPING: Got content length: {len(content) if content else 0} for {url}")
+                
+                if content and len(content.strip()) > 100:
+                    # Truncate very long content
+                    if len(content) > 3000:
+                        content = content[:3000] + "\n\n[Content truncated for brevity...]"
+                    
+                    scraped_contents.append({
+                        'url': url,
+                        'content': content.strip()
+                    })
+                    success_count += 1
+                    yield f"data: {json.dumps({'token': {'text': f'✅ Successfully scraped content ({len(content)} chars)\n\n'}})}\n\n"
+                    
+                    # Process content through LLM instead of raw dumping
+                    yield f"data: {json.dumps({'token': {'text': f'🤖 Processing content through AI...\n\n'}})}\n\n"
+                else:
+                    yield f"data: {json.dumps({'token': {'text': f'❌ No content found or access denied\n\n'}})}\n\n"
+                    
+            except Exception as scrape_error:
+                logger.warning(f"🕷️ SCRAPING: Error scraping {url}: {scrape_error}")
+                yield f"data: {json.dumps({'token': {'text': f'❌ Error: {str(scrape_error)[:100]}\n\n'}})}\n\n"
+        
+        if scraped_contents:
+            yield f"data: {json.dumps({'token': {'text': f'\n\n🤖 Analyzing {success_count} scraped sources with AI...\n\n---\n\n'}})}\n\n"
+            
+            # Use LLM to process and synthesize the scraped content
+            from persistent_llm_server import get_llm_server
+            
+            llm_server = await get_llm_server()
+            
+            # Create system prompt for content synthesis  
+            system_prompt = """You are Jane, a helpful AI assistant with access to scraped web content. Your task is to analyze and synthesize the scraped content to answer the user's question comprehensively.
+
+🚨 CRITICAL FORMATTING RULES - ABSOLUTE REQUIREMENTS 🚨
+
+**COMPLETELY FORBIDDEN - NEVER USE THESE:**
+- [REF]1[/REF] - FORBIDDEN
+- [REF]2[/REF] - FORBIDDEN  
+- [REF]anything[/REF] - FORBIDDEN
+- ANY variation of [REF]...[/REF] - COMPLETELY FORBIDDEN
+
+**REQUIRED LINK FORMAT - ALWAYS USE THIS:**
+- [Specific Website Name](URL) - REQUIRED
+- [CNN](URL) - GOOD
+- [Reuters](URL) - GOOD  
+- [Associated Press](URL) - GOOD
+- [USA Today](URL) - GOOD
+- [Texas Tribune](URL) - GOOD
+
+**LINK TEXT REQUIREMENTS:**
+- Use the actual website/publication name: [CNN](URL), [BBC News](URL), [Reuters](URL)
+- For news articles: [CNN flood coverage](URL), [Reuters breaking news](URL)
+- For official sources: [FEMA updates](URL), [Texas Governor's Office](URL)
+- NEVER use generic text like "Source", "Link", "Here", "Article"
+
+**MANDATORY TABLE USAGE**: When presenting any structured data, comparisons, lists of items with attributes, or multiple data points, YOU MUST use markdown tables:
+
+| Column 1 | Column 2 | Column 3 |
+|----------|----------|----------|
+| Data A   | Data B   | Data C   |
+
+**STRUCTURE EVERYTHING**: Convert any structured information into organized sections with headers, tables, and lists. If data can be structured, it MUST be in a table format.
+
+CRITICAL: Use ONLY [Specific Website Name](URL) format for links, NEVER use [REF] tags or generic "Source" text."""
+
+            # Format all scraped content for LLM
+            all_content = ""
+            for item in scraped_contents:
+                all_content += f"### Content from {item['url']}:\n{item['content']}\n\n---\n\n"
+            
+            user_content = f"User Query: {user_prompt}\n\nScraped Web Content:\n{all_content}\n\nPlease analyze and synthesize this information to comprehensively answer the user's question. Use proper markdown formatting, create tables for structured data, and use specific website names for links (never generic 'Source' text)."
+            
+            formatted_prompt = utils.format_prompt(system_prompt, user_content)
+            
+            # Stream the LLM response token by token
+            async for token in llm_server.generate_stream(
+                prompt=formatted_prompt,
+                max_tokens=40960,
+                temperature=0.7,
+                top_p=0.95,
+                session_id=session_id,
+                priority=1,
+            ):
+                if token:
+                    yield f"data: {json.dumps({'token': {'text': token}})}\n\n"
+        else:
+            yield f"data: {json.dumps({'token': {'text': '\n\n❌ Unable to scrape any content. The websites may be blocking access or require authentication.\n\n'}})}\n\n"
+            
+    except Exception as e:
+        error_msg = f"Scraping error: {e}"
+        logger.error(f"🕷️ SCRAPING: ❌ {error_msg}", exc_info=True)
+        yield f"data: {json.dumps({'token': {'text': f'\n\n❌ {error_msg}\n\n'}})}\n\n"
+    
+    yield f"data: {json.dumps({'done': True})}\n\n"
+
+
 async def handle_web_search_intent(user_prompt: str, session_id: str, request):
     """Handle web search requests with LLM synthesis."""
     logger.info("🧠 MEMORY DEBUG: Processing perform_web_search intent")
 
-    yield f"data: {json.dumps({'token': {'text': '🔍 Searching the web...'}})}\n\n"
-
     try:
-        from web_scraper import perform_web_search_async
+        # Get conversation memory context to provide the LLM with URLs from previous searches
+        memory_context = await get_memory_context(user_prompt, session_id)
+        
+        # Ask the LLM to intelligently decide: new search vs scraping existing URLs
+        from persistent_llm_server import get_llm_server
+        import utils
+        
+        system_prompt = """You are an intelligent web assistant. Analyze the user's request and conversation context to determine the best action.
 
+DECISION RULES:
+1. If the user wants to search for NEW information, choose "SEARCH"
+2. If the user wants to scrape/read more from URLs mentioned in the conversation context, choose "SCRAPE"
+3. Consider the intent behind the user's words
+
+Return ONLY a JSON object:
+{
+    "action": "SEARCH" | "SCRAPE",
+    "reasoning": "brief explanation",
+    "urls_to_scrape": ["url1", "url2"] // Only if action is SCRAPE, extract URLs from context
+}"""
+
+        user_content = f"""User Request: {user_prompt}
+
+Conversation Context (contains any previous search results with URLs):
+{memory_context[:2000]}
+
+What should I do: search for new information or scrape existing URLs from our conversation?"""
+
+        formatted_prompt = utils.format_prompt(system_prompt, user_content)
+        llm_server = await get_llm_server()
+        
+        decision_response = await llm_server.generate(
+            prompt=formatted_prompt,
+            max_tokens=300,
+            temperature=0.2,
+            session_id=f"{session_id}_web_decision",
+        )
+        
+        logger.info(f"🤖 LLM web decision: {decision_response.strip()}")
+        
+        # Parse the LLM decision
+        import json
+        try:
+            # Extract JSON from response
+            start_idx = decision_response.find("{")
+            end_idx = decision_response.rfind("}")
+            if start_idx != -1 and end_idx != -1:
+                decision_json = json.loads(decision_response[start_idx:end_idx + 1])
+                action = decision_json.get("action", "SEARCH")
+                reasoning = decision_json.get("reasoning", "")
+                
+                if action == "SCRAPE":
+                    urls_to_scrape = decision_json.get("urls_to_scrape", [])
+                    yield f"data: {json.dumps({'token': {'text': f'🕷️ Scraping URLs from conversation ({reasoning})...'}})}\n\n"
+                    async for chunk in _handle_direct_scraping(urls_to_scrape, user_prompt, session_id):
+                        yield chunk
+                    return
+                        
+        except json.JSONDecodeError:
+            logger.warning(f"Failed to parse LLM decision: {decision_response}")
+        except Exception as e:
+            logger.warning(f"LLM decision error: {e}")
+            
+        # Default to search
+        yield f"data: {json.dumps({'token': {'text': '🔍 Searching the web...'}})}\n\n"
+
+        from web_scraper import perform_web_search_async
         search_results = await perform_web_search_async(query=user_prompt, num_results=8)
 
         if search_results:
@@ -193,11 +394,21 @@ You are NEVER allowed to use [REF]URL[/REF] tags for ANY reason and MUST ONLY us
 
 **LINK FORMATTING RULE**:
 ❌ ABSOLUTELY FORBIDDEN: [REF]1[/REF], [REF]2[/REF], [REF]source[/REF], [REF]anything[/REF] - NEVER USE THESE
-✅ REQUIRED: [Description](https://actual-url.com) - ALWAYS USE THESE INSTEAD
+❌ FORBIDDEN: [Source](URL) - Generic "Source" text is forbidden
+✅ REQUIRED: [Descriptive Website Name](URL) - ALWAYS USE SPECIFIC WEBSITE NAMES
+
+**LINK TEXT REQUIREMENTS:**
+- Use the actual website name/title as link text: [CNN](URL), [BBC News](URL), [Reuters](URL)
+- For news articles: [CNN article on floods](URL), [BBC breaking news](URL)
+- For organizations: [FEMA disaster response](URL), [Red Cross updates](URL)
+- For official sources: [Texas Governor's Office](URL), [White House statement](URL)
+- NEVER use generic words like "Source", "Link", "Here", "Article"
 
 Examples:
-❌ BAD: "Donald Trump is president [REF]1,2,3[/REF]"
-✅ GOOD: "Donald Trump is president according to [Wikipedia](https://en.wikipedia.org/wiki/Donald_Trump)"
+❌ BAD: "Flooding reported [Source](URL)" 
+❌ BAD: "According to reports [Source](URL)"
+✅ GOOD: "Flooding reported by [CNN](URL)"
+✅ GOOD: "According to [Reuters](URL) and [Associated Press](URL)"
 
 **MANDATORY TABLE USAGE**: When presenting any structured data, comparisons, lists of items with attributes, or multiple data points, YOU MUST use markdown tables:
 
@@ -215,7 +426,7 @@ DO NOT WRITE [REF]1[/REF] OR [REF]2[/REF] OR [REF]URL[/REF] OR ANY VJaneNT
 ONLY USE: [Description](URL) format for ALL links
 🚨🚨🚨 FINAL WARNING 🚨🚨🚨"""
 
-            user_content = f"User Query: {user_prompt}\n\nSearch Results:\n{search_results}\n\nPlease provide a comprehensive response to the user's query using the search results above. CRITICAL: Use ONLY [Description](URL) format for links, NEVER use [REF] tags."
+            user_content = f"User Query: {user_prompt}\n\nSearch Results:\n{search_results}\n\nPlease provide a comprehensive response to the user's query using the search results above. CRITICAL: Use ONLY [Specific Website Name](URL) format for links, NEVER use [REF] tags or generic 'Source' text."
 
             formatted_prompt = utils.format_prompt(system_prompt, user_content)
 
@@ -483,7 +694,8 @@ Examples:
 
         # Get and process stock data
         if app_state.stock_searcher:
-            await _process_stock_data(tickers, user_prompt, session_id, request)
+            async for data_chunk in _process_stock_data(tickers, user_prompt, session_id, request):
+                yield data_chunk
         else:
             yield f"data: {json.dumps({'token': {'text': '\n\n❌ Stock market data service is not available.\n\n'}})}\n\n"
 
@@ -519,7 +731,8 @@ async def handle_weather_query_intent(user_prompt: str, session_id: str, request
             weather_data = await get_weather_for_city(converted_city)
 
             if weather_data and "error" not in weather_data:
-                await _process_weather_data(weather_data, user_prompt, session_id, request, llm_server)
+                async for data_chunk in _process_weather_data(weather_data, user_prompt, session_id, request, llm_server):
+                    yield data_chunk
             else:
                 error_msg = (
                     weather_data.get("error", "Unable to fetch weather data")
@@ -555,7 +768,8 @@ async def handle_crypto_query_intent(user_prompt: str, session_id: str, request)
         crypto_data = crypto_trader.get_multiple_crypto_quotes(requested_cryptos[:5])
 
         if crypto_data:
-            await _process_crypto_data(crypto_trader, requested_cryptos, user_prompt, session_id, request)
+            async for data_chunk in _process_crypto_data(crypto_trader, requested_cryptos, user_prompt, session_id, request):
+                yield data_chunk
         else:
             yield f"data: {json.dumps({'token': {'text': '\n\n❌ Unable to fetch cryptocurrency price data. The CoinGecko API may be unavailable.\n\n'}})}\n\n"
 
@@ -655,17 +869,27 @@ Answer the user's question based on this information. If the information isn't a
 async def _get_conversation_history_context(user_prompt: str, session_id: str) -> str:
     """Get conversation history context from memory."""
     try:
-        logger.info(f"🧠 MEMORY RETRIEVAL: Searching for memories with query: '{user_prompt}'")
-
-        memories = await app_state.personal_memory.get_relevant_memories(query=user_prompt, limit=10)
-
+        logger.info(f"🧠 MEMORY RETRIEVAL: Searching conversation {session_id} for recent memories")
+        
+        # Get conversation-specific context from this session
+        memories = await app_state.personal_memory.get_conversation_context(
+            conversation_id=session_id, max_messages=20
+        )
+        
         if memories:
-            memory_context = "\n".join([f"Memory: {memory.content}" for memory in memories])
-            logger.info(f"🧠 MEMORY RETRIEVAL: ✅ Successfully retrieved {len(memories)} memories")
-            return memory_context
-        else:
-            logger.info("🧠 MEMORY RETRIEVAL: No relevant memories found in database")
-            return ""
+            # Format memories with timestamps for better context
+            memory_lines = []
+            for memory in memories:
+                if hasattr(memory, 'content') and memory.content:
+                    memory_lines.append(f"Previous discussion: {memory.content}")
+            
+            if memory_lines:
+                memory_context = "\n".join(memory_lines)
+                logger.info(f"🧠 MEMORY RETRIEVAL: ✅ Successfully retrieved {len(memory_lines)} conversation memories")
+                return memory_context
+        
+        logger.info("🧠 MEMORY RETRIEVAL: No conversation history found for this session")
+        return ""
     except Exception:
         logger.exception("🧠 MEMORY RETRIEVAL: ❌ Memory retrieval failed")
         return ""
@@ -741,6 +965,8 @@ async def _process_stock_data(tickers: list, user_prompt: str, session_id: str, 
         llm_server = await get_llm_server()
 
         system_prompt = """You are a knowledgeable financial assistant with access to real-time stock market data.
+
+You must always return your responses using proper markdown formatting and must always use markdown tables to display structured data.
 
 CRITICAL FORMATTING RULES:
 1. **MANDATORY**: Always format stock data in clean markdown tables like this:
@@ -1102,3 +1328,65 @@ async def _store_crypto_memory(user_prompt: str, full_response: str, session_id:
         logger.info("₿ CRYPTO: Stored crypto query conversation in memory")
     except Exception:
         logger.exception("₿ CRYPTO: Failed to store in memory")
+
+
+async def _get_file_attachments_for_conversation(session_id: str) -> list[str]:
+    """Get file attachment references for a conversation session.
+    
+    Returns a list of formatted file attachment descriptions for context.
+    """
+    try:
+        logger.info(f"📎 FILE_RETRIEVAL: Getting file attachments for session {session_id}")
+        
+        if not app_state.personal_memory:
+            logger.warning("📎 FILE_RETRIEVAL: personal_memory not available")
+            return []
+            
+        # Search for file attachments in this conversation
+        # We'll search for both types: actual file content and file references
+        file_memories = await app_state.personal_memory.get_relevant_memories(
+            query="file attachment filename user uploaded", 
+            limit=20
+        )
+        
+        if not file_memories:
+            logger.debug(f"📎 FILE_RETRIEVAL: No file memories found for session {session_id}")
+            return []
+            
+        file_attachments = []
+        processed_files = set()  # Avoid duplicates
+        
+        for memory in file_memories:
+            # Check if this memory is from the current conversation
+            if hasattr(memory, 'conversation_id') and memory.conversation_id != session_id:
+                continue
+                
+            # Check if this is a file-related memory
+            if hasattr(memory, 'metadata') and memory.metadata:
+                metadata = memory.metadata
+                if metadata.get('type') == 'file_reference' and metadata.get('filename'):
+                    filename = metadata['filename']
+                    if filename not in processed_files:
+                        file_attachments.append(f"- {filename}: {memory.content}")
+                        processed_files.add(filename)
+                        logger.debug(f"📎 FILE_RETRIEVAL: Found reference for {filename}")
+                        
+                elif metadata.get('type') == 'file_attachment' and metadata.get('filename'):
+                    filename = metadata['filename']
+                    if filename not in processed_files:
+                        content_preview = metadata.get('content_preview', 'No preview available')
+                        file_attachments.append(f"- {filename}: {content_preview}")
+                        processed_files.add(filename)
+                        logger.debug(f"📎 FILE_RETRIEVAL: Found attachment for {filename}")
+            else:
+                # Fallback: look for file patterns in content
+                if 'attached file' in memory.content.lower() or 'file attachment' in memory.content.lower():
+                    file_attachments.append(f"- {memory.content[:100]}{'...' if len(memory.content) > 100 else ''}")
+                    
+        logger.info(f"📎 FILE_RETRIEVAL: Found {len(file_attachments)} file attachments for session {session_id}")
+        return file_attachments[:5]  # Limit to 5 most relevant files
+        
+    except Exception as e:
+        logger.error(f"📎 FILE_RETRIEVAL: ❌ Error retrieving file attachments: {e}", exc_info=True)
+        return []
+

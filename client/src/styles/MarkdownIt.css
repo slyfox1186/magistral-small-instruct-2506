@@ -120,7 +120,7 @@ div.markdown-content {
 
 /* Links */
 .markdown-content a {
-  color: #8b5cf6; /* Elegant purple */
+  color: var(--accent-primary); /* Use theme-aware accent color */
   text-decoration: none;
   transition: color 0.2s ease;
   position: relative;
@@ -128,7 +128,7 @@ div.markdown-content {
 
 .markdown-content a:hover {
   text-decoration: underline;
-  color: #a855f7; /* Lighter elegant purple for hover */
+  color: var(--accent-primary-hover, var(--accent-primary)); /* Use theme-aware hover color */
 }
 
 /* Code */

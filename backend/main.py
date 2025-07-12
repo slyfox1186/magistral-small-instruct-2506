@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""FastAPI backend for Magistral Small chat application.
+"""FastAPI backend for Devstral Small chat application.
 
 Simplified modular architecture - imports all components.
 """
@@ -35,7 +35,7 @@ SERVER_START_TIME = int(time.time())
 
 app = FastAPI(
     lifespan=lifespan,
-    title="Magistral Chat API",
+    title="Devstral Chat API",
     version=f"1.0.{SERVER_START_TIME}",  # Dynamic version for cache busting
 )
 
