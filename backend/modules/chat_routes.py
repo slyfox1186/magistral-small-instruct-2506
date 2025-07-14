@@ -370,8 +370,8 @@ def _create_chat_stream_route(app: FastAPI):
                 if intent in ["perform_web_search", "query_stocks", "query_weather", "query_cryptocurrency"]:
                     async for chunk in handler(user_prompt, session_id, request):
                         yield chunk
-                elif intent in ["store_personal_info", "recall_personal_info"]:
-                    # Personal info handlers only need user_prompt and session_id
+                elif intent in ["store_personal_info", "recall_personal_info", "query_conversation_history"]:
+                    # These handlers only need user_prompt and session_id
                     async for chunk in handler(user_prompt, session_id):
                         yield chunk
                 else:
