@@ -382,9 +382,18 @@ class PersonalMemorySystem:
             try:
                 # Generate embedding for the query using ResourceManager
                 from resource_manager import get_sentence_transformer_embeddings
+                import numpy as np
+                
                 query_embeddings = get_sentence_transformer_embeddings([query])
-                if query_embeddings and len(query_embeddings) > 0:
+                if query_embeddings is not None and len(query_embeddings) > 0:
                     query_embedding = query_embeddings[0]
+                    
+                    # Validate embedding dimensions
+                    if not hasattr(query_embedding, '__len__') or len(query_embedding) != 1024:
+                        raise ValueError(f"Invalid query embedding dimensions: {len(query_embedding) if hasattr(query_embedding, '__len__') else 'unknown'}")
+                    
+                    # Convert to numpy array for calculations
+                    query_embedding = np.array(query_embedding)
                     
                     # Get all memories with embeddings for similarity calculation
                     embedding_query = base_query + " AND embedding IS NOT NULL"
@@ -395,20 +404,19 @@ class PersonalMemorySystem:
                     for row in cursor:
                         try:
                             memory = self._row_to_memory(row)
-                            if memory.embedding:
-                                # Calculate cosine similarity
-                                import numpy as np
+                            if memory.embedding and len(memory.embedding) == 1024:
+                                # Calculate cosine similarity with proper validation
                                 stored_embedding = np.array(memory.embedding)
-                                query_emb = np.array(query_embedding)
                                 
                                 # Cosine similarity calculation
-                                dot_product = np.dot(query_emb, stored_embedding)
-                                norm_query = np.linalg.norm(query_emb)
+                                dot_product = np.dot(query_embedding, stored_embedding)
+                                norm_query = np.linalg.norm(query_embedding)
                                 norm_stored = np.linalg.norm(stored_embedding)
                                 
-                                if norm_query > 0 and norm_stored > 0:
-                                    similarity = dot_product / (norm_query * norm_stored)
-                                    memories_with_similarity.append((similarity, memory))
+                                if norm_query > 1e-8 and norm_stored > 1e-8:
+                                    similarity = float(dot_product / (norm_query * norm_stored))
+                                    if similarity >= 0.1:  # Only keep reasonably similar memories
+                                        memories_with_similarity.append((similarity, memory))
                         except Exception as e:
                             logger.debug(f"Error calculating similarity for memory {row[0]}: {e}")
                             continue
@@ -416,10 +424,8 @@ class PersonalMemorySystem:
                     # Sort by similarity (desc), then importance (desc), then timestamp (desc)
                     memories_with_similarity.sort(key=lambda x: (x[0], x[1].importance, x[1].timestamp), reverse=True)
                     
-                    # Apply similarity threshold (0.2) and limit
-                    similarity_threshold = 0.2
-                    memories = [memory for similarity, memory in memories_with_similarity 
-                              if similarity >= similarity_threshold][:limit]
+                    # Sort by similarity score and take top results (already filtered at 0.1)
+                    memories = [memory for similarity, memory in memories_with_similarity][:limit if limit > 0 else len(memories_with_similarity)]
                     
                     if memories:
                         logger.debug(f"[MEMORY_RETRIEVAL] Found {len(memories)} semantically similar memories")
