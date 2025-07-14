@@ -3,6 +3,7 @@ import { Conversation, MessageData } from '@/utils/types';
 import { crudApi } from '@/api/crud';
 import { useAlerts } from '@/hooks/useAlerts';
 import { ChatMessage } from '@/components/ChatMessage';
+import ConfirmModal from '@/components/ui/ConfirmModal';
 
 interface ConversationViewProps {
   conversation: Conversation;
@@ -18,6 +19,8 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState(false);
   const [editTitle, setEditTitle] = useState(conversation.title);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [messageToDelete, setMessageToDelete] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { showAlert } = useAlerts();
 
@@ -67,18 +70,29 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
     }
   };
 
-  const handleDeleteMessage = async (messageId: string) => {
-    if (!window.confirm('Are you sure you want to delete this message?')) {
-      return;
-    }
+  const handleDeleteMessage = (messageId: string) => {
+    setMessageToDelete(messageId);
+    setShowDeleteModal(true);
+  };
+
+  const confirmDeleteMessage = async () => {
+    if (!messageToDelete) return;
 
     try {
-      await crudApi.deleteMessage(messageId);
-      setMessages(prev => prev.filter(m => m.id !== messageId));
+      await crudApi.deleteMessage(messageToDelete);
+      setMessages(prev => prev.filter(m => m.id !== messageToDelete));
       showAlert('Message deleted', 'success');
     } catch {
       showAlert('Failed to delete message', 'error');
+    } finally {
+      setShowDeleteModal(false);
+      setMessageToDelete(null);
     }
+  };
+
+  const cancelDeleteMessage = () => {
+    setShowDeleteModal(false);
+    setMessageToDelete(null);
   };
 
   const formatDate = (dateString: string) => {
@@ -168,6 +182,17 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
         )}
         <div ref={messagesEndRef} />
       </div>
+
+      <ConfirmModal
+        isOpen={showDeleteModal}
+        title="Delete Message"
+        message="Are you sure you want to delete this message? This action cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+        onConfirm={confirmDeleteMessage}
+        onCancel={cancelDeleteMessage}
+        variant="danger"
+      />
     </div>
   );
 };

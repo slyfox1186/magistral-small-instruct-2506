@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --force",
+    "dev:safe": "node wait-for-backend.js",
     "dev:clean": "vite --force --host",
     "clean": "rm -rf dist .vite node_modules/.vite",
     "build": "tsc && vite build",

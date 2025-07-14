@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Conversation, ConversationCreate } from '@/utils/types';
 import { crudApi } from '@/api/crud';
 import { useAlerts } from '@/hooks/useAlerts';
+import ConfirmModal from '@/components/ui/ConfirmModal';
 
 interface ConversationListProps {
   onSelectConversation: (conversation: Conversation) => void;
@@ -18,6 +19,8 @@ export const ConversationList: React.FC<ConversationListProps> = ({
   const [showArchived, setShowArchived] = useState(false);
   const [showNewConversationForm, setShowNewConversationForm] = useState(false);
   const [newConversationTitle, setNewConversationTitle] = useState('');
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [conversationToDelete, setConversationToDelete] = useState<Conversation | null>(null);
   const { showAlert } = useAlerts();
 
   const loadConversations = useCallback(async () => {
@@ -79,20 +82,30 @@ export const ConversationList: React.FC<ConversationListProps> = ({
     }
   };
 
-  const handleDeleteConversation = async (conversation: Conversation, event: React.MouseEvent) => {
+  const handleDeleteConversation = (conversation: Conversation, event: React.MouseEvent) => {
     event.stopPropagation();
-    
-    if (!window.confirm(`Are you sure you want to delete "${conversation.title}"? This action cannot be undone.`)) {
-      return;
-    }
+    setConversationToDelete(conversation);
+    setShowDeleteModal(true);
+  };
+
+  const confirmDeleteConversation = async () => {
+    if (!conversationToDelete) return;
 
     try {
-      await crudApi.deleteConversation(conversation.id);
-      setConversations(prev => prev.filter(c => c.id !== conversation.id));
+      await crudApi.deleteConversation(conversationToDelete.id);
+      setConversations(prev => prev.filter(c => c.id !== conversationToDelete.id));
       showAlert('Conversation deleted', 'success');
     } catch {
       showAlert('Failed to delete conversation', 'error');
+    } finally {
+      setShowDeleteModal(false);
+      setConversationToDelete(null);
     }
+  };
+
+  const cancelDeleteConversation = () => {
+    setShowDeleteModal(false);
+    setConversationToDelete(null);
   };
 
   const formatDate = (dateString: string) => {
@@ -222,6 +235,17 @@ export const ConversationList: React.FC<ConversationListProps> = ({
           ))
         )}
       </div>
+
+      <ConfirmModal
+        isOpen={showDeleteModal}
+        title="Delete Conversation"
+        message={`Are you sure you want to delete "${conversationToDelete?.title}"? This action cannot be undone.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        onConfirm={confirmDeleteConversation}
+        onCancel={cancelDeleteConversation}
+        variant="danger"
+      />
     </div>
   );
 };

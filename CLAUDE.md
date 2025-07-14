@@ -1,108 +1,104 @@
 # CLAUDE.md
 
-**WARNING: This codebase has critical architectural flaws. System is over-engineered and unreliable.**
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## 🚨 CRITICAL FIXES NEEDED
+**⚠️ WARNING: Critical architectural flaws exist - race conditions, memory leaks, circular dependencies compromise system reliability.**
 
-### Resource Management
-- **GPU race conditions** (`gpu_lock.py:135`): Task cleanup missing
-- **Memory leaks**: Background tasks never canceled
-- **Connection leaks** (`memory_api.py:503`): Redis connections not managed
+## 🚀 Quick Start & Commands
 
-### Concurrency Issues  
-- **LLM server races** (`persistent_llm_server.py:434-447`): Double-checked locking broken
-- **Frontend state confusion** (`chat.ts:196`): Multiple completion signals
-- **Redis deadlocks**: Lock handling improper
-
-### Architecture Problems
-- **Circular dependencies**: `globals.py`, `lifespan.py` import everything
-- **No dependency injection**: Hardcoded service discovery
-- **Untestable code**: Components can't be isolated
-
-## 🔧 CRITICAL FIXES
-
-```python
-# gpu_lock.py:135 - Track tasks properly
-task = asyncio.create_task(self._wake_next_waiter())
-self._background_tasks.add(task)
-task.add_done_callback(self._background_tasks.discard)
-```
-
-```typescript
-// App.tsx - Use state machine
-type StreamState = 'idle' | 'thinking' | 'streaming' | 'completed' | 'error';
-const [streamState, setStreamState] = useState<StreamState>('idle');
-```
-
-```python
-# consolidation_worker.py - Task lifecycle
-class ConsolidationWorker:
-    def __init__(self):
-        self._background_tasks: set[asyncio.Task] = set()
-    async def stop(self):
-        for task in self._background_tasks:
-            task.cancel()
-        await asyncio.gather(*self._background_tasks, return_exceptions=True)
-```
-
-## 📋 COMMANDS
-
-### Start
+### Start System
 ```bash
-cd docker && docker-compose up -d  # Redis first
+cd docker && docker-compose up -d  # Redis first (required)
 python start.py                    # Frontend + Backend
 ```
 
-### Development
-- **All**: `npm run lint`, `npm run format`, `npm run type-check` 
-- **Backend**: `ruff check backend/`, `mypy backend/`, `pytest`
-- **Frontend**: `cd client && npm run dev/build/lint/type-check`
+### Development Commands
+| Command | Purpose | Details |
+|---------|---------|---------|
+| `npm run lint` | Lint all code | Python (Ruff + MyPy) + TypeScript (ESLint) |
+| `npm run format` | Format all code | Python (Ruff) + TypeScript (Prettier) |
+| `npm run type-check` | Type validation | MyPy + TypeScript compiler |
+| `cd client && npm run dev` | Frontend dev server | Port 4000, hot reload |
+| `cd backend && pytest` | Run backend tests | Limited coverage |
 
-### Access
-- Frontend: http://localhost:4000
-- Backend: http://localhost:8000
-- API Docs: http://localhost:8000/docs
-- Redis Insight: http://localhost:8002
+### Access Points
+- **Frontend**: http://localhost:4000
+- **Backend**: http://localhost:8000 + `/docs` (Swagger)
+- **Redis Insight**: http://localhost:8002
 
-## 🏗️ ARCHITECTURE
+## 🏗️ Architecture: Neural Consciousness Chat System
 
-Neural Consciousness Chat System: React TS → FastAPI → Magistral LLM + Redis
+**Stack**: React TypeScript → FastAPI Python → Local Magistral LLM + Redis Stack
 
-### Problems
-- **Backend**: Circular imports, race conditions, connection leaks, no error boundaries
-- **Frontend**: 1800+ line monolith, state management anti-patterns  
-- **Overall**: Over-engineered, scope creep (crypto/stocks/weather APIs unnecessary)
+### Key Components
+| Layer | Technology | Critical Files |
+|-------|------------|----------------|
+| **Frontend** | React 18 + TypeScript + Vite | `App.tsx` (1800+ lines monolith), `api/chat.ts` |
+| **Backend** | FastAPI + Python 3.11 | `main.py`, `modules/lifespan.py`, `persistent_llm_server.py` |
+| **AI/Memory** | Magistral LLM + Redis | `memory/`, `gpu_lock.py` ⚠️, `modules/chat_routes.py` |
+| **Infrastructure** | Docker + Redis Stack | `docker/docker-compose.yml`, `monitoring/` |
 
-## ⚠️ DEVELOPMENT WARNINGS
+## 🚨 Critical Issues & Warnings
 
-### Known Issues
-1. Backend startup: 2-5 minutes (model loading)
-2. Memory leaks during long sessions  
-3. GPU deadlocks require restart
-4. Hot reload fails (circular dependencies)
+### Critical Bugs (Immediate Attention Required)
+| Issue | Location | Impact | Fix Priority |
+|-------|----------|--------|--------------|
+| **LLM Server Race Conditions** | `persistent_llm_server.py:467-479` | Double-checked locking issues | 🔴 Critical |
+| **Memory Connection Leaks** | `memory_api.py:502-503` | Redis connections not pooled | 🟠 High |
+| **Task Lifecycle Leaks** | Background tasks never canceled | Unbounded growth | 🔴 Critical |
+| **Frontend State Chaos** | `App.tsx` multiple signals | Race conditions | 🟠 High |
+| **Circular Dependencies** | `globals.py`, `lifespan.py` | Untestable code | 🟠 High |
 
-### Security Risks
-- No input validation
-- Resource exhaustion attacks possible
-- Redis data loaded without validation
-- Unbounded queues allow DoS
+### Development Hazards
+- **Startup**: 2-5 minutes, may fail with GPU OOM
+- **Stability**: GPU deadlocks require full restart
+- **Security**: No input validation, resource exhaustion attacks possible
+- **Performance**: P95 latency 3-8s (target <2s), poor GPU utilization
+- **Scope Creep**: Unnecessary crypto/stock/weather APIs add complexity
 
-### Performance Problems  
-- P95 latency: 3-8s (target <2s)
-- Unbounded memory growth
-- Poor GPU utilization
+## 🔧 Code Standards & Patterns
 
-## 🎯 PRIORITY FIXES
+### Python (Backend) - Ruff + MyPy + Pytest
+- **Lint/Format**: `ruff check . && ruff format .` (100 char limit, double quotes)
+- **Types**: MyPy strict mode, Pydantic models for API validation
+- **Testing**: Pytest (minimal coverage currently)
 
-### Critical Files
-1. `/backend/gpu_lock.py` - Race conditions
-2. `/backend/persistent_llm_server.py` - Initialization races  
-3. `/client/src/App.tsx` - State machine needed
-4. `/backend/memory/services/consolidation_worker.py` - Task leaks
-5. `/backend/modules/chat_routes.py` - Input validation
+### TypeScript (Frontend) - ESLint + Prettier + Vite
+- **Lint/Format**: ESLint (React + a11y rules) + Prettier
+- **Build**: Vite for fast dev/build, strict TypeScript config
+- **Patterns**: React context + hooks (poorly implemented), streaming chat via SSE
 
-### Recommendations
-- **Remove scope creep**: crypto/stocks/weather APIs
-- **Simplify architecture**: Focus on core chat functionality
-- **Break circular dependencies**: Implement dependency injection
-- **Add proper error handling**: Unified pattern across system
+### Key System Patterns
+- **Memory**: Complex embedding-based system with Redis storage
+- **Streaming**: Server-sent events for real-time LLM responses  
+- **Resource Mgmt**: Attempted GPU/memory management (buggy)
+- **Error Handling**: Minimal and inconsistent (needs unified pattern)
+
+## 💡 Essential Development Guidelines
+
+### Prerequisites & Startup
+1. **Redis First**: Always `cd docker && docker-compose up -d` before starting system
+2. **Slow Startup**: Backend takes 2-5 minutes to load LLM model, may fail with GPU OOM
+3. **Resource Monitoring**: Watch GPU memory, system prone to CUDA errors
+
+### Working with the System
+4. **Test Carefully**: System is fragile, small changes can cause cascading failures
+5. **Isolation Issues**: Components tightly coupled, testing difficult
+6. **Deadlock Recovery**: GPU locks may require full process restart
+7. **Memory Vigilance**: Known leaks in long sessions
+
+### Before Making Changes
+🚨 **Backup Redis data first** - system state and conversation history
+🚨 **Start small** - incremental changes only, monitor resource usage
+🚨 **Consider refactoring** - system may need architectural fixes vs patches
+
+### Quick Fixes Priority
+1. `persistent_llm_server.py:467-479` - Fix double-checked locking race condition
+2. `memory_api.py:502-503` - Implement Redis connection pooling 
+3. `App.tsx` - Implement proper state machine
+4. `consolidation_worker.py` - Fix task lifecycle management
+5. `chat_routes.py` - Add input validation
+
+### Note on GPU Lock
+- `gpu_lock.py:136-138` background task tracking is actually correctly implemented
+- Original issue identification was inaccurate

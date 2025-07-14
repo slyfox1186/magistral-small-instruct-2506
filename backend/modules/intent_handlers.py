@@ -421,15 +421,44 @@ async def get_memory_context(user_prompt: str, session_id: str) -> str:
     return memory_context
 
 
-async def handle_conversation_intent(user_prompt: str, session_id: str):
+async def handle_conversation_intent(user_prompt: str, session_id: str, conversation_history: list = None):
     """Handle conversation intent with memory-aware processing."""
     logger.info("🧠 MEMORY DEBUG: Processing conversation intent - using inline conversation handling")
+
+    # Get user settings to determine language preference
+    user_settings = None
+    preferred_language = "en"  # Default to English
+    try:
+        from .crud_routes import crud_service
+        user_settings = await crud_service.get_user_settings(session_id)
+        if user_settings and hasattr(user_settings, 'preferred_language'):
+            preferred_language = user_settings.preferred_language
+            logger.info(f"🌍 LANGUAGE: Using user's preferred language: {preferred_language}")
+        else:
+            logger.info("🌍 LANGUAGE: No user settings found, using default English")
+    except Exception as e:
+        logger.warning(f"🌍 LANGUAGE: Failed to fetch user settings: {e}, using default English")
 
     # Get memory context from personal memory
     memory_context = await get_memory_context(user_prompt, session_id)
 
-    # Use condensed system prompt with memory context
-    simple_system_prompt = """You are Jane, a helpful AI assistant. Be natural and conversational.
+    # Create language instruction based on preference
+    language_instruction = ""
+    if preferred_language != "en":
+        language_map = {
+            "es": "Spanish (Español)",
+            "fr": "French (Français)", 
+            "de": "German (Deutsch)",
+            "it": "Italian (Italiano)",
+            "pt": "Portuguese (Português)",
+            "zh": "Chinese (中文)",
+            "ja": "Japanese (日本語)"
+        }
+        language_name = language_map.get(preferred_language, preferred_language)
+        language_instruction = f"\n\n🌍 LANGUAGE REQUIREMENT: You MUST respond ONLY in {language_name}. Do not use English unless specifically asked. All your responses should be in {language_name}."
+
+    # Use condensed system prompt with memory context and language preference
+    simple_system_prompt = f"""You are Jane, a helpful AI assistant. Be natural and conversational.
 
 🚨 CRITICAL: You are NEVER allowed to use [REF] tags in ANY form ([REF]1[/REF], [REF]2[/REF], [REF]anything[/REF]) and must ONLY use proper markdown links: [Text Here](URL)
 
@@ -438,7 +467,7 @@ async def handle_conversation_intent(user_prompt: str, session_id: str):
 🔄 CONVERSATION FLOW: 
 - If the user gives a one-word answer or short phrase after you asked for clarification, they are answering your clarification question
 - Look at the "Recent Conversation Context" to understand what specific topic they're choosing when they clarify
-- When they clarify a topic, continue with that specific topic instead of starting a general conversation about it"""
+- When they clarify a topic, continue with that specific topic instead of starting a general conversation about it{language_instruction}"""
 
     # Add memory context if available
     if memory_context:
@@ -450,8 +479,42 @@ async def handle_conversation_intent(user_prompt: str, session_id: str):
 
     server = await get_llm_server()
 
-    # Format prompt properly
-    formatted_prompt = utils.format_prompt(simple_system_prompt, user_prompt)
+    # Format conversation history for the LLM
+    conversation_context = ""
+    if conversation_history:
+        logger.info(f"🧠 CONVERSATION: Processing {len(conversation_history)} previous messages")
+        
+        # Build conversation context from message history
+        conversation_messages = []
+        for msg in conversation_history:
+            role = msg.role if hasattr(msg, 'role') else 'unknown'
+            content = msg.content if hasattr(msg, 'content') else str(msg)
+            
+            # Format each message properly
+            if role == 'user':
+                conversation_messages.append(f"User: {content}")
+            elif role == 'assistant':
+                conversation_messages.append(f"Assistant: {content}")
+        
+        if conversation_messages:
+            conversation_context = "\n".join(conversation_messages)
+            logger.info(f"🧠 CONVERSATION: Built conversation context with {len(conversation_messages)} messages")
+    else:
+        logger.info("🧠 CONVERSATION: No conversation history provided")
+
+    # Format prompt with conversation history using the appropriate utility function
+    if conversation_context:
+        # Use format_prompt_with_history to include conversation context
+        formatted_prompt = utils.format_prompt_with_history(
+            simple_system_prompt, 
+            user_prompt, 
+            f"## Recent Conversation Context:\n{conversation_context}"
+        )
+        logger.info("🧠 CONVERSATION: Using prompt with conversation history")
+    else:
+        # Use regular format_prompt for first message or when no history
+        formatted_prompt = utils.format_prompt(simple_system_prompt, user_prompt)
+        logger.info("🧠 CONVERSATION: Using prompt without conversation history")
 
     # Stream tokens directly
     full_response = ""
@@ -932,24 +995,47 @@ async def handle_personal_info_storage_intent(user_prompt: str, session_id: str)
 
             llm_server = await get_llm_server()
 
-            system_prompt = """You are Jane, a helpful AI assistant with a warm, caring personality. The user has just shared personal information with you, and you have successfully stored it in your memory.
+            system_prompt = """You are Jane, an advanced AI assistant with exceptional emotional intelligence and conversational skills. The user has just shared personal information with you, and you have successfully stored it in your long-term memory system.
 
-You must return your responses using proper markdown formatting and use markdown tables for structured data.
+CORE INSTRUCTIONS:
+1. ACKNOWLEDGE SPECIFICALLY what they shared - don't be generic
+2. EXPRESS genuine appreciation for their trust in sharing personal details
+3. EXPLAIN how this information will help you assist them better in future conversations
+4. DEMONSTRATE understanding by connecting their information to potential future help
+5. BE conversational, warm, and personable - like a close friend would respond
+6. SHOW excitement about getting to know them better
 
-When creating tables, use this format:
-| Category | Details |
-|----------|---------|
-| Field1 | Value1 |
-| Field2 | Value2 |
+RESPONSE STRUCTURE:
+- Start with genuine appreciation
+- Acknowledge the specific information they shared
+- Explain how you'll use this to help them better
+- End with a warm, forward-looking statement
 
-Be genuinely warm and appreciative that they shared personal details with you. Acknowledge what they shared, express that you'll remember it, and show how this helps you understand them better. Keep it conversational and natural - like a friend would respond. Be brief but meaningful."""
+FORMATTING REQUIREMENTS:
+- Use proper markdown formatting throughout
+- Create structured data using markdown tables when appropriate:
+  | Category | Details |
+  |----------|---------|
+  | Field1 | Value1 |
+- NEVER use placeholder text like [Your Color] or [Field1] - ALWAYS use the actual information they shared
+- Extract and use the specific details from what they told you
+- Use **bold** for emphasis on key points
+- Use *italics* for emotional emphasis
+
+TONE: Warm, intelligent, caring, excited to learn about them. Show genuine interest in who they are as a person. Be substantive but not overly verbose."""
 
             formatted_prompt = utils.format_prompt(system_prompt, f"I just told you: {user_prompt}")
 
             # Stream the natural response
+            # Calculate max_tokens dynamically based on config
+            from config import MODEL_CONFIG
+            context_window = MODEL_CONFIG.get("n_ctx", 12288)
+            # Reserve ~30% of context for prompt, use 70% for response
+            max_response_tokens = int(context_window * 0.7)
+            
             async for token in llm_server.generate_stream(
                 prompt=formatted_prompt,
-                max_tokens=300,
+                max_tokens=max_response_tokens,
                 temperature=0.7,
                 top_p=0.95,
                 session_id=session_id,

@@ -1,6 +1,7 @@
 import { crudApi } from '@/api/crud';
 import { AppMessage } from '@/utils/messageUtils';
 import { logger } from '@/utils';
+import config from '@/utils/config';
 
 /**
  * Integration service to automatically manage conversations and messages
@@ -35,7 +36,7 @@ class ChatIntegrationService {
 
       // Create new conversation
       const title = firstMessage 
-        ? this.generateTitleFromMessage(firstMessage)
+        ? await this.generateTitleFromMessage(firstMessage)
         : `Chat Session ${new Date().toLocaleDateString()}`;
 
       const newConversation = await crudApi.createConversation({
@@ -155,9 +156,42 @@ class ChatIntegrationService {
   }
 
   /**
-   * Generate a meaningful title from the first message
+   * Generate a meaningful title from the first message using LLM
    */
-  private generateTitleFromMessage(message: string): string {
+  private async generateTitleFromMessage(message: string): Promise<string> {
+    try {
+      // Call the backend API for LLM-based title generation
+      const response = await fetch(`${config.API_URL}/generate-title`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          user_message: message,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.title && data.title.trim()) {
+          logger.info(`Generated LLM title: "${data.title}" for message: "${message.substring(0, 50)}..."`);
+          return data.title.trim();
+        }
+      } else {
+        logger.warn(`Title generation API failed with status ${response.status}`);
+      }
+    } catch (error) {
+      logger.error('Failed to generate title via LLM:', error);
+    }
+
+    // Fallback to rule-based generation
+    return this.generateFallbackTitle(message);
+  }
+
+  /**
+   * Fallback title generation using rules (original logic)
+   */
+  private generateFallbackTitle(message: string): string {
     // Clean and truncate the message
     const cleaned = message.trim().replace(/\n+/g, ' ').substring(0, 100);
     
@@ -196,7 +230,7 @@ class ChatIntegrationService {
       // Find the first user message
       const firstUserMessage = messages.find(m => m.role === 'user');
       if (firstUserMessage) {
-        const newTitle = this.generateTitleFromMessage(firstUserMessage.content);
+        const newTitle = await this.generateTitleFromMessage(firstUserMessage.content);
         await this.updateConversationTitle(newTitle);
       }
     } catch (error) {

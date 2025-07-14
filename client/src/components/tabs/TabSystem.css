@@ -1,0 +1,442 @@
+/* World-Class Tab System - Sophisticated Integration with Existing Theme */
+
+.tab-system {
+  --tab-height: 48px;
+  --tab-border-radius: 8px;
+  --tab-padding: 0.75rem 1rem;
+  --tab-gap: 4px;
+  --tab-transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  --tab-indicator-height: 3px;
+  --tab-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--bg-primary);
+}
+
+/* Tab Navigation */
+.tab-nav {
+  position: relative;
+  display: flex;
+  align-items: center;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  padding: 0.5rem;
+  box-shadow: var(--shadow-sm);
+  z-index: 10;
+}
+
+.tab-list {
+  display: flex;
+  flex: 1;
+  gap: var(--tab-gap);
+  overflow-x: auto;
+  scroll-behavior: smooth;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  padding: 0 0.5rem;
+}
+
+.tab-list::-webkit-scrollbar {
+  display: none;
+}
+
+/* Individual Tab Item */
+.tab-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: var(--tab-padding);
+  height: var(--tab-height);
+  min-width: 120px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--tab-border-radius);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: var(--tab-transition);
+  white-space: nowrap;
+  user-select: none;
+  outline: none;
+  font-weight: 500;
+  font-size: 0.875rem;
+}
+
+.tab-item:hover:not(.tab-item--disabled) {
+  background: var(--interactive-hover);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.tab-item:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+/* Active Tab */
+.tab-item--active {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-color: var(--accent-primary);
+  box-shadow: var(--shadow-md);
+}
+
+.tab-item--active .tab-active-indicator {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 24px;
+  height: var(--tab-indicator-height);
+  background: linear-gradient(90deg, var(--accent-primary), var(--accent-primary-hover));
+  border-radius: 2px 2px 0 0;
+  animation: indicatorSlide 0.3s ease-out;
+}
+
+@keyframes indicatorSlide {
+  from {
+    width: 0;
+    opacity: 0;
+  }
+  to {
+    width: 24px;
+    opacity: 1;
+  }
+}
+
+/* Disabled Tab */
+.tab-item--disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Pinned Tab */
+.tab-item--pinned {
+  min-width: 48px;
+  padding: 0.75rem 0.5rem;
+}
+
+.tab-item--pinned .tab-label {
+  display: none;
+}
+
+/* Dragging States */
+.tab-item--dragging {
+  opacity: 0.6;
+  transform: rotate(5deg);
+  z-index: 1000;
+}
+
+.tab-item--drag-over {
+  background: var(--accent-primary-faded);
+  border-color: var(--accent-primary);
+}
+
+/* Focused State */
+.tab-item--focused {
+  background: var(--interactive-hover);
+  color: var(--text-primary);
+}
+
+/* Tab Components */
+.tab-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.tab-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.tab-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tab-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  background: var(--accent-danger);
+  color: var(--text-primary);
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 10px;
+  animation: badgePulse 2s infinite;
+}
+
+@keyframes badgePulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+}
+
+.tab-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  background: none;
+  border: none;
+  border-radius: 50%;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: var(--tab-transition);
+  margin-left: 0.25rem;
+  flex-shrink: 0;
+}
+
+.tab-close:hover {
+  background: var(--accent-danger);
+  color: var(--text-primary);
+  transform: scale(1.1);
+}
+
+/* Scroll Buttons */
+.tab-scroll-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: var(--tab-transition);
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.tab-scroll-button:hover {
+  background: var(--interactive-hover);
+  color: var(--text-primary);
+  border-color: var(--accent-primary);
+}
+
+.tab-scroll-button--left {
+  margin-right: 0.5rem;
+}
+
+.tab-scroll-button--right {
+  margin-left: 0.5rem;
+}
+
+/* Tab Content */
+.tab-content {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-primary);
+}
+
+.tab-panel {
+  height: 100%;
+  width: 100%;
+  overflow: auto;
+}
+
+/* Content Transitions */
+.tab-content-transition-enter {
+  opacity: 0;
+  transform: translateX(20px);
+}
+
+.tab-content-transition-enter-active {
+  opacity: 1;
+  transform: translateX(0);
+  transition: opacity 300ms ease, transform 300ms ease;
+}
+
+.tab-content-transition-exit {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.tab-content-transition-exit-active {
+  opacity: 0;
+  transform: translateX(-20px);
+  transition: opacity 300ms ease, transform 300ms ease;
+}
+
+/* Tab System Variants */
+.tab-system--secondary .tab-nav {
+  background: var(--bg-primary);
+  border-bottom-color: var(--border-subtle);
+}
+
+.tab-system--minimal .tab-nav {
+  background: transparent;
+  border-bottom: none;
+  padding: 0;
+}
+
+.tab-system--minimal .tab-item {
+  border-radius: 0;
+  border-bottom: 2px solid transparent;
+}
+
+.tab-system--minimal .tab-item--active {
+  background: transparent;
+  border-bottom-color: var(--accent-primary);
+}
+
+/* Position Variants */
+.tab-system--bottom {
+  flex-direction: column-reverse;
+}
+
+.tab-system--bottom .tab-nav {
+  border-bottom: none;
+  border-top: 1px solid var(--border-color);
+}
+
+.tab-system--left,
+.tab-system--right {
+  flex-direction: row;
+}
+
+.tab-system--left .tab-nav,
+.tab-system--right .tab-nav {
+  flex-direction: column;
+  width: 250px;
+  height: 100%;
+  border-bottom: none;
+}
+
+.tab-system--left .tab-nav {
+  border-right: 1px solid var(--border-color);
+}
+
+.tab-system--right .tab-nav {
+  border-left: 1px solid var(--border-color);
+  order: 2;
+}
+
+.tab-system--left .tab-list,
+.tab-system--right .tab-list {
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Mobile Responsive */
+@media (max-width: 768px) {
+  .tab-system {
+    --tab-height: 44px;
+    --tab-padding: 0.5rem 0.75rem;
+  }
+  
+  .tab-item {
+    min-width: 100px;
+    font-size: 0.8rem;
+  }
+  
+  .tab-nav {
+    padding: 0.25rem;
+  }
+  
+  .tab-scroll-button {
+    width: 28px;
+    height: 28px;
+    font-size: 0.875rem;
+  }
+  
+  /* Hide labels on very small screens, show only icons */
+  @media (max-width: 480px) {
+    .tab-item {
+      min-width: 48px;
+      padding: 0.5rem;
+    }
+    
+    .tab-label {
+      display: none;
+    }
+    
+    .tab-icon {
+      margin: 0;
+    }
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .tab-item {
+    border: 2px solid var(--border-color);
+  }
+  
+  .tab-item--active {
+    border-color: var(--accent-primary);
+    border-width: 3px;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .tab-item,
+  .tab-close,
+  .tab-scroll-button {
+    transition: none;
+  }
+  
+  .tab-content-transition-enter-active,
+  .tab-content-transition-exit-active {
+    transition: none;
+  }
+  
+  .tab-badge {
+    animation: none;
+  }
+}
+
+/* Dark theme optimizations */
+@media (prefers-color-scheme: dark) {
+  .tab-system {
+    --tab-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  }
+}
+
+/* Focus management for keyboard users */
+.tab-system:focus-within .tab-item--focused {
+  background: var(--interactive-hover);
+  color: var(--text-primary);
+}
+
+/* Loading state for tab content */
+.tab-panel--loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.7;
+}
+
+.tab-panel--loading::after {
+  content: '';
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--border-color);
+  border-top: 2px solid var(--accent-primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}

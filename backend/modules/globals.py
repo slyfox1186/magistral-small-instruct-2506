@@ -52,11 +52,16 @@ LLAMA_INIT_PARAMS = {
 LLAMA_GENERATE_PARAMS = {
     "temperature": GENERATION_CONFIG["temperature"],
     "top_p": GENERATION_CONFIG["top_p"],
-    "top_k": GENERATION_CONFIG["top_k"],
-    "min_p": GENERATION_CONFIG["min_p"],
     "stream": GENERATION_CONFIG["stream"],
     "stop": GENERATION_CONFIG["stop"],
 }
+
+# Add optional parameters if they exist in config
+if "top_k" in GENERATION_CONFIG:
+    LLAMA_GENERATE_PARAMS["top_k"] = GENERATION_CONFIG["top_k"]
+
+if "min_p" in GENERATION_CONFIG:
+    LLAMA_GENERATE_PARAMS["min_p"] = GENERATION_CONFIG["min_p"]
 
 # Only add max_tokens if it's not None
 if GENERATION_CONFIG["max_tokens"] is not None:
@@ -144,6 +149,7 @@ class ApplicationState:
         # External services
         self.crypto_trader = None
         self.stock_searcher = None
+        self.crud_service = None
 
         # Background processing
         self.background_tasks: list = []

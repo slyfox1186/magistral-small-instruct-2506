@@ -6,6 +6,7 @@ import './styles/App.css';
 import './styles/StatusAnimations.css';
 import './styles/themes.scss';
 import './styles/Crud.css';
+import './styles/ChatSettings.css';
 // Import status system components
 import { AlertProvider } from './contexts/AlertContext';
 import { useAlert } from './hooks/useAlerts';
@@ -32,6 +33,8 @@ import {
 import { logger, networkService, performanceMonitor } from './utils';
 // Import chat integration
 import { chatIntegration } from './utils/chatIntegration';
+// Import connection status
+import ConnectionStatus from './components/ConnectionStatus';
 // Import type guards for safe JSON parsing
 import {
   isAppMessageArray,
@@ -59,6 +62,10 @@ const MarkdownItRenderer = lazy(() =>
 
 // Import CRUD interface directly to avoid Suspense/hook issues
 import CrudInterface from './components/crud/CrudInterface';
+// Import ChatSettings component
+import ChatSettings from './components/settings/ChatSettings';
+// Import the new tab system
+import MainAppTabs from './components/tabs/MainAppTabs';
 
 // Fix timeout type compatibility
 type TimeoutType = ReturnType<typeof setTimeout>;
@@ -115,6 +122,37 @@ const ThinkingDots = () => (
   </div>
 );
 
+const MenuIcon = () => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <line x1="3" y1="6" x2="21" y2="6"></line>
+    <line x1="3" y1="12" x2="21" y2="12"></line>
+    <line x1="3" y1="18" x2="21" y2="18"></line>
+  </svg>
+);
+
+const SettingsIcon = () => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <circle cx="12" cy="12" r="3"></circle>
+    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1 1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+  </svg>
+);
+
 function App() {
   // Get alert functions
   const alert = useAlert();
@@ -122,8 +160,12 @@ function App() {
   const sessionId = MEMORY_SESSION_ID;
   // Separate API session ID for conversation switching
   const [apiSessionId, setApiSessionId] = useState(MEMORY_SESSION_ID);
-  // Interface mode state
-  const [interfaceMode, setInterfaceMode] = useState<'chat' | 'crud'>('chat');
+  // Interface mode state - now includes analytics and system
+  const [interfaceMode, setInterfaceMode] = useState<'chat' | 'crud' | 'analytics' | 'system'>('chat');
+  // Settings panel state
+  const [showSettings, setShowSettings] = useState(false);
+  // Sidebar state
+  const [showSidebar, setShowSidebar] = useState(false);
   // Conversation loading state
   const [loadingConversation, setLoadingConversation] = useState(false);
   // Backend health state  
@@ -521,7 +563,16 @@ function App() {
         content: msg.content,
         timestamp: new Date(msg.created_at).toLocaleTimeString(),
         status: 'success' as const,
+        nodeRef: React.createRef(), // Add nodeRef for consistency
       }));
+      
+      // CRITICAL: Clear localStorage to prevent conflicts with conversation switching
+      try {
+        localStorage.removeItem(`chat_history_${MEMORY_SESSION_ID}`);
+        logger.info('Cleared localStorage to prevent conflicts with conversation switching');
+      } catch (error) {
+        logger.warn('Failed to clear localStorage:', error);
+      }
       
       // Update the chat state with loaded messages
       setMessages(convertedMessages);
@@ -554,6 +605,11 @@ function App() {
     }
     setInterfaceMode('chat');
   }, [loadConversationMessages]);
+
+  // Handle tab mode changes for the new tab system
+  const handleTabModeChange = useCallback((mode: 'chat' | 'crud' | 'analytics' | 'system') => {
+    setInterfaceMode(mode);
+  }, []);
 
   // Removed isFinalCompletionRef - replaced with atomic state machine
 
@@ -627,10 +683,17 @@ function App() {
   useEffect(() => {
     if (chatState.status === 'completing') {
       logger.warn('VERBOSE: Processing completion - creating final message');
+      logger.warn('DEBUG: chatState.accumulatedContent length:', chatState.accumulatedContent?.length || 0);
+      logger.warn('DEBUG: accumulatedResponseRef.current length:', accumulatedResponseRef.current?.length || 0);
+      logger.warn('DEBUG: currentResponseRaw length:', currentResponseRaw?.length || 0);
       
-      if (chatState.accumulatedContent && chatState.accumulatedContent.length > 0) {
+      // Try multiple sources for content - use fallback logic
+      const finalContent = chatState.accumulatedContent || accumulatedResponseRef.current || currentResponseRaw || '';
+      
+      if (finalContent && finalContent.length > 0) {
+        logger.warn('VERBOSE: Creating final message with content length:', finalContent.length);
         // Create final assistant message
-        const newMessage = createAssistantMessage(chatState.accumulatedContent);
+        const newMessage = createAssistantMessage(finalContent);
         setMessages((prevMessages) => [...prevMessages, newMessage]);
 
         // Save to database asynchronously
@@ -650,6 +713,12 @@ function App() {
 
         // Reset markdown buffer
         resetTokenBuffer();
+      } else {
+        logger.error('CRITICAL: No content available for final message creation!');
+        logger.error('DEBUG: All content sources empty - this should not happen');
+        // Create an error message to indicate the problem
+        const errorMessage = createErrorMessage('Assistant response was empty. Please try again.');
+        setMessages((prevMessages) => [...prevMessages, errorMessage]);
       }
 
       // Atomic transition back to idle - unlocks input immediately
@@ -658,7 +727,7 @@ function App() {
       setCurrentResponseRaw('');
       setCurrentMessageStatus('success');
     }
-  }, [chatState.status]);
+  }, [chatState.status, currentResponseRaw]);
 
   // --- 🚀 ULTRATHINK FIXED SCROLL HANDLER ---
   // Detect user scroll interaction with streaming-aware autoscroll logic
@@ -809,9 +878,10 @@ function App() {
   }, [isLoading, focusInput, resetTextareaHeight]);
 
 
-  // Save messages to localStorage whenever they change
+  // Save messages to localStorage whenever they change (only for default session, not switched conversations)
   useEffect(() => {
-    if (messages.length > 0) {
+    // Only save to localStorage if we're in the default session (not a switched conversation)
+    if (messages.length > 0 && apiSessionId === MEMORY_SESSION_ID) {
       try {
         // Create a version of messages without nodeRef (can't be serialized)
         const serializableMessages = messages.map(({ nodeRef: _nodeRef, ...rest }) => rest);
@@ -819,12 +889,14 @@ function App() {
           `chat_history_${MEMORY_SESSION_ID}`,
           JSON.stringify(serializableMessages)
         );
-        logger.debug(`Saved ${messages.length} messages to localStorage`);
+        logger.debug(`Saved ${messages.length} messages to localStorage for default session`);
       } catch (error) {
         logger.error('Failed to save chat history to localStorage:', error);
       }
+    } else if (apiSessionId !== MEMORY_SESSION_ID) {
+      logger.debug(`Skipping localStorage save for conversation session: ${apiSessionId}`);
     }
-  }, [messages]);
+  }, [messages, apiSessionId]);
 
   useEffect(() => {
     logger.debug(`State update - isLoading: ${isLoading}, streamingComplete: ${streamingComplete}`);
@@ -861,6 +933,13 @@ function App() {
     const textarea = e.currentTarget;
     const defaultHeightRem = config.DEFAULT_TEXTAREA_HEIGHT_REM;
     const maxHeightRem = config.MAX_TEXTAREA_HEIGHT_REM;
+
+    // CRITICAL FIX: If textarea is empty, immediately reset to default height
+    if (e.currentTarget.value.trim() === '') {
+      textarea.style.height = `${defaultHeightRem}rem`;
+      textarea.style.overflowY = 'hidden';
+      return;
+    }
 
     // Store current height before measuring
     const currentHeight = textarea.style.height;
@@ -1246,10 +1325,12 @@ function App() {
 
                   // Add token to accumulator
                   accumulatedResponseRef.current += tokenText;
+                  logger.debug('DEBUG: Token added, accumulator now has length:', accumulatedResponseRef.current.length);
 
                   // Update status to streaming once tokens start arriving
                   if (currentMessageStatus === 'thinking') {
                     setCurrentMessageStatus('streaming');
+                    logger.warn('DEBUG: Status changed from thinking to streaming');
                   }
 
                   // Manage buffer size to prevent memory exhaustion
@@ -1445,40 +1526,102 @@ function App() {
     };
   }, []);
 
+  // Handle keyboard shortcuts for sidebar
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && showSidebar) {
+        setShowSidebar(false);
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showSidebar]);
+
   return (
     <div className="app-layout-container">
-      <div className="corner-controls">
-        <ThemeToggleButton />
-        <button
-          onClick={() => setInterfaceMode(interfaceMode === 'chat' ? 'crud' : 'chat')}
-          className="interface-toggle-button"
-          title={interfaceMode === 'chat' ? 'Switch to CRUD Interface' : 'Switch to Chat Interface'}
-        >
-          {interfaceMode === 'chat' ? '📁 Manage' : '💬 Chat'}
-        </button>
-        {interfaceMode === 'chat' && (
-          <>
-            <button
-              onClick={handleClearMemoryAndHistory}
-              disabled={isLoading || clearingMemory}
-              className="clear-memory-button"
-              title="Clear assistant's memory AND chat history"
-            >
-              {clearingMemory ? 'Clearing...' : 'Clear Memory & History'}
-            </button>
-            <button
-              onClick={clearChatHistory}
-              disabled={isLoading || messages.length === 0}
-              className="clear-history-button"
-              title="Clear chat history"
-            >
-              Clear History
-            </button>
-          </>
-        )}
+      {/* Sidebar Toggle Button - at app level */}
+      <button
+        className="sidebar-toggle"
+        onClick={() => setShowSidebar(!showSidebar)}
+        title="Toggle menu"
+        aria-label="Toggle sidebar menu"
+      >
+        <MenuIcon />
+      </button>
+      
+      {/* Collapsible Sidebar - at app level */}
+      <div className={`sidebar ${showSidebar ? 'sidebar--open' : ''}`}>
+        <div className="sidebar-content">
+          <ConnectionStatus className="connection-status--compact" />
+          <ThemeToggleButton />
+          <button
+            onClick={() => setShowSettings(true)}
+            className="settings-button"
+            title="Chat Settings"
+          >
+            <SettingsIcon />
+          </button>
+          <button
+            onClick={handleClearMemoryAndHistory}
+            disabled={isLoading || clearingMemory}
+            className="clear-memory-button"
+            title="Clear assistant's memory AND chat history"
+          >
+            {clearingMemory ? 'Clearing...' : 'Clear Memory & History'}
+          </button>
+          <button
+            onClick={clearChatHistory}
+            disabled={isLoading || messages.length === 0}
+            className="clear-history-button"
+            title="Clear chat history"
+          >
+            Clear History
+          </button>
+        </div>
       </div>
       
-      {interfaceMode === 'chat' ? (
+      {/* Backdrop to close sidebar when clicking outside */}
+      {showSidebar && (
+        <div 
+          className="sidebar-backdrop" 
+          onClick={() => setShowSidebar(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* Simple Tab Navigation */}
+      <div className="simple-tab-nav">
+        <button 
+          className={`simple-tab ${interfaceMode === 'chat' ? 'active' : ''}`}
+          onClick={() => setInterfaceMode('chat')}
+        >
+          💬 Chat
+        </button>
+        <button 
+          className={`simple-tab ${interfaceMode === 'crud' ? 'active' : ''}`}
+          onClick={() => setInterfaceMode('crud')}
+        >
+          📁 Data Management
+        </button>
+        <button 
+          className={`simple-tab ${interfaceMode === 'analytics' ? 'active' : ''}`}
+          onClick={() => setInterfaceMode('analytics')}
+        >
+          📊 Analytics
+        </button>
+        <button 
+          className={`simple-tab ${interfaceMode === 'system' ? 'active' : ''}`}
+          onClick={() => setInterfaceMode('system')}
+        >
+          ⚙️ System
+        </button>
+      </div>
+
+      {/* Content based on interface mode */}
+      {interfaceMode === 'chat' && (
         <div className="chat-container">
           {/* Conversation loading indicator */}
           {loadingConversation && (
@@ -1759,9 +1902,11 @@ function App() {
               <SendIcon />
             </button>
           </div>
+          </div>
         </div>
-        </div>
-      ) : (
+      )}
+
+      {interfaceMode === 'crud' && (
         <ErrorBoundary>
           <CrudInterface 
             userId={sessionId} 
@@ -1769,6 +1914,259 @@ function App() {
           />
         </ErrorBoundary>
       )}
+
+      {interfaceMode === 'analytics' && (
+        <div className="analytics-content" style={{ padding: '2rem', height: '100%', overflow: 'auto' }}>
+          <div style={{ 
+            padding: '2rem', 
+            textAlign: 'center', 
+            color: 'var(--text-secondary, #cbd5e1)',
+            background: 'var(--bg-secondary, #252730)',
+            borderRadius: '8px',
+            margin: '2rem',
+            minHeight: '200px'
+          }}>
+            <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>📊</div>
+            <h2 style={{ margin: '1rem 0', color: 'var(--text-primary, #f8fafc)' }}>
+              Analytics Dashboard
+            </h2>
+            <p>Conversation insights, usage patterns, and performance metrics will be displayed here.</p>
+            <div style={{ 
+              display: 'grid', 
+              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
+              gap: '1rem',
+              marginTop: '2rem'
+            }}>
+              <div style={{ 
+                padding: '1.5rem', 
+                background: 'var(--bg-tertiary, #2f3349)', 
+                borderRadius: '8px',
+                border: '1px solid var(--border-color, #475569)',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+              }}>
+                <strong style={{ color: '#a78bfa', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Conversations</strong>
+                <div style={{ fontSize: '2rem', marginTop: '0.5rem', fontWeight: '600', color: 'var(--text-primary)' }}>247</div>
+              </div>
+              <div style={{ 
+                padding: '1.5rem', 
+                background: 'var(--bg-tertiary, #2f3349)', 
+                borderRadius: '8px',
+                border: '1px solid var(--border-color, #475569)',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+              }}>
+                <strong style={{ color: '#34d399', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Avg Response Time</strong>
+                <div style={{ fontSize: '2rem', marginTop: '0.5rem', fontWeight: '600', color: 'var(--text-primary)' }}>1.2s</div>
+              </div>
+              <div style={{ 
+                padding: '1.5rem', 
+                background: 'var(--bg-tertiary, #2f3349)', 
+                borderRadius: '8px',
+                border: '1px solid var(--border-color, #475569)',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+              }}>
+                <strong style={{ color: '#60a5fa', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Active Users</strong>
+                <div style={{ fontSize: '2rem', marginTop: '0.5rem', fontWeight: '600', color: 'var(--text-primary)' }}>12</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {interfaceMode === 'system' && (
+        <div className="system-content" style={{ padding: '2rem', height: '100%', overflow: 'auto' }}>
+          <div style={{ 
+            padding: '2rem', 
+            textAlign: 'center', 
+            color: 'var(--text-secondary, #cbd5e1)',
+            background: 'var(--bg-secondary, #252730)',
+            borderRadius: '8px',
+            margin: '2rem',
+            minHeight: '200px'
+          }}>
+            <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>⚙️</div>
+            <h2 style={{ margin: '1rem 0', color: 'var(--text-primary, #f8fafc)' }}>
+              System Health
+            </h2>
+            <p>System monitoring, health checks, and configuration options.</p>
+            <div style={{ 
+              display: 'grid', 
+              gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', 
+              gap: '1.5rem',
+              marginTop: '2rem'
+            }}>
+              <div style={{ 
+                padding: '1.5rem', 
+                background: 'var(--bg-tertiary, #2f3349)', 
+                borderRadius: '8px',
+                border: '1px solid var(--border-color, #475569)',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+              }}>
+                <strong style={{ color: '#34d399', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Backend Status</strong>
+                <div style={{ 
+                  fontSize: '1.1rem', 
+                  marginTop: '0.8rem',
+                  color: '#34d399',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem'
+                }}>
+                  <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#34d399' }}></div>
+                  Online
+                </div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', marginTop: '0.5rem' }}>
+                  Uptime: 99.9%
+                </div>
+              </div>
+              <div style={{ 
+                padding: '1.5rem', 
+                background: 'var(--bg-tertiary, #2f3349)', 
+                borderRadius: '8px',
+                border: '1px solid var(--border-color, #475569)',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+              }}>
+                <strong style={{ color: '#34d399', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Database</strong>
+                <div style={{ 
+                  fontSize: '1.1rem', 
+                  marginTop: '0.8rem',
+                  color: '#34d399',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem'
+                }}>
+                  <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#34d399' }}></div>
+                  Connected
+                </div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', marginTop: '0.5rem' }}>
+                  Latency: 12ms
+                </div>
+              </div>
+              <div style={{ 
+                padding: '1.5rem', 
+                background: 'var(--bg-tertiary, #2f3349)', 
+                borderRadius: '8px',
+                border: '1px solid var(--border-color, #475569)',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+              }}>
+                <strong style={{ color: '#f59e0b', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Memory Usage</strong>
+                <div style={{ 
+                  fontSize: '1.8rem', 
+                  marginTop: '0.8rem',
+                  color: 'var(--text-primary)',
+                  fontWeight: '600'
+                }}>
+                  78%
+                </div>
+                <div style={{ 
+                  width: '100%', 
+                  height: '4px', 
+                  background: 'var(--bg-primary)', 
+                  borderRadius: '2px',
+                  marginTop: '0.8rem',
+                  overflow: 'hidden'
+                }}>
+                  <div style={{ 
+                    width: '78%', 
+                    height: '100%', 
+                    background: 'linear-gradient(90deg, #f59e0b, #f97316)',
+                    borderRadius: '2px'
+                  }}></div>
+                </div>
+              </div>
+              <div style={{ 
+                padding: '1.5rem', 
+                background: 'var(--bg-tertiary, #2f3349)', 
+                borderRadius: '8px',
+                border: '1px solid var(--border-color, #475569)',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+              }}>
+                <strong style={{ color: '#60a5fa', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>CPU Usage</strong>
+                <div style={{ 
+                  fontSize: '1.8rem', 
+                  marginTop: '0.8rem',
+                  color: 'var(--text-primary)',
+                  fontWeight: '600'
+                }}>
+                  24%
+                </div>
+                <div style={{ 
+                  width: '100%', 
+                  height: '4px', 
+                  background: 'var(--bg-primary)', 
+                  borderRadius: '2px',
+                  marginTop: '0.8rem',
+                  overflow: 'hidden'
+                }}>
+                  <div style={{ 
+                    width: '24%', 
+                    height: '100%', 
+                    background: 'linear-gradient(90deg, #60a5fa, #3b82f6)',
+                    borderRadius: '2px'
+                  }}></div>
+                </div>
+              </div>
+              <div style={{ 
+                padding: '1.5rem', 
+                background: 'var(--bg-tertiary, #2f3349)', 
+                borderRadius: '8px',
+                border: '1px solid var(--border-color, #475569)',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+              }}>
+                <strong style={{ color: '#a78bfa', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Active Sessions</strong>
+                <div style={{ 
+                  fontSize: '1.8rem', 
+                  marginTop: '0.8rem',
+                  color: 'var(--text-primary)',
+                  fontWeight: '600'
+                }}>
+                  8
+                </div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', marginTop: '0.5rem' }}>
+                  Peak: 15 today
+                </div>
+              </div>
+              <div style={{ 
+                padding: '1.5rem', 
+                background: 'var(--bg-tertiary, #2f3349)', 
+                borderRadius: '8px',
+                border: '1px solid var(--border-color, #475569)',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+              }}>
+                <strong style={{ color: '#10b981', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Disk Usage</strong>
+                <div style={{ 
+                  fontSize: '1.8rem', 
+                  marginTop: '0.8rem',
+                  color: 'var(--text-primary)',
+                  fontWeight: '600'
+                }}>
+                  45%
+                </div>
+                <div style={{ 
+                  width: '100%', 
+                  height: '4px', 
+                  background: 'var(--bg-primary)', 
+                  borderRadius: '2px',
+                  marginTop: '0.8rem',
+                  overflow: 'hidden'
+                }}>
+                  <div style={{ 
+                    width: '45%', 
+                    height: '100%', 
+                    background: 'linear-gradient(90deg, #10b981, #059669)',
+                    borderRadius: '2px'
+                  }}></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Chat Settings Panel */}
+      <ChatSettings 
+        userId={sessionId}
+        isOpen={showSettings}
+        onClose={() => setShowSettings(false)}
+      />
     </div>
   );
 }

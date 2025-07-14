@@ -7,7 +7,8 @@
     "client"
   ],
   "scripts": {
-    "dev": "python start.py",
+    "dev": "node start-coordinated.js",
+    "dev:legacy": "python start.py",
     "lint": "npm run lint:python && npm run lint:typescript",
     "lint:python": "cd backend && ruff check . && mypy .",
     "lint:python:fix": "cd backend && ruff check . --fix && ruff format .",

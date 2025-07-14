@@ -35,6 +35,11 @@ from .intent_handlers import (
 
 # Import models and globals
 from .models import ChatStreamRequest
+from pydantic import BaseModel
+
+class TitleGenerationRequest(BaseModel):
+    """Request model for title generation."""
+    user_message: str
 
 logger = logging.getLogger(__name__)
 
@@ -179,6 +184,86 @@ def update_chat_activity():
     bg_state.last_chat_activity = time.time()
 
 
+async def generate_conversation_title(user_message: str) -> str:
+    """Generate a concise, meaningful title for a conversation based on the user's first message.
+    
+    Args:
+        user_message: The user's first message in the conversation
+        
+    Returns:
+        A short, descriptive title (max 60 characters)
+    """
+    from persistent_llm_server import get_llm_server
+    
+    # Create a focused system prompt for title generation
+    system_prompt = """You are an expert at creating concise, descriptive titles for conversations. Generate a title for a conversation that starts with the given user message. The title should:
+- Be 2-8 words maximum
+- Capture the main topic or intent
+- Be professional and clear
+- Not include quotes or special formatting
+- Be under 60 characters
+
+Return only the title, nothing else."""
+
+    user_prompt = f'Generate a title for this conversation starter: "{user_message.strip()}"'
+
+    try:
+        server = await get_llm_server()
+        
+        # Use proper prompt formatting from utils.py
+        formatted_prompt = utils.format_prompt(system_prompt, user_prompt)
+        
+        # Generate title with focused parameters
+        full_response = ""
+        async for token in server.generate_stream(
+            prompt=formatted_prompt,
+            max_tokens=20,  # Keep it short
+            temperature=0.3,  # Lower temperature for consistency
+            top_p=0.8,
+            session_id="title_generation",
+            priority=1,  # Higher priority for quick response
+        ):
+            if token:
+                full_response += token
+        
+        # Clean up the response
+        title = full_response.strip()
+        
+        # Remove common prefixes/suffixes that the LLM might add
+        prefixes_to_remove = ["Title:", "title:", "**", "*", '"', "'", "- "]
+        for prefix in prefixes_to_remove:
+            if title.startswith(prefix):
+                title = title[len(prefix):].strip()
+        
+        # Remove quotes and ensure reasonable length
+        title = title.strip('"\'*').strip()
+        
+        # Fallback if title is too long or empty
+        if len(title) > 60:
+            title = title[:57] + "..."
+        elif not title or len(title) < 3:
+            # Fallback to first few words of the message
+            words = user_message.strip().split()[:5]
+            title = " ".join(words)
+            if len(title) > 60:
+                title = title[:57] + "..."
+        
+        logger.info(f"Generated title: '{title}' for message: '{user_message[:50]}...'")
+        return title
+        
+    except Exception as e:
+        logger.error(f"Failed to generate title via LLM: {e}", exc_info=True)
+        
+        # Fallback to simple word extraction
+        words = user_message.strip().split()[:5]
+        fallback_title = " ".join(words)
+        if len(fallback_title) > 60:
+            fallback_title = fallback_title[:57] + "..."
+        
+        logger.info(f"Using fallback title: '{fallback_title}'")
+        return fallback_title
+
+
 def _create_chat_stream_route(app: FastAPI):
     """Create the main chat stream route."""
     @app.post("/api/chat-stream")
@@ -285,8 +370,13 @@ def _create_chat_stream_route(app: FastAPI):
                 if intent in ["perform_web_search", "query_stocks", "query_weather", "query_cryptocurrency"]:
                     async for chunk in handler(user_prompt, session_id, request):
                         yield chunk
-                else:
+                elif intent in ["store_personal_info", "recall_personal_info"]:
+                    # Personal info handlers only need user_prompt and session_id
                     async for chunk in handler(user_prompt, session_id):
+                        yield chunk
+                else:
+                    # Pass conversation history to conversation intent handler
+                    async for chunk in handler(user_prompt, session_id, request.messages[:-1] if len(request.messages) > 1 else []):
                         yield chunk
 
             except Exception as e:
@@ -306,6 +396,31 @@ def _create_chat_stream_route(app: FastAPI):
         )
 
 
+def _create_title_generation_route(app: FastAPI):
+    """Create the title generation route."""
+    @app.post("/api/generate-title")
+    async def generate_title(request: TitleGenerationRequest) -> dict[str, str]:
+        """Generate a conversation title from a user message."""
+        logger.info(f"Title generation request for message: '{request.user_message[:100]}...'")
+        
+        try:
+            # Validate input
+            user_message = validate_chat_input(request.user_message)
+            
+            # Generate title using LLM
+            title = await generate_conversation_title(user_message)
+            
+            return {"title": title}
+            
+        except ValueError as e:
+            logger.warning(f"Invalid input for title generation: {e}")
+            raise HTTPException(status_code=400, detail=str(e))
+        except Exception as e:
+            logger.error(f"Title generation failed: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail="Failed to generate title")
+
+
 def setup_chat_routes(app: FastAPI):
     """Setup chat streaming routes."""
     _create_chat_stream_route(app)
+    _create_title_generation_route(app)

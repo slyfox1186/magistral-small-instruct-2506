@@ -49,6 +49,32 @@ export default defineConfig({
         target: 'http://localhost:8000',
         changeOrigin: true,
         secure: false,
+        // Add timeout and retry configuration to handle backend startup timing
+        timeout: 10000, // 10 second timeout
+        // Configure proxy to be more resilient during backend startup
+        configure: (proxy, options) => {
+          proxy.on('error', (err, req, res) => {
+            console.log('[VITE-PROXY] Backend connection error (backend may still be starting):', err.code);
+            // Send a 503 instead of crashing
+            if (!res.headersSent) {
+              res.writeHead(503, {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+                'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+              });
+              res.end(JSON.stringify({ 
+                error: 'Backend starting up, please wait...', 
+                code: 'BACKEND_STARTING',
+                retry: true 
+              }));
+            }
+          });
+          
+          proxy.on('proxyReq', (proxyReq, req, res) => {
+            console.log(`[VITE-PROXY] ${req.method} ${req.url} -> ${options.target}${req.url}`);
+          });
+        },
       },
     },
   },

@@ -18,6 +18,7 @@ import messageUtils, {
   formatMessagesForAPI,
 } from './messageUtils';
 import { RequestOptions } from './types';
+import connectionManager, { ConnectionStatus } from './connectionManager';
 
 // Export configuration
 export { config, LogLevel };
@@ -40,6 +41,9 @@ export {
   createErrorMessage,
   formatMessagesForAPI,
 };
+
+// Export connection management
+export { connectionManager, type ConnectionStatus };
 
 // Export a default object with all the utilities
 export default {

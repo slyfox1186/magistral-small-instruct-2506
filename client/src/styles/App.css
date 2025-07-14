@@ -4,6 +4,8 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 /* Import the status animations CSS */
 @import './StatusAnimations.css';
+/* Import tab system styles */
+@import '../components/tabs/TabSystem.css';
 
 /* Elegant Dark Theme - Sophisticated and comfortable */
 :root {
@@ -136,23 +138,84 @@ body {
   pointer-events: none;
 }
 
-/* Corner controls with subtle design */
-.corner-controls {
-  position: absolute;
+/* Sidebar Toggle Button */
+.sidebar-toggle {
+  position: fixed;
   top: 1.5rem;
   right: 1.5rem;
-  z-index: 100;
+  z-index: 1001;
+  width: 44px;
+  height: 44px;
+  padding: 0.75rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 0.75rem;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow-md);
+}
+
+.sidebar-toggle:hover {
+  background: var(--interactive-hover);
+  border-color: var(--accent-primary);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-lg);
+}
+
+.sidebar-toggle svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* Collapsible Sidebar */
+.sidebar {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 100vh;
+  width: 280px;
+  background: var(--bg-primary);
+  border-left: 1px solid var(--border-color);
+  z-index: 1000;
+  transform: translateX(100%);
+  transition: transform 0.3s ease;
+  box-shadow: var(--shadow-xl);
+}
+
+.sidebar--open {
+  transform: translateX(0);
+}
+
+.sidebar-content {
+  padding: 5rem 1.5rem 1.5rem;
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  align-items: stretch;
-  width: 240px; /* Increased width to accommodate longer button text */
+  height: 100%;
+  overflow-y: auto;
+}
+
+/* Sidebar Backdrop */
+.sidebar-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 999;
+  transition: opacity 0.3s ease;
 }
 
 .clear-history-button,
 .clear-memory-button,
 .theme-toggle-button,
-.interface-toggle-button {
+.interface-toggle-button,
+.settings-button {
   padding: 0.625rem 1.25rem;
   border: 1px solid rgba(148, 163, 184, 0.4);
   border-radius: 0.5rem;
@@ -173,9 +236,24 @@ body {
   text-overflow: ellipsis; /* Handle overflow gracefully */
 }
 
+.settings-button {
+  padding: 0.625rem;
+  width: auto;
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.settings-button svg {
+  width: 18px;
+  height: 18px;
+}
+
 .clear-history-button:hover,
 .clear-memory-button:hover,
-.theme-toggle-button:hover {
+.theme-toggle-button:hover,
+.settings-button:hover {
   transform: translateY(-1px);
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
   border-color: var(--accent-primary);
@@ -185,7 +263,8 @@ body {
 
 .clear-history-button:active,
 .clear-memory-button:active,
-.theme-toggle-button:active {
+.theme-toggle-button:active,
+.settings-button:active {
   transform: translateY(0);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
@@ -305,7 +384,8 @@ body {
   color: var(--text-primary, #f8fafc); /* Theme-aware text */
   padding: 1.25rem 1.25rem;
   border-radius: 1.25rem 1.25rem 0.25rem 1.25rem;
-  max-width: 80%;
+  max-width: 85%;
+  min-width: 120px;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
   position: relative;
   font-weight: 500;
@@ -315,6 +395,7 @@ body {
   transition:
     transform 0.2s ease,
     box-shadow 0.2s ease;
+  margin-left: auto;
 }
 
 /* Subtle hover effect for user messages */
@@ -333,7 +414,8 @@ body {
   color: var(--text-primary, #f8fafc); /* Theme-aware text */
   padding: 1.25rem 1.5rem;
   border-radius: 1.25rem 1.25rem 1.25rem 0.25rem;
-  max-width: 97.5%;
+  max-width: 85%;
+  min-width: 120px;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
   border: 1px solid var(--border-light, rgba(230, 230, 230, 0.08));
   position: relative;
@@ -345,6 +427,7 @@ body {
   font-weight: 400;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  margin-right: auto;
 }
 
 /* Subtle hover state for AI messages */
@@ -761,7 +844,7 @@ body {
   font-size: 16px;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   font-weight: 400;
-  padding: 0.875rem 1rem 0.625rem 1rem;
+  padding: 0.75rem 1rem;
   resize: none;
   outline: none;
   line-height: 1.4;
@@ -1083,7 +1166,7 @@ body {
     BlinkMacSystemFont,
     sans-serif;
   font-weight: 400;
-  padding: 0.875rem 1rem 0.625rem 1rem; /* Asymmetric padding: more top, less bottom for visual centering */
+  padding: 0.75rem 1rem; /* Balanced padding for proper vertical centering */
   resize: none;
   outline: none;
   min-height: auto; /* Let padding control height */
@@ -1419,9 +1502,20 @@ body {
     max-width: 90%;
   }
 
-  .corner-controls {
+  .sidebar-toggle {
     top: 1rem;
     right: 1rem;
+    width: 40px;
+    height: 40px;
+    padding: 0.625rem;
+  }
+  
+  .sidebar {
+    width: 260px;
+  }
+  
+  .sidebar-content {
+    padding: 4rem 1rem 1rem;
     gap: 0.5rem;
   }
 
@@ -1513,6 +1607,89 @@ a:active::before,
 
 /* REMOVED: Universal transition was causing severe performance issues
    Instead, apply transitions only to specific elements that need them */
+
+/* Custom Modal Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: modalFadeIn 0.2s ease-out;
+}
+
+.modal-content {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+  max-width: 480px;
+  width: 90%;
+  max-height: 80vh;
+  overflow: hidden;
+  animation: modalSlideIn 0.3s ease-out;
+}
+
+.modal-header {
+  padding: 1.5rem 1.5rem 1rem 1.5rem;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.modal-title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.modal-body {
+  padding: 1rem 1.5rem;
+}
+
+.modal-message {
+  margin: 0;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+}
+
+.modal-footer {
+  padding: 1rem 1.5rem 1.5rem 1.5rem;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  border-top: 1px solid var(--border-light);
+}
+
+.modal-footer .btn {
+  min-width: 80px;
+}
+
+@keyframes modalFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
 
 /* Pulse animation for glowing elements */
 @keyframes pulse {
@@ -1610,4 +1787,119 @@ a:active::before,
 .loading-conversation span {
   color: var(--text-secondary);
   font-size: 0.9rem;
+}
+
+/* ===================== Connection Status ===================== */
+
+.connection-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  transition: all 0.2s ease;
+}
+
+.connection-status--success {
+  background: rgba(34, 197, 94, 0.1);
+  border-color: rgba(34, 197, 94, 0.3);
+  color: var(--accent-success);
+}
+
+.connection-status--warning {
+  background: rgba(251, 191, 36, 0.1);
+  border-color: rgba(251, 191, 36, 0.3);
+  color: var(--accent-warning);
+}
+
+.connection-status--error {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: var(--accent-danger);
+}
+
+.connection-status__icon {
+  font-size: 0.75rem;
+  line-height: 1;
+}
+
+.connection-status__text {
+  white-space: nowrap;
+}
+
+.connection-status__error {
+  font-size: 0.75rem;
+  opacity: 0.8;
+  cursor: help;
+}
+
+/* Compact variant for header */
+.connection-status--compact {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  border-radius: 4px;
+}
+
+.connection-status--compact .connection-status__icon {
+  font-size: 0.625rem;
+}
+
+/* Main App Tabs Integration */
+.main-app-tabs-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  position: relative;
+  background: var(--bg-primary); /* Debugging: ensure background is visible */
+}
+
+.main-app-tabs-container .tab-content {
+  flex: 1;
+  overflow: hidden;
+  background: var(--bg-primary); /* Debugging: ensure content area is visible */
+}
+
+/* Simple Tab Navigation */
+.simple-tab-nav {
+  display: flex;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  padding: 0.5rem;
+  gap: 0.5rem;
+  width: 100%;
+  flex-shrink: 0;
+}
+
+.simple-tab {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-secondary);
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.simple-tab:hover {
+  background: var(--interactive-hover);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+.simple-tab.active {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-color: var(--accent-primary);
+  box-shadow: var(--shadow-sm);
 }
