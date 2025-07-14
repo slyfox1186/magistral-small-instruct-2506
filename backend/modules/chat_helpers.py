@@ -62,13 +62,13 @@ Analyze the input against each category. Use the definitions, crucial tests, and
 
 ---
 **CATEGORY: WEB**
-- **Definition:** User needs real-time, current, or recent information from the internet, OR wants to scrape/access specific websites, OR wants MORE details than what's in conversation memory.
-- **Crucial Test:** Does this require knowledge beyond your training cutoff, information that changes rapidly, web scraping, or deeper information than what's already available?
+- **Definition:** User explicitly requests internet search, current events, or real-time information that requires web access.
+- **Crucial Test:** Is the user explicitly asking for current/recent information, news, or web search? NOT personal statements about future plans.
 - **Example:** `User: "What were the results of the F1 race today?" -> WEB`
-- **Example:** `User: "Did they find any of those poor girls that have not been found since the historic Texas flood?" -> WEB` (asking for current rescue status)
-- **Example:** `User: "Read more on those websites by scraping them" -> WEB` (explicit web scraping request)
-- **Example:** `User: "Scrape those links for more details" -> WEB` (follow-up scraping request)
-- **Example:** `User: "Learn more about the missing persons" -> WEB` (when user wants deeper info than summary in memory)
+- **Example:** `User: "Search for information about missing persons" -> WEB`
+- **Example:** `User: "Find current news about the Texas flood" -> WEB`
+- **Example:** `User: "Look up restaurant reviews in Paris" -> WEB`
+- **NOT WEB:** `User: "I'm planning a trip to Paris" -> INTERNAL` (personal statement, not search request)
 
 ---
 **CATEGORY: WEATHER**
@@ -88,9 +88,11 @@ Analyze the input against each category. Use the definitions, crucial tests, and
 
 ---
 **CATEGORY: INTERNAL**
-- **Definition:** A general-purpose command, a creative task, a question about the AI, or any conversational input that does not fit a more specific category. This is the final fallback.
-- **Crucial Test:** Is the user giving a command, asking a hypothetical, or making a generic statement?
+- **Definition:** General conversation, personal statements about plans/activities, creative tasks, questions about the AI, or any conversational input that does not fit a more specific category.
+- **Crucial Test:** Is the user having a conversation, sharing plans, or making statements that don't require web search or personal data storage?
 - **Example:** `User: "Generate a python function that sorts a list." -> INTERNAL`
+- **Example:** `User: "I'm planning a trip to Paris next month." -> INTERNAL`
+- **Example:** `User: "How are you doing today?" -> INTERNAL`
 
 # [SELF-CORRECTION & HIERARCHY]
 1.  **Specificity is Key:** Always choose the most specific, non-`INTERNAL` category.
@@ -102,9 +104,9 @@ Analyze the input against each category. Use the definitions, crucial tests, and
     -   Question about the *CONVERSATION'S HISTORY*: `What was the last thing you said?` -> **MEMORY**
 4.  **Core Disambiguation: `MEMORY` vs. `WEB` vs. `INTERNAL`**
     -   Simple clarification about CONVERSATION: `What did you just say about missing persons?` -> **MEMORY**
-    -   User wants MORE/DEEPER info than what's in conversation: `Learn more about the missing persons` -> **WEB**
-    -   New topic or general request: `Tell me about missing persons in general` -> **INTERNAL**
-    -   **Key Rule**: If user wants to expand beyond conversation summary, choose **WEB** for fresh information
+    -   Explicit search request: `Search for information about missing persons` -> **WEB**
+    -   Personal statement or general conversation: `I'm planning a trip to Paris` -> **INTERNAL**
+    -   **Key Rule**: WEB requires explicit search intent, not personal statements about plans
 
 # [FINAL INSTRUCTION]
 Analyze the user query. Provide only the single uppercase classification word. NOTHING ELSE."""
