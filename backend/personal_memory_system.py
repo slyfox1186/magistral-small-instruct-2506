@@ -400,9 +400,11 @@ class PersonalMemorySystem:
                     cursor = conn.execute(embedding_query, params[:-1])  # Remove limit for now
                     
                     memories_with_similarity = []
+                    total_memories_checked = 0
                     
                     for row in cursor:
                         try:
+                            total_memories_checked += 1
                             memory = self._row_to_memory(row)
                             if memory.embedding and len(memory.embedding) == 1024:
                                 # Calculate cosine similarity with proper validation
@@ -415,20 +417,25 @@ class PersonalMemorySystem:
                                 
                                 if norm_query > 1e-8 and norm_stored > 1e-8:
                                     similarity = float(dot_product / (norm_query * norm_stored))
-                                    if similarity >= 0.1:  # Only keep reasonably similar memories
+                                    logger.debug(f"[MEMORY_RETRIEVAL] Memory similarity: {similarity:.3f} for: {memory.content[:50]}...")
+                                    if similarity >= 0.05:  # Lower threshold to catch more memories
                                         memories_with_similarity.append((similarity, memory))
                         except Exception as e:
                             logger.debug(f"Error calculating similarity for memory {row[0]}: {e}")
                             continue
                     
+                    logger.debug(f"[MEMORY_RETRIEVAL] Checked {total_memories_checked} memories, found {len(memories_with_similarity)} with similarity >= 0.05")
+                    
                     # Sort by similarity (desc), then importance (desc), then timestamp (desc)
                     memories_with_similarity.sort(key=lambda x: (x[0], x[1].importance, x[1].timestamp), reverse=True)
                     
-                    # Sort by similarity score and take top results (already filtered at 0.1)
+                    # Sort by similarity score and take top results (already filtered at 0.05)
                     memories = [memory for similarity, memory in memories_with_similarity][:limit if limit > 0 else len(memories_with_similarity)]
                     
                     if memories:
                         logger.debug(f"[MEMORY_RETRIEVAL] Found {len(memories)} semantically similar memories")
+                        for i, (similarity, memory) in enumerate(memories_with_similarity[:3]):
+                            logger.debug(f"[MEMORY_RETRIEVAL] Top match {i+1}: {similarity:.3f} - {memory.content[:100]}...")
                     else:
                         # If no semantic matches, fall back to importance/timestamp
                         raise ValueError("No semantic matches found")
