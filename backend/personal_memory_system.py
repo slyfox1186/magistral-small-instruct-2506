@@ -380,56 +380,54 @@ class PersonalMemorySystem:
 
             # Implement proper semantic search using embeddings
             try:
-                # Generate embedding for the query
-                if self.resource_manager:
-                    query_embeddings = self.resource_manager.get_sentence_transformer_embeddings([query])
-                    if query_embeddings and len(query_embeddings) > 0:
-                        query_embedding = query_embeddings[0]
-                        
-                        # Get all memories with embeddings for similarity calculation
-                        embedding_query = base_query + " AND embedding IS NOT NULL"
-                        cursor = conn.execute(embedding_query, params[:-1])  # Remove limit for now
-                        
-                        memories_with_similarity = []
-                        
-                        for row in cursor:
-                            try:
-                                memory = self._row_to_memory(row)
-                                if memory.embedding:
-                                    # Calculate cosine similarity
-                                    import numpy as np
-                                    stored_embedding = np.array(memory.embedding)
-                                    query_emb = np.array(query_embedding)
-                                    
-                                    # Cosine similarity calculation
-                                    dot_product = np.dot(query_emb, stored_embedding)
-                                    norm_query = np.linalg.norm(query_emb)
-                                    norm_stored = np.linalg.norm(stored_embedding)
-                                    
-                                    if norm_query > 0 and norm_stored > 0:
-                                        similarity = dot_product / (norm_query * norm_stored)
-                                        memories_with_similarity.append((similarity, memory))
-                            except Exception as e:
-                                logger.debug(f"Error calculating similarity for memory {row[0]}: {e}")
-                                continue
-                        
-                        # Sort by similarity (desc), then importance (desc), then timestamp (desc)
-                        memories_with_similarity.sort(key=lambda x: (x[0], x[1].importance, x[1].timestamp), reverse=True)
-                        
-                        # Apply similarity threshold (0.2) and limit
-                        similarity_threshold = 0.2
-                        memories = [memory for similarity, memory in memories_with_similarity 
-                                  if similarity >= similarity_threshold][:limit]
-                        
-                        if memories:
-                            logger.debug(f"[MEMORY_RETRIEVAL] Found {len(memories)} semantically similar memories")
-                        else:
-                            # If no semantic matches, fall back to importance/timestamp
-                            raise ValueError("No semantic matches found")
+                # Generate embedding for the query using ResourceManager
+                from resource_manager import get_sentence_transformer_embeddings
+                query_embeddings = get_sentence_transformer_embeddings([query])
+                if query_embeddings and len(query_embeddings) > 0:
+                    query_embedding = query_embeddings[0]
+                    
+                    # Get all memories with embeddings for similarity calculation
+                    embedding_query = base_query + " AND embedding IS NOT NULL"
+                    cursor = conn.execute(embedding_query, params[:-1])  # Remove limit for now
+                    
+                    memories_with_similarity = []
+                    
+                    for row in cursor:
+                        try:
+                            memory = self._row_to_memory(row)
+                            if memory.embedding:
+                                # Calculate cosine similarity
+                                import numpy as np
+                                stored_embedding = np.array(memory.embedding)
+                                query_emb = np.array(query_embedding)
+                                
+                                # Cosine similarity calculation
+                                dot_product = np.dot(query_emb, stored_embedding)
+                                norm_query = np.linalg.norm(query_emb)
+                                norm_stored = np.linalg.norm(stored_embedding)
+                                
+                                if norm_query > 0 and norm_stored > 0:
+                                    similarity = dot_product / (norm_query * norm_stored)
+                                    memories_with_similarity.append((similarity, memory))
+                        except Exception as e:
+                            logger.debug(f"Error calculating similarity for memory {row[0]}: {e}")
+                            continue
+                    
+                    # Sort by similarity (desc), then importance (desc), then timestamp (desc)
+                    memories_with_similarity.sort(key=lambda x: (x[0], x[1].importance, x[1].timestamp), reverse=True)
+                    
+                    # Apply similarity threshold (0.2) and limit
+                    similarity_threshold = 0.2
+                    memories = [memory for similarity, memory in memories_with_similarity 
+                              if similarity >= similarity_threshold][:limit]
+                    
+                    if memories:
+                        logger.debug(f"[MEMORY_RETRIEVAL] Found {len(memories)} semantically similar memories")
                     else:
-                        raise ValueError("Could not generate query embedding")
+                        # If no semantic matches, fall back to importance/timestamp
+                        raise ValueError("No semantic matches found")
                 else:
-                    raise ValueError("No resource manager available")
+                    raise ValueError("Could not generate query embedding")
                     
             except Exception as e:
                 logger.debug(f"[MEMORY_RETRIEVAL] Semantic search failed: {e}, falling back to importance/timestamp")
