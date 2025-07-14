@@ -57,9 +57,22 @@ def _get_embedding_model():
 
 def _get_db_path(config) -> str:
     """Get database path from config or use default."""
-    db_path = "memory/personal_ai_memories.db"
+    import os
+    
+    db_path = "personal_ai_memories.db"
     if config and hasattr(config, "SQLITE_DB_PATH"):
         db_path = config.SQLITE_DB_PATH
+    
+    # CRITICAL FIX: Ensure absolute path to prevent working directory issues
+    if not os.path.isabs(db_path):
+        # Get the backend directory (where this script runs from)
+        backend_dir = os.path.dirname(os.path.abspath(__file__))
+        db_path = os.path.join(backend_dir, db_path)
+    
+    logger.info(f"🗄️ MEMORY_DB_PATH: Using database path: {db_path}")
+    logger.info(f"🗄️ MEMORY_DB_PATH: File exists: {os.path.exists(db_path)}")
+    logger.info(f"🗄️ MEMORY_DB_PATH: File size: {os.path.getsize(db_path) if os.path.exists(db_path) else 'N/A'} bytes")
+    
     return db_path
 
 
@@ -135,7 +148,7 @@ def _create_redis_memory_system():
         from personal_memory_system import PersonalMemorySystem
         from redis_compat_memory import RedisCompatMemorySystem
 
-        personal_memory = PersonalMemorySystem("memory/personal_ai_memories.db")
+        personal_memory = PersonalMemorySystem("personal_ai_memories.db")
         return RedisCompatMemorySystem(personal_memory)
 
 
@@ -164,7 +177,7 @@ class MemoryConfig:
         # Read from environment with defaults
         self.MEMORY_BACKEND = os.getenv("MEMORY_BACKEND", "sqlite")
         self.USE_REDIS_COMPAT = os.getenv("USE_REDIS_COMPAT", "false").lower() == "true"
-        self.SQLITE_DB_PATH = os.getenv("SQLITE_DB_PATH", "memory/personal_ai_memories.db")
+        self.SQLITE_DB_PATH = os.getenv("SQLITE_DB_PATH", "personal_ai_memories.db")
 
         # Migration settings
         self.MIGRATE_ON_STARTUP = os.getenv("MIGRATE_ON_STARTUP", "false").lower() == "true"
@@ -181,7 +194,7 @@ MEMORY_BACKEND=sqlite
 USE_REDIS_COMPAT=false
 
 # SQLite database path
-SQLITE_DB_PATH=memory/personal_ai_memories.db
+SQLITE_DB_PATH=personal_ai_memories.db
 
 # Auto-migrate Redis data on startup (one-time operation)
 MIGRATE_ON_STARTUP=false

@@ -339,9 +339,11 @@ async def _handle_background_memory_processing(user_prompt: str, full_response: 
         task = asyncio.create_task(
             lightweight_memory_processing(user_prompt, full_response, session_id)
         )
-        # Store task reference to prevent garbage collection
-        getattr(asyncio.current_task(), '_background_tasks', set()).add(task)
-        task.add_done_callback(lambda t: getattr(asyncio.current_task(), '_background_tasks', set()).discard(t))
+        # Store task reference to prevent garbage collection - use global app_state
+        if not hasattr(app_state, '_background_tasks'):
+            app_state._background_tasks = set()
+        app_state._background_tasks.add(task)
+        task.add_done_callback(lambda t: app_state._background_tasks.discard(t))
         logger.info("🧠 MEMORY DEBUG: ✅ Background memory processing task created")
     except Exception as memory_task_error:
         logger.error(

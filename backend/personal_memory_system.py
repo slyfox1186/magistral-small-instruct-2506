@@ -63,6 +63,14 @@ class PersonalMemorySystem:
         """Initialize the personal memory system."""
         self.db_path = db_path
         self.embedding_model = embedding_model
+        
+        # Debug: Log the actual database path being used
+        import os
+        logger.info(f"[MEMORY_SYSTEM_INIT] Database path: {db_path}")
+        logger.info(f"[MEMORY_SYSTEM_INIT] Absolute path: {os.path.abspath(db_path)}")
+        logger.info(f"[MEMORY_SYSTEM_INIT] File exists: {os.path.exists(db_path)}")
+        logger.info(f"[MEMORY_SYSTEM_INIT] Current working directory: {os.getcwd()}")
+        
         self._init_database()
 
         # Memory windows
@@ -230,8 +238,15 @@ class PersonalMemorySystem:
     @contextmanager
     def _get_connection(self):
         """Get a database connection with optimized settings."""
-        conn = sqlite3.connect(self.db_path, timeout=10.0)
+        # CRITICAL: Fix threading isolation and autocommit issues
+        conn = sqlite3.connect(
+            self.db_path, 
+            timeout=30.0,
+            isolation_level=None,        # Autocommit mode for WAL
+            check_same_thread=False      # Allow multi-threading
+        )
         conn.row_factory = sqlite3.Row
+        
         # Enable WAL mode for better concurrency
         conn.execute("PRAGMA journal_mode=WAL")
         # Faster writes
@@ -240,6 +255,17 @@ class PersonalMemorySystem:
         conn.execute("PRAGMA cache_size=-10240")
         # Set busy timeout to avoid lock errors
         conn.execute("PRAGMA busy_timeout=5000")
+        # Auto-checkpoint to keep WAL file small
+        conn.execute("PRAGMA wal_autocheckpoint=100")
+        
+        # CRITICAL: Force FULL checkpoint to ensure we see ALL committed data
+        try:
+            conn.execute("PRAGMA wal_checkpoint(FULL)")
+            logger.debug("[MEMORY_DB] WAL checkpoint FULL completed successfully")
+        except sqlite3.Error as e:
+            logger.warning(f"[MEMORY_DB] WAL checkpoint FULL failed: {e}, trying PASSIVE")
+            conn.execute("PRAGMA wal_checkpoint(PASSIVE)")
+        
         try:
             yield conn
         finally:
@@ -343,7 +369,7 @@ class PersonalMemorySystem:
         return memory
 
     async def get_relevant_memories(
-        self, query: str, limit: int = 10, time_window_hours: int | None = None
+        self, query: str, limit: int = 10, time_window_hours: int | None = None, conversation_id: str | None = None
     ) -> list[Memory]:
         """Retrieve relevant memories for the current context.
 
@@ -352,9 +378,16 @@ class PersonalMemorySystem:
         - Recency
         - Importance scores
         - Access patterns
+        
+        Args:
+            query: Search query string
+            limit: Maximum number of memories to return
+            time_window_hours: Limit to memories within this time window
+            conversation_id: Limit to memories from specific conversation (for isolation)
         """
         logger.debug(
             f"[MEMORY_RETRIEVAL] Query: {query[:50]}..., Limit: {limit}, "
+            f"Conversation: {conversation_id or 'All'}, "
             f"Time window: {time_window_hours}h"
             if time_window_hours
             else "Time window: None"
@@ -371,6 +404,11 @@ class PersonalMemorySystem:
                 WHERE 1=1
             """
             params = []
+
+            # Conversation filter for isolation
+            if conversation_id:
+                base_query += " AND conversation_id = ?"
+                params.append(conversation_id)
 
             # Time window filter
             if time_window_hours:
@@ -395,9 +433,24 @@ class PersonalMemorySystem:
                     # Convert to numpy array for calculations
                     query_embedding = np.array(query_embedding)
                     
-                    # Get all memories with embeddings for similarity calculation
+                    # Debug: Check total memories and embeddings count
+                    count_query = "SELECT COUNT(*) FROM memories"
+                    total_count = conn.execute(count_query).fetchone()[0]
+                    logger.debug(f"[MEMORY_RETRIEVAL] Total memories in database: {total_count}")
+                    
+                    embedding_count_query = "SELECT COUNT(*) FROM memories WHERE embedding IS NOT NULL"
+                    embedding_count = conn.execute(embedding_count_query).fetchone()[0]
+                    logger.debug(f"[MEMORY_RETRIEVAL] Memories with embeddings: {embedding_count}")
+                    
+                    # Get all memories with embeddings for similarity calculation (fix parameter issue)
                     embedding_query = base_query + " AND embedding IS NOT NULL"
-                    cursor = conn.execute(embedding_query, params[:-1])  # Remove limit for now
+                    # Use correct parameters based on time_window filter
+                    embedding_params = params if not time_window_hours else params
+                    
+                    logger.debug(f"[MEMORY_RETRIEVAL] SQL Query: {embedding_query}")
+                    logger.debug(f"[MEMORY_RETRIEVAL] Parameters: {embedding_params}")
+                    
+                    cursor = conn.execute(embedding_query, embedding_params)
                     
                     memories_with_similarity = []
                     total_memories_checked = 0

@@ -246,22 +246,6 @@ class AdvancedMemoryProcessor:
             )
 
             return result
-            error_msg = f"Memory processing failed: {e!s}"
-            self.logger.exception(f"{error_msg} for session {session_id}")
-            self._update_processing_stats(time.time() - start_time, 0, False)
-
-            return MemoryProcessingResult(
-                success=False,
-                error_message=error_msg,
-                memories_stored=0,
-                processing_time=time.time() - start_time,
-                stage_timings=stage_timings,
-                content_analysis=None,
-                extraction_stats={},
-                deduplication_result=None,
-                session_id=session_id,
-                timestamp=time.strftime("%Y-%m-%d %H:%M:%S"),
-            )
 
     async def _store_memories(self, memories: list[ExtractedMemory], session_id: str) -> int:
         """Store memories in the appropriate database tables.

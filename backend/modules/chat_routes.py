@@ -101,8 +101,8 @@ async def get_memory_context(user_prompt: str, session_id: str) -> str:
         logger.info(f"🧠 MEMORY DEBUG: personal_memory is available: {type(app_state.personal_memory)}")
         try:
             # Quick memory retrieval for context
-            logger.info(f"🧠 MEMORY DEBUG: Calling get_relevant_memories with query: '{user_prompt[:50]}...'")
-            memories = await app_state.personal_memory.get_relevant_memories(query=user_prompt, limit=5)
+            logger.info(f"🧠 MEMORY DEBUG: Calling get_relevant_memories with query: '{user_prompt[:50]}...' for conversation {session_id}")
+            memories = await app_state.personal_memory.get_relevant_memories(query=user_prompt, limit=5, conversation_id=session_id)
             logger.info(f"🧠 MEMORY DEBUG: Retrieved {len(memories) if memories else 0} memories")
 
             # Get core memories (user facts) for this conversation
@@ -147,8 +147,11 @@ async def create_memory_processing_task(user_prompt: str, full_response: str, se
     if full_response and app_state.personal_memory:
         try:
             task = asyncio.create_task(lightweight_memory_processing(user_prompt, full_response, session_id))
-            # Keep reference to prevent garbage collection
-            task.add_done_callback(lambda t: None)
+            # Keep reference to prevent garbage collection - use proper global tracking
+            if not hasattr(app_state, '_background_tasks'):
+                app_state._background_tasks = set()
+            app_state._background_tasks.add(task)
+            task.add_done_callback(lambda t: app_state._background_tasks.discard(t))
         except Exception:
             logger.exception("🧠 MEMORY DEBUG: ❌ Failed to create memory processing task")
 

@@ -276,12 +276,37 @@ class CRUDService:
             return await self.get_conversation(conversation_id)
 
     async def delete_conversation(self, conversation_id: str) -> bool:
-        """Delete a conversation and all its messages."""
+        """Delete a conversation and all its messages AND associated memories."""
+        # CRITICAL: Also clear memories to prevent cross-contamination
+        from modules.globals import app_state
+        import logging
+        
+        logger = logging.getLogger(__name__)
+        logger.info(f"🗑️ Deleting conversation {conversation_id} and associated memories...")
+        
+        # First, clear memories from the personal memory system
+        memories_deleted = 0
+        if app_state.personal_memory:
+            try:
+                memories_deleted = app_state.personal_memory.clear_conversation_memories(conversation_id)
+                logger.info(f"🗑️ Cleared {memories_deleted} memories for conversation {conversation_id}")
+            except Exception as e:
+                logger.error(f"🗑️ Failed to clear memories for conversation {conversation_id}: {e}")
+                # Continue with conversation deletion even if memory clearing fails
+        
+        # Then delete the conversation from CRUD database
         async with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("DELETE FROM conversations WHERE id = ?", (conversation_id,))
             conn.commit()
-            return cursor.rowcount > 0
+            deleted = cursor.rowcount > 0
+            
+            if deleted:
+                logger.info(f"🗑️ Successfully deleted conversation {conversation_id} and {memories_deleted} associated memories")
+            else:
+                logger.warning(f"🗑️ Conversation {conversation_id} not found in database")
+                
+            return deleted
 
     # ===================== Message CRUD =====================
 

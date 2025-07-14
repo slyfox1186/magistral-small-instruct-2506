@@ -516,6 +516,9 @@ async def handle_conversation_intent(user_prompt: str, session_id: str, conversa
         formatted_prompt = utils.format_prompt(simple_system_prompt, user_prompt)
         logger.info("🧠 CONVERSATION: Using prompt without conversation history")
 
+    # Show memory saving indicator before starting response
+    yield f"data: {json.dumps({'token': {'text': '💾 Saving to memory...\n\n'}})}\n\n"
+
     # Stream tokens directly
     full_response = ""
     async for token in server.generate_stream(
@@ -977,7 +980,7 @@ async def handle_personal_info_storage_intent(user_prompt: str, session_id: str)
     """Handle storing personal information."""
     logger.info("🧠 MEMORY STORE: Processing store_personal_info intent")
 
-    yield f"data: {json.dumps({'token': {'text': '🧠 Storing your information...\n\n---\n\n'}})}\n\n"
+    yield f"data: {json.dumps({'token': {'text': '🧠 Storing your personal information...\n\n---\n\n'}})}\n\n"
 
     try:
         if app_state.personal_memory:
@@ -1070,7 +1073,7 @@ TONE: Warm, intelligent, caring, excited to learn about them. Show genuine inter
 
 
 async def handle_personal_info_recall_intent(user_prompt: str, session_id: str):
-    """Handle recalling personal information."""
+    """Handle recalling personal information with comprehensive search."""
     logger.info("🧠 MEMORY RECALL: Processing recall_personal_info intent")
 
     yield f"data: {json.dumps({'token': {'text': '🧠 Searching my memory...\n\n'}})}\n\n"
@@ -1080,20 +1083,60 @@ async def handle_personal_info_recall_intent(user_prompt: str, session_id: str):
             # Search for relevant personal information
             logger.info(f"🧠 MEMORY RECALL: Searching for: '{user_prompt}'")
 
-            # Get ALL relevant memories - no limits
-            memories = await app_state.personal_memory.get_relevant_memories(query=user_prompt)
-            logger.info(f"🧠 MEMORY DEBUG: Found {len(memories)} memories for query: '{user_prompt}'")
+            # ENHANCED SEARCH: Try multiple search strategies for revolutionary recall
+            all_memories = []
+            
+            # Strategy 1: Semantic search with original query - CONVERSATION SPECIFIC
+            memories = await app_state.personal_memory.get_relevant_memories(query=user_prompt, limit=20, conversation_id=session_id)
+            logger.info(f"🧠 MEMORY DEBUG: Conversation-specific semantic search found {len(memories)} memories")
+            all_memories.extend(memories)
+            
+            # Strategy 2: Keyword-based search for experiences
+            experience_keywords = ["went", "visited", "bought", "did", "experienced", "happened", "store", "shop", "yesterday", "today", "last"]
+            if any(keyword in user_prompt.lower() for keyword in experience_keywords):
+                # Get conversation context which includes experiences
+                conversation_memories = await app_state.personal_memory.get_conversation_context(session_id, max_messages=50)
+                logger.info(f"🧠 MEMORY DEBUG: Conversation context found {len(conversation_memories)} memories")
+                
+                # Filter for experience-related memories
+                for mem in conversation_memories:
+                    if any(keyword in mem.content.lower() for keyword in experience_keywords):
+                        if mem not in all_memories:  # Avoid duplicates
+                            all_memories.append(mem)
+                            logger.info(f"🧠 MEMORY DEBUG: Added experience memory: {mem.content[:100]}...")
+            
+            # Strategy 3: Search for high-importance memories within this conversation only
+            try:
+                # CRITICAL FIX: Only search within the current conversation to prevent cross-contamination
+                conversation_specific_memories = await app_state.personal_memory.get_conversation_context(session_id, max_messages=100)
+                for mem in conversation_specific_memories:
+                    if getattr(mem, 'importance', 0) >= 0.8:  # High importance threshold
+                        if mem not in all_memories:
+                            all_memories.append(mem)
+                            logger.info(f"🧠 MEMORY DEBUG: Added high-importance conversation memory: {mem.content[:100]}...")
+            except Exception as e:
+                logger.warning(f"🧠 MEMORY DEBUG: Conversation-specific search failed: {e}")
+            
+            # Remove duplicates while preserving order
+            unique_memories = []
+            seen_ids = set()
+            for mem in all_memories:
+                if hasattr(mem, 'id') and mem.id not in seen_ids:
+                    unique_memories.append(mem)
+                    seen_ids.add(mem.id)
+            
+            logger.info(f"🧠 MEMORY DEBUG: Final search found {len(unique_memories)} unique memories for query: '{user_prompt}'")
             
             # DEBUG: Log what memories were found
-            for i, memory in enumerate(memories[:5]):
+            for i, memory in enumerate(unique_memories[:10]):
                 logger.info(f"🧠 MEMORY DEBUG: Memory {i+1}: {memory.content[:100]}... (importance: {getattr(memory, 'importance', 'unknown')})")
 
             # Also get core memories (user facts) for this conversation
             core_memories = await app_state.personal_memory.get_all_core_memories(session_id)
 
             # Build response with found information
-            if memories or core_memories:
-                async for chunk in _generate_memory_recall_response(memories, core_memories, user_prompt, session_id):
+            if unique_memories or core_memories:
+                async for chunk in _generate_memory_recall_response(unique_memories, core_memories, user_prompt, session_id):
                     yield chunk
             else:
                 logger.info("🧠 MEMORY RECALL: No relevant memories found")
@@ -1903,7 +1946,8 @@ async def _get_file_attachments_for_conversation(session_id: str) -> list[str]:
         # We'll search for both types: actual file content and file references
         file_memories = await app_state.personal_memory.get_relevant_memories(
             query="file attachment filename user uploaded", 
-            limit=20
+            limit=20,
+            conversation_id=session_id
         )
         
         if not file_memories:

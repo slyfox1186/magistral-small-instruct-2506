@@ -355,7 +355,7 @@ class AsyncPersonalMemorySystem:
         return memory
 
     async def get_relevant_memories(
-        self, query: str, limit: int = 10, time_window_hours: int | None = None
+        self, query: str, limit: int = 10, time_window_hours: int | None = None, conversation_id: str | None = None
     ) -> list[Memory]:
         """Retrieve relevant memories for the current context.
 
@@ -387,6 +387,11 @@ class AsyncPersonalMemorySystem:
                 WHERE 1=1
             """
             params = []
+
+            # Conversation filter for isolation
+            if conversation_id:
+                base_query += " AND conversation_id = ?"
+                params.append(conversation_id)
 
             # Time window filter
             if time_window_hours:

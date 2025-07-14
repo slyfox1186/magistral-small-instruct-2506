@@ -253,10 +253,35 @@ class MemoryExtractor:
         """Extract experiences memories."""
         memories = []
 
-        experience_keywords = ["did", "went", "visited", "happened", "experience", "remember"]
+        experience_keywords = ["did", "went", "visited", "happened", "experience", "remember", "bought", "purchased"]
 
+        # CRITICAL FIX: Use full user prompt for experiences, not just extracted facts
+        # This preserves ALL details like items bought, specific actions, etc.
+        if any(keyword in user_prompt.lower() for keyword in experience_keywords):
+            memory = ExtractedMemory(
+                content=sanitize_content(user_prompt),  # Use FULL user prompt
+                category="experiences",
+                importance_score=await self._calculate_llm_importance_score(
+                    user_prompt, "experiences", analysis.confidence
+                ),
+                confidence=analysis.confidence,
+                entities=analysis.entities,
+                context_type=analysis.context_type,
+                memory_type="regular",
+                session_id=session_id,
+                timestamp=time.strftime("%Y-%m-%d %H:%M:%S"),
+                metadata={
+                    "source": "experiences_extraction",
+                    "experience_type": "personal",
+                    "extraction_method": "full_prompt_preservation",
+                },
+            )
+            memories.append(memory)
+
+        # Also check key facts as fallback, but with higher threshold
         for fact in analysis.key_facts:
-            if any(keyword in fact.lower() for keyword in experience_keywords):
+            if (any(keyword in fact.lower() for keyword in experience_keywords) and 
+                len(fact) > 30):  # Only use facts if they're substantial
                 memory = ExtractedMemory(
                     content=sanitize_content(fact),
                     category="experiences",
@@ -555,26 +580,27 @@ class MemoryExtractor:
             Importance score between 0.0 and 1.0
         """
         try:
-            system_prompt = """You are Jane, a memory importance analyst. Evaluate the importance of memory content for long-term storage.
+            system_prompt = """You are Jane, the memory architect for a REVOLUTIONARY AI memory system. Your job is to ensure PERFECT recall of conversational details.
 
-CRITICAL INSTRUCTIONS:
-1. Return ONLY a JSON object with your analysis
-2. Score memories based on their long-term value and uniqueness
-3. Personal facts and relationships should generally score higher
-4. Avoid inflation - most memories should score 0.3-0.7
-5. Only truly significant memories should score above 0.8
+REVOLUTIONARY MEMORY PRINCIPLES:
+1. This is NOT ordinary storage - this is building a comprehensive memory system for full conversational recall
+2. EVERY specific detail is precious: names, items, quantities, locations, times, actions, relationships
+3. Users will ask follow-up questions expecting COMPLETE recall of previous conversations
+4. Your scoring determines whether the AI can answer "What did I buy?" or "Who did I meet?" later
+5. Conservative scoring BREAKS the memory system - be GENEROUS with importance scores
 
-Scoring Guidelines:
-- 0.9-1.0: Critical personal information (name, core relationships, major life events)
-- 0.7-0.8: Important preferences, significant experiences, key knowledge
-- 0.5-0.6: Useful information, moderate preferences, routine experiences
-- 0.3-0.4: Basic information, minor preferences, casual mentions
-- 0.1-0.2: Trivial information, temporary states, low-value content
+SCORING FOR REVOLUTIONARY RECALL:
+- 0.8-1.0: ANY conversation with specific details (purchases, meetings, activities, plans, preferences)
+- 0.6-0.8: General experiences, statements with some concrete information
+- 0.4-0.6: Basic information, opinions, casual mentions
+- 0.1-0.4: Meta-conversations, system references, truly generic statements
+
+CRITICAL: If a user mentions specific items, people, places, actions, or events - score HIGH (0.7+). The goal is PERFECT conversational continuity and detail recall.
 
 JSON Response Format:
 {
     "importance_score": 0.0-1.0,
-    "reasoning": "brief explanation of scoring"
+    "reasoning": "brief explanation focusing on recall value"
 }"""
             
             user_prompt = f"""Evaluate the importance of this {category} memory:
@@ -631,11 +657,11 @@ Provide importance score and reasoning."""
         except Exception as e:
             self.logger.warning(f"LLM importance scoring failed: {e}")
         
-        # Fallback: use base confidence with conservative scaling
-        fallback_score = min(base_confidence * 0.6, 0.7)
+        # Fallback: GENEROUS scoring for revolutionary memory system
+        fallback_score = min(base_confidence * 1.2, 0.8)  # More generous baseline
         
-        # Boost core categories slightly
-        if category in ["personal_facts", "relationships"]:
-            fallback_score = min(fallback_score * 1.2, 0.8)
+        # Boost experience categories significantly for detail preservation
+        if category in ["experiences", "personal_facts", "relationships", "preferences"]:
+            fallback_score = min(fallback_score * 1.3, 0.9)  # Revolutionary memory needs high scores
             
         return fallback_score

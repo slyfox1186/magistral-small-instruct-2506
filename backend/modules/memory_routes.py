@@ -339,21 +339,22 @@ def _setup_memory_consolidate_route(app: FastAPI):
 def _setup_memory_search_route(app: FastAPI):
     """Setup memory search route."""
     @app.get("/memory/search/{user_id}")
-    async def search_memories(user_id: str, query: str, limit: int = 10):
+    async def search_memories(user_id: str, query: str, limit: int = 10, conversation_id: str = None):
         """Search memories for a user.
 
         Args:
             user_id: User to search memories for
             query: Search query
             limit: Maximum results to return
+            conversation_id: Optional conversation filter for isolation
         """
         if not app_state.personal_memory:
             raise HTTPException(status_code=503, detail="Memory pipeline not available")
 
         try:
-            # Use personal memory retrieval
+            # Use personal memory retrieval with optional conversation filter
             memories = await app_state.personal_memory.get_relevant_memories(
-                query=query, limit=limit
+                query=query, limit=limit, conversation_id=conversation_id
             )
             results = memories
 
@@ -385,9 +386,14 @@ def _setup_memory_search_route(app: FastAPI):
 
 def _setup_optimization_routes(app: FastAPI):
     """Setup optimization and maintenance routes."""
+    
     @app.delete("/api/clear-conversation-memories/{conversation_id}")
     async def clear_conversation_memories(conversation_id: str):
-        """Clear memories for a specific conversation."""
+        """Clear memories for a specific conversation.
+        
+        Note: This endpoint exists for manual memory management and frontend compatibility.
+        Conversation deletion via CRUD API also automatically clears memories.
+        """
         try:
             logger.info(f"🧹 Clearing memories for conversation {conversation_id}...")
 
