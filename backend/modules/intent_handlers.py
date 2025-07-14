@@ -1080,8 +1080,13 @@ async def handle_personal_info_recall_intent(user_prompt: str, session_id: str):
             # Search for relevant personal information
             logger.info(f"🧠 MEMORY RECALL: Searching for: '{user_prompt}'")
 
-            # Get relevant memories
-            memories = await app_state.personal_memory.get_relevant_memories(query=user_prompt, limit=10)
+            # Get ALL relevant memories - no limits
+            memories = await app_state.personal_memory.get_relevant_memories(query=user_prompt)
+            logger.info(f"🧠 MEMORY DEBUG: Found {len(memories)} memories for query: '{user_prompt}'")
+            
+            # DEBUG: Log what memories were found
+            for i, memory in enumerate(memories[:5]):
+                logger.info(f"🧠 MEMORY DEBUG: Memory {i+1}: {memory.content[:100]}... (importance: {getattr(memory, 'importance', 'unknown')})")
 
             # Also get core memories (user facts) for this conversation
             core_memories = await app_state.personal_memory.get_all_core_memories(session_id)
