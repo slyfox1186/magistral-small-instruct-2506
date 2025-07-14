@@ -22,7 +22,7 @@ def inspect_memory_database():
     try:
         # Find the database file
         db_path = (
-            "/home/jman/tmp/models-to-test/Magistral-Small-2506-1.2/backend/personal_ai_memories.db"
+            "/home/jman/tmp/models-to-test/Magistral-Small-2506-1.2/backend/memory/personal_ai_memories.db"
         )
 
         if not Path(db_path).exists():

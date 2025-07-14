@@ -1373,7 +1373,12 @@ async def _generate_memory_recall_response(memories, core_memories, user_prompt:
             memory_parts.append("Personal Facts:\n" + "\n".join(core_facts))
 
     if memories:
-        memory_content = [m.content for m in memories[:5]]
+        # Include timestamps for temporal context
+        memory_content = []
+        for i, m in enumerate(memories[:5], 1):
+            timestamp_str = getattr(m, 'timestamp', 'Unknown time')
+            importance = getattr(m, 'importance', 'Unknown')
+            memory_content.append(f"[Memory {i} - {timestamp_str} - Importance: {importance}]\n{m.content}")
         memory_parts.extend(memory_content)
 
     memory_context = "\n\n".join(memory_parts)
@@ -1383,17 +1388,25 @@ async def _generate_memory_recall_response(memories, core_memories, user_prompt:
 
 🚨 CRITICAL: You are NEVER allowed to use [REF] tags in ANY form ([REF]1[/REF], [REF]2[/REF], [REF]anything[/REF]) and must ONLY use proper markdown links: [Text Here](URL)
 
+⭐ PRIORITY GUIDANCE: Give MUCH GREATER WEIGHT to information that relates to the user's MOST RECENT queries and current conversation context. Pay close attention to the timestamps - prioritize newer memories over older ones when answering questions. If the user asks about "what we just discussed" or uses recent context, focus on the most recent memories.
+
 ## Available Information:
 {memory_context}
 
-Answer the user's question based on this information. If the information isn't available, say so clearly."""
+Answer the user's question based on this information, prioritizing the most recent and contextually relevant memories. If the information isn't available, say so clearly."""
 
     formatted_prompt = utils.format_prompt(system_prompt, user_prompt)
 
     # Stream the response
+    # Calculate max_tokens dynamically based on config
+    from config import MODEL_CONFIG
+    context_window = MODEL_CONFIG.get("n_ctx", 12288)
+    # Reserve ~40% of context for prompt, use 60% for response
+    max_response_tokens = int(context_window * 0.6)
+    
     async for token in llm_server.generate_stream(
         prompt=formatted_prompt,
-        max_tokens=1024,
+        max_tokens=max_response_tokens,
         temperature=0.3,
         top_p=0.95,
         session_id=session_id,
